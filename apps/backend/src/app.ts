@@ -6,6 +6,9 @@ import dotenv from "dotenv";
 import http from "http";
 import { Server as SocketIOServer } from "socket.io";
 import { runSystemDiagnostics } from "./config/diagnostics";
+import { initDatabase } from "./config/database";
+import authRoutes from "./routes/authRoutes";
+import reportRoutes from "./routes/reportRoutes";
 
 dotenv.config();
 
@@ -27,6 +30,10 @@ app.use(morgan("dev"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// API Routes
+app.use("/api/auth", authRoutes);
+app.use("/api/reports", reportRoutes);
+
 // Health Check Endpoint
 app.get("/api/health", (_req: Request, res: Response) => {
   res.status(200).json({
@@ -36,7 +43,7 @@ app.get("/api/health", (_req: Request, res: Response) => {
   });
 });
 
-// Live Diagnostics Endpoint (view connectivity of all services in JSON)
+// Live Diagnostics Endpoint
 app.get("/api/diagnostics", async (_req: Request, res: Response) => {
   try {
     const report = await runSystemDiagnostics();
@@ -63,11 +70,16 @@ io.on("connection", (socket) => {
   });
 });
 
-// Start Server and trigger diagnostics
+// Start Server and trigger database setup + diagnostics
 server.listen(PORT, async () => {
   console.log(`[INFO] Server running on port ${PORT}`);
   console.log(`[INFO] Health check: http://localhost:${PORT}/api/health`);
   console.log(`[INFO] Diagnostics:  http://localhost:${PORT}/api/diagnostics`);
+  console.log(`[INFO] Auth API:     http://localhost:${PORT}/api/auth`);
+  console.log(`[INFO] Reports API:  http://localhost:${PORT}/api/reports`);
+
+  // Initialize DB tables & seed
+  await initDatabase();
 
   // Run initial diagnostic check on startup
   await runSystemDiagnostics();
