@@ -10,7 +10,7 @@
     "lint-staged": "^16.4.0"
   },
   "scripts": {
-    "prepare": "husky"
+    "prepare": "npx husky"
   },
    "lint-staged": {
     "apps/backend/**/*.ts": ["eslint --fix", "prettier --write"],
