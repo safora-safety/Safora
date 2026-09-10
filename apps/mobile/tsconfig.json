@@ -13,7 +13,9 @@
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "baseUrl": "."
+    "paths": {
+      "@safora/shared-types": ["../../packages/shared-types/src"]
+    }
   },
   "include": ["src/**/*", "App.tsx", "index.js"],
   "exclude": ["**/node_modules", "**/Pods", "android", "ios"]

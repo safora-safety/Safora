@@ -1,0 +1,33 @@
+export interface TrustedContactRow {
+  id: number;
+  user_id: number;
+  name: string;
+  phone: string;
+  relationship?: string | null;
+  created_at: Date | string;
+}
+
+export interface TrustedContactEntity {
+  id: number;
+  userId: number;
+  name: string;
+  phone: string;
+  relationship?: string;
+  createdAt: string;
+}
+
+export class TrustedContactModel {
+  static fromRow(row: TrustedContactRow): TrustedContactEntity {
+    return {
+      id: row.id,
+      userId: row.user_id,
+      name: row.name,
+      phone: row.phone,
+      relationship: row.relationship || undefined,
+      createdAt:
+        row.created_at instanceof Date
+          ? row.created_at.toISOString()
+          : String(row.created_at),
+    };
+  }
+}

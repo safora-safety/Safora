@@ -3,36 +3,28 @@ import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
 import dotenv from "dotenv";
-import http from "http";
-import { Server as SocketIOServer } from "socket.io";
 import { runSystemDiagnostics } from "./config/diagnostics";
-import { initDatabase } from "./config/database";
 import authRoutes from "./routes/authRoutes";
 import reportRoutes from "./routes/reportRoutes";
+import journeyRoutes from "./routes/journeyRoutes";
+import sosRoutes from "./routes/sosRoutes";
+import { errorHandler } from "./middleware/errorHandler";
 
 dotenv.config();
 
 const app = express();
-const server = http.createServer(app);
-const io = new SocketIOServer(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST", "PATCH", "DELETE"],
-  },
-});
 
-const PORT = process.env.PORT || 5000;
-
-// Core Middleware
+// Core Security & Request Middleware
 app.use(helmet());
 app.use(cors());
 app.use(morgan("dev"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// API Routes
-app.use("/api/auth", authRoutes);
-app.use("/api/reports", reportRoutes);
+// Root route
+app.get("/", (_req: Request, res: Response) => {
+  res.send("Welcome to SAFORA Backend API");
+});
 
 // Health Check Endpoint
 app.get("/api/health", (_req: Request, res: Response) => {
@@ -56,33 +48,14 @@ app.get("/api/diagnostics", async (_req: Request, res: Response) => {
   }
 });
 
-// Root route
-app.get("/", (_req: Request, res: Response) => {
-  res.send("Welcome to SAFORA Backend API");
-});
+// Modular API Routes
+app.use("/api/auth", authRoutes);
+app.use("/api/reports", reportRoutes);
+app.use("/api/journeys", journeyRoutes);
+app.use("/api/sos", sosRoutes);
 
-// Socket.IO connection
-io.on("connection", (socket) => {
-  console.log(`[Socket.IO] Client connected: ${socket.id}`);
+// Centralized Error Handling Middleware (Always registered last)
+app.use(errorHandler);
 
-  socket.on("disconnect", () => {
-    console.log(`[Socket.IO] Client disconnected: ${socket.id}`);
-  });
-});
-
-// Start Server and trigger database setup + diagnostics
-server.listen(PORT, async () => {
-  console.log(`[INFO] Server running on port ${PORT}`);
-  console.log(`[INFO] Health check: http://localhost:${PORT}/api/health`);
-  console.log(`[INFO] Diagnostics:  http://localhost:${PORT}/api/diagnostics`);
-  console.log(`[INFO] Auth API:     http://localhost:${PORT}/api/auth`);
-  console.log(`[INFO] Reports API:  http://localhost:${PORT}/api/reports`);
-
-  // Initialize DB tables & seed
-  await initDatabase();
-
-  // Run initial diagnostic check on startup
-  await runSystemDiagnostics();
-});
-
-export { app, server, io };
+export { app };
+export default app;

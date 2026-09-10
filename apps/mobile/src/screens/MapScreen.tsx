@@ -1,469 +1,457 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
   StatusBar,
+  ActivityIndicator,
   Alert,
 } from 'react-native';
-import { colors } from '../theme/colors';
+import MapView, { Marker, UrlTile } from 'react-native-maps';
+import { useTheme } from '../theme/ThemeContext';
 import {
   getCurrentCoordinates,
   LocationCoordinates,
   CAMPUS_COORDINATES,
 } from '../services/locationService';
-
-interface HazardPin {
-  id: string;
-  category: string;
-  title: string;
-  location: string;
-  severity: number;
-  distanceMeters: number;
-  icon: string;
-}
-
-const SAMPLE_HAZARDS: HazardPin[] = [
-  {
-    id: '1',
-    category: 'lighting',
-    title: 'Poor Street Lighting',
-    location: 'Chakrata Road Near Bus Stop',
-    severity: 3,
-    distanceMeters: 250,
-    icon: '💡',
-  },
-  {
-    id: '2',
-    category: 'road_hazard',
-    title: 'Open Construction Trench',
-    location: 'Manduwala Main Campus Gate',
-    severity: 5,
-    distanceMeters: 550,
-    icon: '🚧',
-  },
-  {
-    id: '3',
-    category: 'waterlogging',
-    title: 'Waterlogged Underpass',
-    location: 'Prem Nagar Market Subway',
-    severity: 2,
-    distanceMeters: 1200,
-    icon: '🌊',
-  },
-  {
-    id: '4',
-    category: 'isolated',
-    title: 'Dimly Lit Walking Trail',
-    location: 'Navgaon Hostel Connecting Path',
-    severity: 4,
-    distanceMeters: 780,
-    icon: '🌲',
-  },
-];
+import { ReportService } from '../services/reportService';
+import { HazardReport } from '@safora/shared-types';
+import { ReportHazardModal } from '../components/ReportHazardModal';
 
 export const MapScreen: React.FC = () => {
+  const { colors, isDark } = useTheme();
+  const mapRef = useRef<MapView | null>(null);
   const [coords, setCoords] = useState<LocationCoordinates>(CAMPUS_COORDINATES);
-  const [selectedRadius, setSelectedRadius] = useState<number>(3); // 3km
-  const [selectedHazard, setSelectedHazard] = useState<HazardPin | null>(null);
+  const [hazards, setHazards] = useState<HazardReport[]>([]);
+  const [selectedHazard, setSelectedHazard] = useState<HazardReport | null>(
+    null,
+  );
+  const [loading, setLoading] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
 
   useEffect(() => {
-    getCurrentCoordinates().then(setCoords);
+    loadMapData();
   }, []);
 
-  const getSeverityColor = (sev: number) => {
+  const loadMapData = async () => {
+    setLoading(true);
+    try {
+      const userPos = await getCurrentCoordinates();
+      setCoords(userPos);
+      const data = await ReportService.getNearby(
+        userPos.latitude,
+        userPos.longitude,
+        5000,
+      );
+      setHazards(data);
+    } catch {
+      // Fallback handled inside services
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const recenterMap = () => {
+    if (mapRef.current) {
+      mapRef.current.animateToRegion(
+        {
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          latitudeDelta: 0.012,
+          longitudeDelta: 0.012,
+        },
+        600,
+      );
+    }
+  };
+
+  const handleConfirmHazard = async (reportId: string | number) => {
+    try {
+      const res = await ReportService.confirm(reportId);
+      setHazards(prev =>
+        prev.map(h =>
+          h.id === reportId
+            ? { ...h, confirmationsCount: res.confirmationsCount }
+            : h,
+        ),
+      );
+      if (selectedHazard?.id === reportId) {
+        setSelectedHazard(prev =>
+          prev ? { ...prev, confirmationsCount: res.confirmationsCount } : null,
+        );
+      }
+      Alert.alert(
+        'Hazard Verified',
+        'Thank you! Your verification increases community safety confidence.',
+      );
+    } catch {
+      Alert.alert('Error', 'Unable to confirm hazard at this time.');
+    }
+  };
+
+  const getPinColor = (sev: number) => {
     if (sev >= 4) return colors.danger;
     if (sev === 3) return colors.warning;
     return colors.info;
   };
 
+  const getCategoryIcon = (category: string) => {
+    switch (category) {
+      case 'lighting':
+        return '💡';
+      case 'road_hazard':
+        return '🚧';
+      case 'waterlogging':
+        return '🌊';
+      case 'isolated_area':
+        return '🌲';
+      case 'traffic':
+        return '🚗';
+      default:
+        return '⚠️';
+    }
+  };
+
+  const tileUrl = isDark
+    ? 'https://a.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png'
+    : 'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png';
+
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={colors.background} />
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar
+        barStyle={isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={colors.backgroundCard}
+      />
 
-      {/* Top Header */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>Safety Radar</Text>
-          <Text style={styles.headerSubtitle}>
-            📍 {coords.areaName} ({coords.latitude.toFixed(4)},{' '}
-            {coords.longitude.toFixed(4)})
-          </Text>
-        </View>
-
-        <TouchableOpacity
-          style={styles.newReportBtn}
-          onPress={() =>
-            Alert.alert(
-              'Report Hazard',
-              'Opening PostGIS report submission modal...',
-            )
-          }
-        >
-          <Text style={styles.newReportText}>+ Pin</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Interactive Simulated Map Canvas / Radar */}
-      <View style={styles.radarCanvas}>
-        <View style={styles.radarRingOuter}>
-          <View style={styles.radarRingMiddle}>
-            <View style={styles.radarRingInner}>
-              <View style={styles.userGpsDot} />
-            </View>
-          </View>
-        </View>
-
-        {/* Hazard Markers on Radar */}
-        <TouchableOpacity
-          style={[
-            styles.pinMarker,
-            { top: '28%', left: '32%', backgroundColor: colors.danger },
-          ]}
-          onPress={() => setSelectedHazard(SAMPLE_HAZARDS[1])}
-        >
-          <Text style={styles.pinText}>🚧</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.pinMarker,
-            { top: '55%', left: '68%', backgroundColor: colors.warning },
-          ]}
-          onPress={() => setSelectedHazard(SAMPLE_HAZARDS[0])}
-        >
-          <Text style={styles.pinText}>💡</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.pinMarker,
-            { top: '72%', left: '26%', backgroundColor: colors.info },
-          ]}
-          onPress={() => setSelectedHazard(SAMPLE_HAZARDS[2])}
-        >
-          <Text style={styles.pinText}>🌊</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.pinMarker,
-            { top: '22%', left: '72%', backgroundColor: colors.danger },
-          ]}
-          onPress={() => setSelectedHazard(SAMPLE_HAZARDS[3])}
-        >
-          <Text style={styles.pinText}>🌲</Text>
-        </TouchableOpacity>
-
-        <View style={styles.radarCaption}>
-          <Text style={styles.radarCaptionText}>
-            ⚡ PostGIS Spatial Index Active • {SAMPLE_HAZARDS.length} hazards
-            verified
-          </Text>
-        </View>
-      </View>
-
-      {/* Radius Filters */}
-      <View style={styles.filterRow}>
-        <Text style={styles.filterLabel}>Radius:</Text>
-        {[1, 3, 5, 10].map(radius => (
-          <TouchableOpacity
-            key={radius}
-            style={[
-              styles.filterChip,
-              selectedRadius === radius && styles.filterChipActive,
-            ]}
-            onPress={() => setSelectedRadius(radius)}
-          >
-            <Text
-              style={[
-                styles.filterChipText,
-                selectedRadius === radius && styles.filterChipTextActive,
-              ]}
-            >
-              {radius} km
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* Hazard List Feed */}
-      <ScrollView
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
+      {/* Header Overlay */}
+      <View
+        style={[
+          styles.topHeader,
+          {
+            backgroundColor: colors.backgroundCard,
+            borderBottomColor: colors.border,
+          },
+        ]}
       >
-        <Text style={styles.listSectionTitle}>
-          Campus Hazards (Within {selectedRadius}km)
-        </Text>
+        <View style={styles.headerInfo}>
+          <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
+            Safety Radar
+          </Text>
+          <Text
+            style={[styles.headerSubtitle, { color: colors.textSecondary }]}
+            numberOfLines={1}
+          >
+            📍 {coords.areaName} • {hazards.length} hazards active
+          </Text>
+        </View>
 
-        {SAMPLE_HAZARDS.map(hazard => (
-          <TouchableOpacity
-            key={hazard.id}
-            style={[
-              styles.hazardCard,
-              selectedHazard?.id === hazard.id && styles.hazardCardSelected,
-            ]}
-            onPress={() => setSelectedHazard(hazard)}
+        <TouchableOpacity
+          style={[styles.pinBtn, { backgroundColor: colors.primary }]}
+          onPress={() => setShowReportModal(true)}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.pinBtnText}>+ Pin Hazard</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Real Full-Screen MapView */}
+      <View style={styles.mapWrapper}>
+        <MapView
+          ref={mapRef}
+          style={styles.map}
+          mapType="none"
+          initialRegion={{
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            latitudeDelta: 0.015,
+            longitudeDelta: 0.015,
+          }}
+          userInterfaceStyle={isDark ? 'dark' : 'light'}
+        >
+          {/* CartoDB High-Performance Vector Raster Tiles */}
+          <UrlTile
+            urlTemplate={tileUrl}
+            maximumZ={19}
+            flipY={false}
+            tileSize={256}
+          />
+
+          {/* User Current Location Marker */}
+          <Marker
+            coordinate={{
+              latitude: coords.latitude,
+              longitude: coords.longitude,
+            }}
+            title="Your Location"
+            description={coords.areaName}
           >
             <View
               style={[
-                styles.hazardIconBox,
-                { borderColor: getSeverityColor(hazard.severity) },
+                styles.userMarkerPulse,
+                {
+                  backgroundColor: isDark
+                    ? 'rgba(79, 70, 229, 0.25)'
+                    : 'rgba(79, 70, 229, 0.15)',
+                  borderColor: colors.primary,
+                },
               ]}
             >
-              <Text style={styles.hazardCardIcon}>{hazard.icon}</Text>
-            </View>
-
-            <View style={styles.hazardDetails}>
-              <Text style={styles.hazardTitle}>{hazard.title}</Text>
-              <Text style={styles.hazardLocation}>{hazard.location}</Text>
-              <Text style={styles.hazardDistance}>
-                📍 {hazard.distanceMeters}m from current position
-              </Text>
-            </View>
-
-            <View
-              style={[
-                styles.sevBadge,
-                { backgroundColor: getSeverityColor(hazard.severity) + '25' },
-              ]}
-            >
-              <Text
+              <View
                 style={[
-                  styles.sevBadgeText,
-                  { color: getSeverityColor(hazard.severity) },
+                  styles.userMarkerDot,
+                  { backgroundColor: colors.primary },
+                ]}
+              />
+            </View>
+          </Marker>
+
+          {/* Hazard Report Pins */}
+          {hazards.map(item => (
+            <Marker
+              key={String(item.id)}
+              coordinate={{
+                latitude: item.latitude,
+                longitude: item.longitude,
+              }}
+              title={item.title}
+              description={`Severity: ${item.severity}/5`}
+              onPress={() => setSelectedHazard(item)}
+            >
+              <View
+                style={[
+                  styles.hazardPin,
+                  { backgroundColor: getPinColor(item.severity) },
                 ]}
               >
-                SEV {hazard.severity}
+                <Text style={styles.hazardPinIcon}>
+                  {getCategoryIcon(item.category)}
+                </Text>
+              </View>
+            </Marker>
+          ))}
+        </MapView>
+
+        {/* Recenter GPS Floating Button */}
+        <TouchableOpacity
+          style={[
+            styles.recenterFab,
+            {
+              backgroundColor: colors.backgroundCard,
+              borderColor: colors.border,
+            },
+          ]}
+          onPress={recenterMap}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.recenterIcon}>🎯</Text>
+        </TouchableOpacity>
+
+        {/* Loading Pill */}
+        {loading && (
+          <View
+            style={[
+              styles.loadingPill,
+              {
+                backgroundColor: colors.backgroundCard,
+                borderColor: colors.border,
+              },
+            ]}
+          >
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={[styles.loadingText, { color: colors.textPrimary }]}>
+              Syncing PostGIS Radar...
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {/* Selected Hazard Card Sheet */}
+      {selectedHazard && (
+        <View
+          style={[
+            styles.bottomCard,
+            {
+              backgroundColor: colors.backgroundCard,
+              borderColor: colors.border,
+            },
+          ]}
+        >
+          <View style={styles.bottomCardHeader}>
+            <View style={styles.badgeRow}>
+              <View
+                style={[
+                  styles.sevBadge,
+                  {
+                    backgroundColor:
+                      getPinColor(selectedHazard.severity) + '20',
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.sevBadgeText,
+                    { color: getPinColor(selectedHazard.severity) },
+                  ]}
+                >
+                  SEVERITY {selectedHazard.severity}/5
+                </Text>
+              </View>
+              <Text
+                style={[
+                  styles.confirmationsText,
+                  { color: colors.textSecondary },
+                ]}
+              >
+                👍 {selectedHazard.confirmationsCount || 0} verifications
               </Text>
             </View>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+
+            <TouchableOpacity
+              onPress={() => setSelectedHazard(null)}
+              style={styles.cardCloseBtn}
+            >
+              <Text style={[styles.cardCloseText, { color: colors.textMuted }]}>
+                ✕
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
+            {selectedHazard.title}
+          </Text>
+          {selectedHazard.description ? (
+            <Text
+              style={[styles.cardDesc, { color: colors.textSecondary }]}
+              numberOfLines={2}
+            >
+              {selectedHazard.description}
+            </Text>
+          ) : null}
+
+          <View style={styles.cardActionRow}>
+            <TouchableOpacity
+              style={[styles.confirmBtn, { backgroundColor: colors.primary }]}
+              onPress={() => handleConfirmHazard(selectedHazard.id)}
+            >
+              <Text style={styles.confirmBtnText}>✓ Confirm Hazard (+1)</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Report Hazard Modal */}
+      <ReportHazardModal
+        visible={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        coordinates={{
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+        }}
+        onReportCreated={newRep => {
+          setHazards(prev => [newRep, ...prev]);
+          setSelectedHazard(newRep);
+        }}
+      />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  header: {
+  container: { flex: 1 },
+  topHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: 48,
-    paddingBottom: 12,
+    paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.backgroundCard,
+    zIndex: 10,
   },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: colors.textPrimary,
-  },
-  headerSubtitle: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  newReportBtn: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
-  },
-  newReportText: {
-    color: '#FFFFFF',
-    fontWeight: '800',
-    fontSize: 13,
-  },
-  radarCanvas: {
-    height: 240,
-    backgroundColor: '#090D16',
+  headerInfo: { flex: 1, marginRight: 10 },
+  headerTitle: { fontSize: 20, fontWeight: '900' },
+  headerSubtitle: { fontSize: 11, marginTop: 2 },
+  pinBtn: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12 },
+  pinBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 12 },
+  mapWrapper: { flex: 1, position: 'relative' },
+  map: { ...StyleSheet.absoluteFillObject },
+  userMarkerPulse: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    position: 'relative',
-    overflow: 'hidden',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  radarRingOuter: {
-    width: 220,
-    height: 220,
-    borderRadius: 110,
     borderWidth: 1,
-    borderColor: 'rgba(6, 182, 212, 0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  radarRingMiddle: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    borderWidth: 1,
-    borderColor: 'rgba(6, 182, 212, 0.25)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  radarRingInner: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    borderWidth: 1.5,
-    borderColor: 'rgba(6, 182, 212, 0.4)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(6, 182, 212, 0.05)',
-  },
-  userGpsDot: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: colors.accent,
-    shadowColor: colors.accent,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.9,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  pinMarker: {
-    position: 'absolute',
+  userMarkerDot: { width: 12, height: 12, borderRadius: 6 },
+  hazardPin: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 2,
     borderColor: '#FFFFFF',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.5,
-    shadowRadius: 4,
-    elevation: 5,
+    elevation: 4,
   },
-  pinText: {
-    fontSize: 14,
-  },
-  radarCaption: {
+  hazardPinIcon: { fontSize: 14 },
+  recenterFab: {
     position: 'absolute',
-    bottom: 8,
-    backgroundColor: 'rgba(11, 15, 25, 0.85)',
-    paddingVertical: 4,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-  },
-  radarCaptionText: {
-    color: colors.textMuted,
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  filterRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    gap: 8,
-    backgroundColor: colors.backgroundCard,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  filterLabel: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    fontWeight: '700',
-    marginRight: 4,
-  },
-  filterChip: {
-    paddingVertical: 5,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    backgroundColor: colors.backgroundInput,
+    right: 18,
+    bottom: 24,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: colors.border,
-  },
-  filterChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  filterChipText: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  filterChipTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-  listContent: {
-    padding: 16,
-    gap: 10,
-    paddingBottom: 40,
-  },
-  listSectionTitle: {
-    color: colors.textPrimary,
-    fontSize: 14,
-    fontWeight: '800',
-    marginBottom: 6,
-  },
-  hazardCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.backgroundCard,
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  hazardCardSelected: {
-    borderColor: colors.accent,
-    backgroundColor: colors.surfaceHover,
-  },
-  hazardIconBox: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
-    backgroundColor: colors.backgroundInput,
-    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    elevation: 6,
   },
-  hazardCardIcon: {
-    fontSize: 20,
+  recenterIcon: { fontSize: 20 },
+  loadingPill: {
+    position: 'absolute',
+    top: 14,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 8,
   },
-  hazardDetails: {
+  loadingText: { fontSize: 11, fontWeight: '700' },
+  bottomCard: {
+    position: 'absolute',
+    bottom: 20,
+    left: 16,
+    right: 16,
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 16,
+    gap: 8,
+    elevation: 8,
+  },
+  bottomCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  sevBadge: { paddingVertical: 3, paddingHorizontal: 8, borderRadius: 6 },
+  sevBadgeText: { fontSize: 10, fontWeight: '800' },
+  confirmationsText: { fontSize: 11, fontWeight: '600' },
+  cardCloseBtn: { padding: 4 },
+  cardCloseText: { fontSize: 14, fontWeight: '700' },
+  cardTitle: { fontSize: 16, fontWeight: '800' },
+  cardDesc: { fontSize: 12, lineHeight: 16 },
+  cardActionRow: { flexDirection: 'row', marginTop: 4 },
+  confirmBtn: {
     flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
   },
-  hazardTitle: {
-    color: colors.textPrimary,
-    fontSize: 14,
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  hazardLocation: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    marginBottom: 2,
-  },
-  hazardDistance: {
-    color: colors.accent,
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  sevBadge: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-    alignSelf: 'flex-start',
-  },
-  sevBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-  },
+  confirmBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
 });
