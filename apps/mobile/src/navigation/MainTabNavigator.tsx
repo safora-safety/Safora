@@ -1,0 +1,127 @@
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { colors } from '../theme/colors';
+import { HomeScreen } from '../screens/HomeScreen';
+import { MapScreen } from '../screens/MapScreen';
+import { SafeWalkScreen } from '../screens/SafeWalkScreen';
+import { ProfileScreen } from '../screens/ProfileScreen';
+
+type TabKey = 'Home' | 'Map' | 'SafeWalk' | 'Profile';
+
+interface TabItem {
+  key: TabKey;
+  label: string;
+  icon: string;
+}
+
+const TABS: TabItem[] = [
+  { key: 'Home', label: 'Home', icon: '🏠' },
+  { key: 'Map', label: 'Map Radar', icon: '🗺️' },
+  { key: 'SafeWalk', label: 'Safe Walk', icon: '🚶‍♀️' },
+  { key: 'Profile', label: 'Profile', icon: '👤' },
+];
+
+export const MainTabNavigator: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<TabKey>('Home');
+
+  const renderActiveScreen = () => {
+    switch (activeTab) {
+      case 'Home':
+        return <HomeScreen onNavigateTab={tab => setActiveTab(tab)} />;
+      case 'Map':
+        return <MapScreen />;
+      case 'SafeWalk':
+        return <SafeWalkScreen />;
+      case 'Profile':
+        return <ProfileScreen />;
+    }
+  };
+
+  return (
+    <View style={styles.container}>
+      {/* Screen Container */}
+      <View style={styles.screenArea}>{renderActiveScreen()}</View>
+
+      {/* Sleek Bottom Navigation Bar */}
+      <View style={styles.bottomTabBar}>
+        {TABS.map(tab => {
+          const isActive = activeTab === tab.key;
+          return (
+            <TouchableOpacity
+              key={tab.key}
+              style={[styles.tabButton, isActive && styles.tabButtonActive]}
+              activeOpacity={0.7}
+              onPress={() => setActiveTab(tab.key)}
+            >
+              {isActive && <View style={styles.activeGlowLine} />}
+              <Text style={styles.tabIcon}>{tab.icon}</Text>
+              <Text
+                style={[styles.tabLabel, isActive && styles.tabLabelActive]}
+              >
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  screenArea: {
+    flex: 1,
+  },
+  bottomTabBar: {
+    flexDirection: 'row',
+    backgroundColor: colors.backgroundCard,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingBottom: 20,
+    paddingTop: 8,
+    paddingHorizontal: 8,
+    justifyContent: 'space-around',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 12,
+  },
+  tabButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    position: 'relative',
+    minWidth: 70,
+  },
+  tabButtonActive: {
+    backgroundColor: 'rgba(79, 70, 229, 0.12)',
+  },
+  activeGlowLine: {
+    position: 'absolute',
+    top: -8,
+    width: 28,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: colors.accent,
+  },
+  tabIcon: {
+    fontSize: 20,
+    marginBottom: 4,
+  },
+  tabLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textMuted,
+  },
+  tabLabelActive: {
+    color: colors.accent,
+    fontWeight: '800',
+  },
+});

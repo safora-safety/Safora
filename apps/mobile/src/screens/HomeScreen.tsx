@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,16 +10,30 @@ import {
 } from 'react-native';
 import { colors } from '../theme/colors';
 import { useAuthStore } from '../store/authStore';
+import {
+  getCurrentCoordinates,
+  LocationCoordinates,
+  CAMPUS_COORDINATES,
+} from '../services/locationService';
 
-export const HomeScreen: React.FC = () => {
-  const { user, isGuest, logout } = useAuthStore();
+interface HomeScreenProps {
+  onNavigateTab?: (tab: 'Home' | 'Map' | 'SafeWalk' | 'Profile') => void;
+}
+
+export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
+  const { user, isGuest } = useAuthStore();
   const [sosTriggered, setSosTriggered] = useState(false);
+  const [coords, setCoords] = useState<LocationCoordinates>(CAMPUS_COORDINATES);
+
+  useEffect(() => {
+    getCurrentCoordinates().then(setCoords);
+  }, []);
 
   const handleSosPress = () => {
     setSosTriggered(true);
     Alert.alert(
       '🚨 SOS ALERT TRIGGERED',
-      'Emergency broadcast sent! Your live coordinates (30.3165°N, 78.0322°E) are being transmitted to trusted contacts & nearest responders.',
+      `Emergency broadcast sent! Your live coordinates (${coords.latitude.toFixed(4)}°N, ${coords.longitude.toFixed(4)}°E - ${coords.areaName}) are being transmitted to trusted contacts & campus responders.`,
       [{ text: 'Dismiss SOS', onPress: () => setSosTriggered(false) }],
     );
   };
@@ -35,7 +49,10 @@ export const HomeScreen: React.FC = () => {
           <Text style={styles.brandTitle}>SAFORA</Text>
         </View>
 
-        <View style={styles.userActions}>
+        <TouchableOpacity
+          style={styles.userActions}
+          onPress={() => onNavigateTab?.('Profile')}
+        >
           <View
             style={[
               styles.badge,
@@ -48,12 +65,18 @@ export const HomeScreen: React.FC = () => {
                 : `🛡️ ${user?.name?.split(' ')[0] || 'MEMBER'}`}
             </Text>
           </View>
+        </TouchableOpacity>
+      </View>
 
-          <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
-            <Text style={styles.logoutText}>
-              {isGuest ? 'Sign In' : 'Logout'}
-            </Text>
-          </TouchableOpacity>
+      {/* Live GPS Sub-Bar */}
+      <View style={styles.gpsBar}>
+        <Text style={styles.gpsIcon}>📍</Text>
+        <Text style={styles.gpsText} numberOfLines={1}>
+          {coords.areaName} • {coords.latitude.toFixed(4)},{' '}
+          {coords.longitude.toFixed(4)}
+        </Text>
+        <View style={styles.liveChip}>
+          <Text style={styles.liveChipText}>LIVE</Text>
         </View>
       </View>
 
@@ -63,16 +86,20 @@ export const HomeScreen: React.FC = () => {
       >
         {/* Guest Banner */}
         {isGuest && (
-          <View style={styles.guestBanner}>
+          <TouchableOpacity
+            style={styles.guestBanner}
+            onPress={() => onNavigateTab?.('Profile')}
+            activeOpacity={0.85}
+          >
             <View style={styles.guestBannerHeader}>
               <Text style={styles.guestBannerTitle}>Guest Preview Mode</Text>
               <Text style={styles.guestBannerTag}>DEMO</Text>
             </View>
             <Text style={styles.guestBannerDesc}>
-              You can explore the safety grid & simulated hazards. Sign in to
-              save custom contacts & submit verified reports.
+              You are exploring as Guest. Tap here to create an account & save
+              custom emergency contacts.
             </Text>
-          </View>
+          </TouchableOpacity>
         )}
 
         {/* Big SOS Emergency Action */}
@@ -99,12 +126,7 @@ export const HomeScreen: React.FC = () => {
         <View style={styles.gridContainer}>
           <TouchableOpacity
             style={styles.gridCard}
-            onPress={() =>
-              Alert.alert(
-                'Safe Walk',
-                'Safe Walk route guidance simulation initiated. Tracking movement...',
-              )
-            }
+            onPress={() => onNavigateTab?.('SafeWalk')}
           >
             <Text style={styles.cardEmoji}>🚶‍♀️</Text>
             <Text style={styles.cardTitle}>Safe Walk</Text>
@@ -114,9 +136,7 @@ export const HomeScreen: React.FC = () => {
 
           <TouchableOpacity
             style={styles.gridCard}
-            onPress={() =>
-              Alert.alert('Report Hazard', 'Pinning hazard on PostGIS grid...')
-            }
+            onPress={() => onNavigateTab?.('Map')}
           >
             <Text style={styles.cardEmoji}>⚠️</Text>
             <Text style={styles.cardTitle}>Report Hazard</Text>
@@ -128,12 +148,7 @@ export const HomeScreen: React.FC = () => {
 
           <TouchableOpacity
             style={styles.gridCard}
-            onPress={() =>
-              Alert.alert(
-                'Safety Heatmap',
-                'Loading MapTiler vector tiles + PostGIS risk layer...',
-              )
-            }
+            onPress={() => onNavigateTab?.('Map')}
           >
             <Text style={styles.cardEmoji}>🗺️</Text>
             <Text style={styles.cardTitle}>Live Heatmap</Text>
@@ -143,12 +158,7 @@ export const HomeScreen: React.FC = () => {
 
           <TouchableOpacity
             style={styles.gridCard}
-            onPress={() =>
-              Alert.alert(
-                'Trusted Contacts',
-                'Manage emergency SMS and push alerts.',
-              )
-            }
+            onPress={() => onNavigateTab?.('Profile')}
           >
             <Text style={styles.cardEmoji}>📞</Text>
             <Text style={styles.cardTitle}>SOS Contacts</Text>
@@ -160,9 +170,13 @@ export const HomeScreen: React.FC = () => {
         </View>
 
         {/* Nearby Hazards Sample Feed */}
-        <Text style={styles.sectionTitle}>
-          Nearby Hazard Reports (PostGIS Grid)
-        </Text>
+        <View style={styles.feedHeaderRow}>
+          <Text style={styles.sectionTitle}>Nearby Hazards (PostGIS Grid)</Text>
+          <TouchableOpacity onPress={() => onNavigateTab?.('Map')}>
+            <Text style={styles.seeAllText}>View Radar →</Text>
+          </TouchableOpacity>
+        </View>
+
         <View style={styles.hazardsFeed}>
           <View style={styles.hazardItem}>
             <View
@@ -174,7 +188,7 @@ export const HomeScreen: React.FC = () => {
             <View style={styles.hazardInfo}>
               <Text style={styles.hazardItemTitle}>Poor Street Lighting</Text>
               <Text style={styles.hazardLocation}>
-                Chakrata Road • 250m away
+                Chakrata Road Near DBUU Gate • 250m away
               </Text>
             </View>
             <View style={styles.severityBadge}>
@@ -190,9 +204,11 @@ export const HomeScreen: React.FC = () => {
               ]}
             />
             <View style={styles.hazardInfo}>
-              <Text style={styles.hazardItemTitle}>Open Construction Pit</Text>
+              <Text style={styles.hazardItemTitle}>
+                Open Construction Trench
+              </Text>
               <Text style={styles.hazardLocation}>
-                Manduwala Gate • 600m away
+                Manduwala Campus Gate • 550m away
               </Text>
             </View>
             <View
@@ -214,7 +230,7 @@ export const HomeScreen: React.FC = () => {
             <View style={styles.hazardInfo}>
               <Text style={styles.hazardItemTitle}>Waterlogged Underpass</Text>
               <Text style={styles.hazardLocation}>
-                Prem Nagar Market • 1.2km away
+                Prem Nagar Subway • 1.2km away
               </Text>
             </View>
             <View
@@ -245,9 +261,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: 48,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    paddingBottom: 14,
     backgroundColor: colors.backgroundCard,
   },
   logoRow: {
@@ -270,10 +284,9 @@ const styles = StyleSheet.create({
   userActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
   },
   badge: {
-    paddingVertical: 4,
+    paddingVertical: 5,
     paddingHorizontal: 10,
     borderRadius: 12,
   },
@@ -289,25 +302,43 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '800',
     color: colors.textPrimary,
   },
-  logoutBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 10,
-    backgroundColor: colors.backgroundInput,
-    borderWidth: 1,
-    borderColor: colors.border,
+  gpsBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    backgroundColor: '#0D1424',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    gap: 8,
   },
-  logoutText: {
-    color: colors.textSecondary,
+  gpsIcon: {
     fontSize: 12,
+  },
+  gpsText: {
+    flex: 1,
+    color: colors.textSecondary,
+    fontSize: 11,
     fontWeight: '600',
+  },
+  liveChip: {
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  liveChipText: {
+    color: colors.success,
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.8,
   },
   scrollContent: {
     padding: 20,
-    paddingBottom: 50,
+    paddingBottom: 40,
   },
   guestBanner: {
     backgroundColor: 'rgba(245, 158, 11, 0.1)',
@@ -446,6 +477,17 @@ const styles = StyleSheet.create({
   cardAction: {
     color: colors.accent,
     fontSize: 11,
+    fontWeight: '700',
+  },
+  feedHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  seeAllText: {
+    color: colors.accent,
+    fontSize: 12,
     fontWeight: '700',
   },
   hazardsFeed: {
