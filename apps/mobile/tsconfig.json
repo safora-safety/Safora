@@ -9,7 +9,6 @@
     "isolatedModules": true,
     "strict": false,
     "moduleResolution": "node",
-    "ignoreDeprecations": "6.0",
     "resolveJsonModule": true,
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
