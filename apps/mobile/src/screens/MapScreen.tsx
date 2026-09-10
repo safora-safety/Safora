@@ -8,7 +8,11 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import MapView, { Marker, UrlTile } from 'react-native-maps';
+import {
+  OpenMapView,
+  OpenMapViewRef,
+  MapMarkerItem,
+} from '../components/OpenMapView';
 import { useTheme } from '../theme/ThemeContext';
 import {
   getCurrentCoordinates,
@@ -21,7 +25,7 @@ import { ReportHazardModal } from '../components/ReportHazardModal';
 
 export const MapScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
-  const mapRef = useRef<MapView | null>(null);
+  const mapRef = useRef<OpenMapViewRef | null>(null);
   const [coords, setCoords] = useState<LocationCoordinates>(CAMPUS_COORDINATES);
   const [hazards, setHazards] = useState<HazardReport[]>([]);
   const [selectedHazard, setSelectedHazard] = useState<HazardReport | null>(
@@ -54,15 +58,7 @@ export const MapScreen: React.FC = () => {
 
   const recenterMap = () => {
     if (mapRef.current) {
-      mapRef.current.animateToRegion(
-        {
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-          latitudeDelta: 0.012,
-          longitudeDelta: 0.012,
-        },
-        600,
-      );
+      mapRef.current.recenter(coords.latitude, coords.longitude, 15);
     }
   };
 
@@ -113,9 +109,25 @@ export const MapScreen: React.FC = () => {
     }
   };
 
-  const tileUrl = isDark
-    ? 'https://a.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png'
-    : 'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png';
+  const mapMarkers: MapMarkerItem[] = [
+    {
+      id: 'user-loc',
+      latitude: coords.latitude,
+      longitude: coords.longitude,
+      title: 'Your Location',
+      description: coords.areaName,
+      isUser: true,
+    },
+    ...hazards.map(item => ({
+      id: item.id,
+      latitude: item.latitude,
+      longitude: item.longitude,
+      title: item.title,
+      description: `Severity: ${item.severity}/5`,
+      icon: getCategoryIcon(item.category),
+      color: getPinColor(item.severity),
+    })),
+  ];
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -157,80 +169,20 @@ export const MapScreen: React.FC = () => {
 
       {/* Real Full-Screen MapView */}
       <View style={styles.mapWrapper}>
-        <MapView
+        <OpenMapView
           ref={mapRef}
-          style={styles.map}
-          mapType="none"
-          initialRegion={{
-            latitude: coords.latitude,
-            longitude: coords.longitude,
-            latitudeDelta: 0.015,
-            longitudeDelta: 0.015,
+          center={{ latitude: coords.latitude, longitude: coords.longitude }}
+          zoom={15}
+          isDark={isDark}
+          markers={mapMarkers}
+          onMarkerPress={markerId => {
+            const found = hazards.find(h => String(h.id) === String(markerId));
+            if (found) {
+              setSelectedHazard(found);
+            }
           }}
-          userInterfaceStyle={isDark ? 'dark' : 'light'}
-        >
-          {/* CartoDB High-Performance Vector Raster Tiles */}
-          <UrlTile
-            urlTemplate={tileUrl}
-            maximumZ={19}
-            flipY={false}
-            tileSize={256}
-          />
-
-          {/* User Current Location Marker */}
-          <Marker
-            coordinate={{
-              latitude: coords.latitude,
-              longitude: coords.longitude,
-            }}
-            title="Your Location"
-            description={coords.areaName}
-          >
-            <View
-              style={[
-                styles.userMarkerPulse,
-                {
-                  backgroundColor: isDark
-                    ? 'rgba(79, 70, 229, 0.25)'
-                    : 'rgba(79, 70, 229, 0.15)',
-                  borderColor: colors.primary,
-                },
-              ]}
-            >
-              <View
-                style={[
-                  styles.userMarkerDot,
-                  { backgroundColor: colors.primary },
-                ]}
-              />
-            </View>
-          </Marker>
-
-          {/* Hazard Report Pins */}
-          {hazards.map(item => (
-            <Marker
-              key={String(item.id)}
-              coordinate={{
-                latitude: item.latitude,
-                longitude: item.longitude,
-              }}
-              title={item.title}
-              description={`Severity: ${item.severity}/5`}
-              onPress={() => setSelectedHazard(item)}
-            >
-              <View
-                style={[
-                  styles.hazardPin,
-                  { backgroundColor: getPinColor(item.severity) },
-                ]}
-              >
-                <Text style={styles.hazardPinIcon}>
-                  {getCategoryIcon(item.category)}
-                </Text>
-              </View>
-            </Marker>
-          ))}
-        </MapView>
+          style={styles.map}
+        />
 
         {/* Recenter GPS Floating Button */}
         <TouchableOpacity
