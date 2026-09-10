@@ -6,7 +6,7 @@ import React, {
   useState,
 } from 'react';
 import { StyleSheet, View, ViewStyle, ActivityIndicator } from 'react-native';
-import { WebView } from 'react-native-webview';
+import WebView from 'react-native-webview';
 
 export interface MapMarkerItem {
   id: string | number;
@@ -290,7 +290,7 @@ export const OpenMapView = forwardRef<OpenMapViewRef, OpenMapViewProps>(
     },
     ref,
   ) => {
-    const webViewRef = useRef<WebView | null>(null);
+    const webViewRef = useRef<any>(null);
     const [isMapLoaded, setIsMapLoaded] = useState(false);
 
     useImperativeHandle(ref, () => ({
