@@ -1,12 +1,12 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Default to Android emulator host alias 10.0.2.2 or local port 5000
-export const API_BASE_URL = 'http://10.0.2.2:5000/api';
+// Live Render backend (works on both emulator and real devices)
+export const API_BASE_URL = 'https://safora-backend.onrender.com/api';
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: 30000, // 30s – Render free-tier cold-starts can take 15-30s
   headers: {
     'Content-Type': 'application/json',
   },
