@@ -32,10 +32,13 @@ export function validateQuery(schema: AnyZodObject) {
     next: NextFunction,
   ): Promise<void> => {
     try {
-      req.query = (await schema.parseAsync(req.query)) as Record<
-        string,
-        unknown
-      > as typeof req.query;
+      const parsed = await schema.parseAsync(req.query);
+      Object.defineProperty(req, "query", {
+        value: parsed,
+        writable: true,
+        configurable: true,
+        enumerable: true,
+      });
       next();
     } catch (error) {
       if (error instanceof ZodError) {

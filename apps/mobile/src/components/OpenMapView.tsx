@@ -6,7 +6,7 @@ import React, {
   useState,
 } from 'react';
 import { StyleSheet, View, ViewStyle, ActivityIndicator } from 'react-native';
-import { WebView } from 'react-native-webview';
+import WebView from 'react-native-webview';
 
 export interface MapMarkerItem {
   id: string | number;
@@ -44,8 +44,8 @@ const generateHtml = (
   isDark: boolean,
 ) => {
   const tileUrl = isDark
-    ? 'https://a.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png'
-    : `https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`;
+    ? `https://api.maptiler.com/maps/basic-v2-dark/256/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`
+    : `https://api.maptiler.com/maps/streets-v2/256/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`;
 
   const bgColor = isDark ? '#0B1120' : '#F8FAFC';
 
@@ -180,14 +180,14 @@ const generateHtml = (
     window.updateMapTheme = function(isDark) {
       if (!map) return;
       var newUrl = isDark
-        ? 'https://a.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png'
-        : 'https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=${MAPTILER_KEY}';
+        ? 'https://api.maptiler.com/maps/basic-v2-dark/256/{z}/{x}/{y}.png?key=${MAPTILER_KEY}'
+        : 'https://api.maptiler.com/maps/streets-v2/256/{z}/{x}/{y}.png?key=${MAPTILER_KEY}';
       if (tileLayer) {
         map.removeLayer(tileLayer);
       }
       tileLayer = L.tileLayer(newUrl, {
         maxZoom: 19,
-        subdomains: ['a', 'b', 'c', 'd']
+        tileSize: 256
       }).addTo(map);
       document.body.style.background = isDark ? '#0B1120' : '#F8FAFC';
     };
@@ -290,7 +290,7 @@ export const OpenMapView = forwardRef<OpenMapViewRef, OpenMapViewProps>(
     },
     ref,
   ) => {
-    const webViewRef = useRef<WebView | null>(null);
+    const webViewRef = useRef<any>(null);
     const [isMapLoaded, setIsMapLoaded] = useState(false);
 
     useImperativeHandle(ref, () => ({
