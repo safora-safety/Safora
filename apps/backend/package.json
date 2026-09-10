@@ -5,6 +5,7 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "npx tsx watch src/server.ts",
+    "prebuild": "tsc -p ../../packages/shared-types/tsconfig.json",
     "build": "tsc",
     "start": "node dist/server.js",
     "test": "jest"

@@ -5,6 +5,7 @@ node_modules/
 
 # Production / Build Outputs
 **/dist/
+!packages/shared-types/dist/
 **/build/
 **/.cxx/
 **/intermediates/
