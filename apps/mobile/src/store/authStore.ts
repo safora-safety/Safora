@@ -1,16 +1,12 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { User } from '@safora/shared-types';
+import { AuthService } from '../services/authService';
 
-export interface UserProfile {
-  id: string;
-  name: string;
-  email: string;
-  phone?: string;
-  role?: string;
-}
+export type UserProfile = User;
 
 interface AuthState {
-  user: UserProfile | null;
+  user: User | null;
   token: string | null;
   isAuthenticated: boolean;
   isGuest: boolean;
@@ -31,6 +27,7 @@ interface AuthState {
     pass: string,
   ) => Promise<boolean>;
   logout: () => Promise<void>;
+  updateProfile: (data: Partial<User>) => Promise<boolean>;
   clearError: () => void;
 }
 
@@ -41,7 +38,7 @@ const STORAGE_KEYS = {
   ONBOARDING_SEEN: '@safora_onboarding_seen',
 };
 
-export const useAuthStore = create<AuthState>((set, get) => ({
+export const useAuthStore = create<AuthState>((set, _get) => ({
   user: null,
   token: null,
   isAuthenticated: false,
@@ -61,22 +58,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           AsyncStorage.getItem(STORAGE_KEYS.ONBOARDING_SEEN),
         ]);
 
-      const hasSeenOnboarding = storedOnboarding === 'true';
-      const isGuest = storedGuest === 'true';
-
-      if (storedUser && (storedToken || isGuest)) {
+      if (storedUser && storedToken) {
         set({
-          user: JSON.parse(storedUser),
+          user: JSON.parse(storedUser) as User,
           token: storedToken,
           isAuthenticated: true,
-          isGuest,
-          hasSeenOnboarding,
+          isGuest: storedGuest === 'true',
+          hasSeenOnboarding: storedOnboarding === 'true',
           isHydrated: true,
         });
       } else {
         set({
-          hasSeenOnboarding,
           isHydrated: true,
+          hasSeenOnboarding: storedOnboarding === 'true',
         });
       }
     } catch {
@@ -94,11 +88,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   enterAsGuest: async () => {
-    const guestUser: UserProfile = {
+    const guestUser: User = {
       id: 'guest-user',
       name: 'Guest Explorer',
       email: 'guest@safora.app',
-      role: 'guest',
+      role: 'user',
     };
 
     try {
@@ -119,32 +113,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     });
   },
 
-  login: async (email: string) => {
+  login: async (email: string, pass: string) => {
     set({ isLoading: true, error: null });
     try {
-      // Simulate/mock API auth response for demo APK
-      await new Promise(resolve => setTimeout(resolve, 800));
-      const mockName = email.split('@')[0];
-      const capitalized = mockName.charAt(0).toUpperCase() + mockName.slice(1);
+      const { user, token } = await AuthService.login(email, pass);
 
-      const loggedInUser: UserProfile = {
-        id: 'user-' + Date.now(),
-        name: capitalized || 'Safora Member',
-        email: email.trim(),
-        role: 'user',
-      };
-      const token = 'jwt-token-' + Date.now();
-
-      await AsyncStorage.setItem(
-        STORAGE_KEYS.USER,
-        JSON.stringify(loggedInUser),
-      );
+      await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
       await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, token);
       await AsyncStorage.setItem(STORAGE_KEYS.IS_GUEST, 'false');
       await AsyncStorage.setItem(STORAGE_KEYS.ONBOARDING_SEEN, 'true');
 
       set({
-        user: loggedInUser,
+        user,
         token,
         isAuthenticated: true,
         isGuest: false,
@@ -159,29 +139,28 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  register: async (name: string, email: string, phone: string) => {
+  register: async (
+    name: string,
+    email: string,
+    phone: string,
+    pass: string,
+  ) => {
     set({ isLoading: true, error: null });
     try {
-      await new Promise(resolve => setTimeout(resolve, 800));
-      const registeredUser: UserProfile = {
-        id: 'user-' + Date.now(),
-        name: name.trim(),
-        email: email.trim(),
-        phone: phone.trim(),
-        role: 'user',
-      };
-      const token = 'jwt-token-' + Date.now();
-
-      await AsyncStorage.setItem(
-        STORAGE_KEYS.USER,
-        JSON.stringify(registeredUser),
+      const { user, token } = await AuthService.register(
+        name,
+        email,
+        phone,
+        pass,
       );
+
+      await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
       await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, token);
       await AsyncStorage.setItem(STORAGE_KEYS.IS_GUEST, 'false');
       await AsyncStorage.setItem(STORAGE_KEYS.ONBOARDING_SEEN, 'true');
 
       set({
-        user: registeredUser,
+        user,
         token,
         isAuthenticated: true,
         isGuest: false,
@@ -198,11 +177,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   logout: async () => {
     try {
-      await AsyncStorage.removeItem(STORAGE_KEYS.USER);
-      await AsyncStorage.removeItem(STORAGE_KEYS.TOKEN);
-      await AsyncStorage.removeItem(STORAGE_KEYS.IS_GUEST);
+      await Promise.all([
+        AsyncStorage.removeItem(STORAGE_KEYS.USER),
+        AsyncStorage.removeItem(STORAGE_KEYS.TOKEN),
+        AsyncStorage.removeItem(STORAGE_KEYS.IS_GUEST),
+      ]);
     } catch {
-      // Storage fallback
+      // Cleanup fallback
     }
 
     set({
@@ -212,6 +193,47 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       isGuest: false,
       error: null,
     });
+  },
+
+  updateProfile: async (data: Partial<User>) => {
+    set({ isLoading: true, error: null });
+    try {
+      const currentUser = _get().user;
+      if (!currentUser) throw new Error('No user logged in');
+
+      let updatedUser: User;
+      if (_get().isGuest) {
+        updatedUser = {
+          ...currentUser,
+          ...data,
+        };
+      } else {
+        const res = await AuthService.updateProfile({
+          name: data.name,
+          email: data.email,
+          phone: data.phone,
+          bloodGroup: data.bloodGroup,
+          emergencyNotes: data.emergencyNotes,
+        });
+        updatedUser = {
+          ...currentUser,
+          ...res.user,
+          ...data,
+        };
+      }
+
+      await AsyncStorage.setItem(
+        STORAGE_KEYS.USER,
+        JSON.stringify(updatedUser),
+      );
+      set({ user: updatedUser, isLoading: false });
+      return true;
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : 'Failed to update profile';
+      set({ error: msg, isLoading: false });
+      return false;
+    }
   },
 
   clearError: () => set({ error: null }),

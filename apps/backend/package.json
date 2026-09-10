@@ -2,11 +2,11 @@
   "name": "backend",
   "version": "1.0.0",
   "description": "",
-  "main": "dist/app.js",
+  "main": "dist/server.js",
   "scripts": {
-    "dev": "npx tsx watch src/app.ts",
+    "dev": "npx tsx watch src/server.ts",
     "build": "tsc",
-    "start": "node dist/app.js",
+    "start": "node dist/server.js",
     "test": "jest"
   },
   "keywords": [],
@@ -14,7 +14,9 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@safora/shared-types": "*",
     "bcryptjs": "^3.0.3",
+    "zod": "^3.23.8",
     "cloudinary": "^2.11.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",

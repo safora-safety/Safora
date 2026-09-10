@@ -1,310 +1,231 @@
-# Safora — Community Safety & Safe Walk App
+# SAFORA — Community Safety & Safe Walk App
 
-Safora is a mobile app where users report unsafe locations (poor lighting,
-accidents, hazards, waterlogging, etc.), see a live community-generated
-safety heatmap, share their journey with trusted contacts during Safe Walk
-mode, and send a one-tap SOS in an emergency.
+[![React Native](https://img.shields.io/badge/React%20Native-0.87.1%20(Fabric)-61DAFB?logo=react&logoColor=black)](https://reactnative.dev)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+[![Express](https://img.shields.io/badge/Express-4.x-000000?logo=express&logoColor=white)](https://expressjs.com)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15%2B-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org)
+[![PostGIS](https://img.shields.io/badge/PostGIS-Spatial%20Engine-336791)](https://postgis.net)
 
-This is the **minor project scope**. Offline (Bluetooth/Wi-Fi Direct) SOS
-communication and AI-based safe-route scoring are explicitly **out of
-scope** here — they belong to a future major-project phase. Do not
-implement them in this build.
+> **Academic Context**: Minor Project-I submitted in partial fulfilment of the requirements for the degree of **Bachelor of Technology in Computer Science & Engineering**  
+> **Institution**: Dev Bhoomi Uttarakhand University (DBUU), Dehradun  
+> **Batch**: 2026 – 2027  
+> **Supervisor**: Mr. Mukesh Rajput (Assistant Professor, Department of CSE, SoEC, DBUU)  
+> **Project Team**: Arushi Saxena (24BTCSE0241), Anurag Suyal (24BTCSE0264), Aman Singh Kunwar (24BTCSE0321), Shubham Kumar (24BTCSE0333)
 
 ---
 
-## 1. Tech Stack
+## 🌟 Executive Summary
 
-| Layer | Technology | Notes |
+**SAFORA** is a community-powered personal safety navigation and emergency response application designed for campus and urban environments. While standard navigation systems focus solely on distance and speed, SAFORA empowers walkers—especially women and students traveling at night or in unfamiliar areas—to evaluate safety risks in real time.
+
+Users crowdsource hazard reports (poor lighting, road hazards, waterlogging, isolated areas, harassment hotspots), view an algorithmic safety heatmap, share live tracking during **Safe Walk** journeys with automated route deviation alerts, and trigger an instant **One-Tap SOS**.
+
+```mermaid
+flowchart TD
+    User(["👤 Mobile User"])
+    
+    subgraph MobileApp ["Mobile Client (React Native + TypeScript)"]
+        Radar["Safety Radar & Geospatial Canvas"]
+        SafeWalk["Safe Walk Engine (150m Corridor)"]
+        SOS["One-Tap SOS Emergency Trigger"]
+    end
+    
+    subgraph BackendGateway ["Backend API & Real-Time Gateway (Node.js + Express)"]
+        Auth["JWT Auth & Security"]
+        ScoreEngine["Decay-Weighted Safety Score Engine"]
+        IncidentMgr["Incident & Socket.IO Dispatcher"]
+    end
+    
+    subgraph SpatialDB ["Spatial Data Store (PostgreSQL + PostGIS)"]
+        PostGIS[("PostGIS Engine<br/>geography(Point, 4326) + GiST Indexes")]
+    end
+    
+    subgraph EmergencyContacts ["Safety Network"]
+        FCM["Firebase Cloud Messaging (FCM)"]
+        Contacts["👥 Trusted Contacts (SMS & Push Alerts)"]
+    end
+
+    User <--> MobileApp
+    MobileApp <==>|"HTTPS (REST) & WSS (Socket.IO)"| BackendGateway
+    BackendGateway <-->|"ST_DWithin & ST_ClusterDBSCAN"| SpatialDB
+    BackendGateway -->|"Emergency Payload"| FCM
+    FCM --> Contacts
+```
+
+---
+
+## 📚 Project Documentation Hub
+
+All detailed technical specifications, architectural diagrams, mathematical models, and deployment guides are available in the **[`docs/`](file:///D:/Safora/docs)** directory:
+
+| Document | Description |
+|---|---|
+| 📐 **[System Architecture](file:///D:/Safora/docs/architecture.md)** | Subsystems, C4 container diagram, DFD Level 0 (Context) & Level 1, sequence flows. |
+| 🔌 **[REST API Specification](file:///D:/Safora/docs/api.md)** | Endpoints reference, request/response schemas, JWT bearer authorization, and Socket.IO events. |
+| 🗄️ **[Database & PostGIS Architecture](file:///D:/Safora/docs/database.md)** | ER diagram, table schemas, `geography(Point, 4326)` types, GiST indexes, and spatial query patterns. |
+| 📱 **[Mobile Application Guide](file:///D:/Safora/docs/mobile-guide.md)** | React Native (Fabric/Hermes), screen catalog, Zustand state, Metro monorepo resolver, and Android APK builds. |
+| 🧠 **[Safety Algorithms & Mathematics](file:///D:/Safora/docs/safety-algorithms.md)** | Mathematical safety score decay formulation, DBSCAN 50m clustering, and Safe Walk state machine. |
+| 🛠️ **[Developer Setup & Run Guide](file:///D:/Safora/docs/setup.md)** | Prerequisites, `.env` file configurations, running backend & mobile, and troubleshooting. |
+| 📏 **[Engineering Standards & Best Practices](file:///D:/Safora/docs/standards-and-best-practices.md)** | Codebase conventions, feature-based mobile folder structure, clean backend architecture, and PostGIS idioms. |
+| 📊 **[Project Status & Roadmap](file:///D:/Safora/docs/project-status-and-roadmap.md)** | Completion progress scorecard (~94%), what is done, and remaining tasks for final submission. |
+| 📑 **[Docs Master Index](file:///D:/Safora/docs/README.md)** | Comprehensive documentation index and summary of all technical artifacts. |
+| 📄 **[Academic Synopsis PDF](file:///D:/Safora/docs/SAFORA_Synopsis_Formatted.pdf)** | Approved project synopsis submitted to Dev Bhoomi Uttarakhand University. |
+
+---
+
+## 🚀 Key Features & The 6 Core Modules
+
+Based on Section 4.2 of the [Project Synopsis](file:///D:/Safora/docs/SAFORA_Synopsis_Formatted.pdf):
+
+1. **Module 1: User Authentication & Profile Management**
+   - Secure stateless authentication using JSON Web Tokens (JWT) and bcrypt password hashing.
+   - Profile management with customizable emergency contact relationships.
+2. **Module 2: Community Hazard Reporting**
+   - Crowdsourced hazard pinning with category selection (lighting, construction, waterlogging, isolated trail, traffic) and severity ratings (1 to 5).
+   - Anti-abuse mechanisms: Rate limiting (max 5/hr) and text filters against personal names.
+3. **Module 3: Safety Score & Heatmap Engine**
+   - Real-time score computation (0 to 100) combining hazard frequency, severity, recency exponential decay ($t_{\text{half}} = 24\text{h}$), and community confirmations.
+   - Spatial clustering via PostGIS `ST_ClusterDBSCAN` grouping hazards within **50 meters** to prevent duplicate marker clutter.
+4. **Module 4: Safe Walk Mode & Trusted Contacts**
+   - Live route compliance monitoring along a configured 150-meter corridor.
+   - **Confirm-Before-Escalate**: If a deviation occurs, the walker receives a 60-second grace prompt before alerting contacts, eliminating false alarms.
+   - Ephemeral location sharing automatically terminated once the journey ends.
+5. **Module 5: One-Tap SOS Alert System**
+   - Immediate distress signal capturing high-accuracy coordinates and battery level.
+   - Instant dispatch to assigned emergency contacts with a live tracking URL.
+6. **Module 6: Administrative Moderation & Diagnostics**
+   - Moderation workflows to mark reports as active, resolved, duplicate, or fake.
+   - Live system health checks and database latency diagnostics (`/api/diagnostics`).
+
+---
+
+## 🛠️ Architecture & Technology Stack
+
+| Layer | Technology | Engineering Rationale |
 |---|---|---|
-| Mobile app | React Native + TypeScript | Pure mobile app, no separate web frontend |
-| Backend | Node.js + Express + TypeScript | REST API |
-| Database | PostgreSQL + PostGIS | Use the `geography` type for coordinates, **not** `geometry` — this app needs real-world distance accuracy |
-| ORM | TypeORM or Knex | Must have working native support for PostGIS spatial queries. Do not use Prisma with raw-SQL workarounds for this project |
-| Background location | `react-native-background-geolocation` | Chosen specifically because it keeps tracking under iOS/Android background restrictions — required for Safe Walk mode to work when the phone is asleep |
-| Maps | Google Maps SDK or Mapbox | Confirm pricing/quota before locking in |
-| Real-time | Socket.IO | Live location updates during a journey |
-| Notifications | Firebase Cloud Messaging (FCM) | Safe Walk start/end, SOS, arrival timeout |
-| Auth | JWT | Optional Google OAuth later — not required for minor scope |
-| Image storage | Cloudinary | Optional report photo attachments |
-| Deployment (backend) | Render or Railway | |
-| Deployment (database) | Neon (managed PostgreSQL + PostGIS) or equivalent | |
+| **Mobile App** | React Native `0.87.1` + TypeScript | Native mobile performance with **Hermes** bytecode engine and **Fabric (New Architecture)** enabled. |
+| **Spatial Canvas** | Native Safety Radar & Open Geospatial Canvas | Coordinates and radius rings plotted mathematically via PostGIS (`ST_DWithin`), eliminating external Google Maps API billing and quota failure points. |
+| **State & Navigation** | Zustand + Native Stack Navigator | Fast, decoupled state management with native transitions and persistent session storage. |
+| **Backend API** | Node.js + Express + TypeScript | Lightweight asynchronous REST API and Socket.IO WebSocket gateway. |
+| **Database** | PostgreSQL 15+ with PostGIS | Uses `geography(Point, 4326)` for true ellipsoidal distance accuracy across the earth's curved surface. |
+| **Spatial Indexing** | GiST (`reports_location_idx`) | $O(\log N)$ bounding-box search for high-throughput spatial radius lookups. |
+| **Notifications** | Firebase Cloud Messaging (FCM) | High-priority push alerts for deviation escalation and SOS dispatch. |
 
 ---
 
-## 2. Repository Structure
+## 📂 Repository Structure
+
+The project is configured as an npm workspace monorepo:
 
 ```
 safora/
 ├── apps/
-│   ├── mobile/                 # React Native + TypeScript app
+│   ├── backend/                # Express.js + TypeScript API server
 │   │   ├── src/
-│   │   │   ├── screens/        # Map, ReportIssue, SafeWalk, SOS, TrustedContacts, Auth, AdminDashboard
-│   │   │   ├── components/
-│   │   │   ├── navigation/
-│   │   │   ├── services/       # API client, socket client, location service
-│   │   │   ├── hooks/
-│   │   │   └── store/          # app state (journey status, auth, etc.)
-│   │   ├── app.json
+│   │   │   ├── config/         # Database pool, diagnostics, environment
+│   │   │   ├── controllers/    # Route controllers (auth, reports)
+│   │   │   ├── middleware/     # Auth guards, validation, rate limiting
+│   │   │   ├── routes/         # Express routers (/api/auth, /api/reports)
+│   │   │   └── app.ts          # Server bootstrap & Socket.IO initialization
+│   │   ├── .env
 │   │   └── package.json
 │   │
-│   └── backend/                # Express + TypeScript API
+│   └── mobile/                 # React Native mobile application
+│       ├── android/            # Android Gradle project (New Arch, arm64-v8a ABI)
 │       ├── src/
-│       │   ├── modules/
-│       │   │   ├── auth/
-│       │   │   ├── reports/        # CRUD + PostGIS queries + clustering
-│       │   │   ├── safety-score/   # scoring + decay logic
-│       │   │   ├── journeys/       # Safe Walk state, deviation/timeout logic
-│       │   │   ├── sos/
-│       │   │   ├── trusted-contacts/
-│       │   │   └── admin/          # moderation, analytics
-│       │   ├── db/
-│       │   │   ├── migrations/
-│       │   │   └── entities/       # TypeORM entities (or Knex schema)
-│       │   ├── middleware/         # auth guard, rate limiter
-│       │   ├── sockets/            # Socket.IO handlers
-│       │   └── index.ts
-│       ├── .env.example
+│       │   ├── screens/        # UI screens (Home, Map, SafeWalk, Profile, Auth)
+│       │   ├── navigation/     # RootNavigator (Native Stack)
+│       │   ├── services/       # Location engine, API client (Axios)
+│       │   ├── store/          # Zustand global state
+│       │   └── theme/          # Typography, colors, styles
+│       ├── metro.config.js     # Monorepo resolution with extraNodeModules
 │       └── package.json
 │
 ├── packages/
-│   └── shared-types/           # Shared TS interfaces: Report, User, SafetyScore,
-│                                # Journey, TrustedContact, SosAlert — imported by
-│                                # both apps/mobile and apps/backend
+│   └── shared-types/           # Shared TypeScript interfaces (User, HazardReport, etc.)
 │       ├── src/
 │       └── package.json
 │
-├── docs/
+├── docs/                       # Technical documentation & Academic Synopsis
 │   ├── architecture.md
-│   └── api.md
+│   ├── api.md
+│   ├── database.md
+│   ├── mobile-guide.md
+│   ├── safety-algorithms.md
+│   ├── setup.md
+│   ├── SAFORA_Synopsis_Formatted.pdf
+│   └── README.md
 │
-└── README.md
-```
-
-Use a monorepo tool (npm workspaces, pnpm workspaces, or Turborepo) so
-`packages/shared-types` can be imported directly by both `apps/mobile` and
-`apps/backend` without publishing to a registry.
-
----
-
-## 3. Prerequisites
-
-- Node.js 20+
-- npm or pnpm
-- PostgreSQL 15+ with the PostGIS extension enabled
-- React Native development environment (Android Studio and/or Xcode)
-- A Google Maps or Mapbox API key
-- A Firebase project (for FCM)
-- A Cloudinary account (optional, for report photos)
-
----
-
-## 4. Environment Variables
-
-Create `apps/backend/.env` from `.env.example`:
-
-```
-DATABASE_URL=postgresql://user:password@host:5432/safora
-JWT_SECRET=replace-me
-FCM_SERVER_KEY=replace-me
-CLOUDINARY_URL=replace-me
-PORT=4000
-```
-
-Create `apps/mobile/.env`:
-
-```
-API_BASE_URL=http://localhost:4000
-GOOGLE_MAPS_API_KEY=replace-me
+└── README.md                   # Root repository documentation
 ```
 
 ---
 
-## 5. Database Setup
+## ⚡ Quick Start & Run Commands
 
-```sql
-CREATE EXTENSION IF NOT EXISTS postgis;
-```
+### 1. Prerequisites
+- **Node.js**: `v20.x` or `v22.x` & `npm`
+- **PostgreSQL**: `15+` with the `postgis` extension enabled (e.g. via Neon)
+- **Android SDK**: Platform 34/35, NDK `27.1.12297006`, OpenJDK 17
 
-Core tables (implement as TypeORM entities or Knex migrations):
-
-- **users** — id, name, phone/email, password_hash, created_at
-- **reports** — id, user_id, category, description, photo_url (nullable),
-  location `geography(Point, 4326)`, severity, status (active/resolved/duplicate/fake),
-  confirmations_count, created_at
-- **trusted_contacts** — id, user_id, contact_name, contact_phone, relationship
-- **journeys** — id, user_id, destination `geography(Point, 4326)`,
-  planned_route, trusted_contact_ids, status (active/completed/cancelled),
-  started_at, expected_arrival_at, ended_at
-- **sos_alerts** — id, user_id, journey_id (nullable), location, status, created_at
-
-Key spatial query pattern (use this for "find reports near me" and for
-clustering — do not do naive lat/lng math in application code):
-
-```sql
-SELECT * FROM reports
-WHERE ST_DWithin(location, ST_MakePoint($lng, $lat)::geography, $radius_meters)
-AND status = 'active';
-```
-
-A GiST index on the `location` column is required:
-
-```sql
-CREATE INDEX reports_location_idx ON reports USING GIST (location);
-```
-
----
-
-## 6. Setup & Run
-
-```bash
-# Install all workspace dependencies
+### 2. Dependency Installation
+From the root repository:
+```powershell
 npm install
+```
 
-# Backend
+### 3. Start the Backend API
+```powershell
 cd apps/backend
-npm run migrate      # run DB migrations
-npm run dev          # starts Express server with hot reload
+npm run dev
+```
+- API Base URL: `http://localhost:5000/api`
+- Health Check: `http://localhost:5000/api/health`
+- Live Diagnostics: `http://localhost:5000/api/diagnostics`
 
-# Mobile (in a separate terminal)
+### 4. Run the Mobile App
+In a second terminal:
+```powershell
 cd apps/mobile
-npm run android       # or: npm run ios
+npm start -- --reset-cache
 ```
-
----
-
-## 7. Core Feature Implementation Notes
-
-Build in this order — each phase depends on the previous one working:
-
-1. **Auth + Report CRUD + PostGIS query** — prove the geospatial query
-   pattern works end to end before building anything on top of it.
-2. **Safety Score & clustering**
-   - Score = `report frequency + severity + recency + confirmations`.
-   - Recency must be an actual decay function (e.g. exponential falloff by
-     report age), not a fixed one-time weight — stale reports must count
-     for less over time, or the map will mislead users.
-   - Cluster/deduplicate reports within **50 meters or less** using
-     `ST_ClusterDBSCAN` or an equivalent distance-bounded grouping query.
-     Do not use a wider radius — it risks merging genuinely separate
-     hazards into one.
-   - Report category input: a structured dropdown (accident, broken
-     light, waterlogging, road hazard, unsafe area, animal hazard) plus a
-     free-text "other" field. The free-text field must be filtered against
-     a blocklist (no naming individuals) and flagged for admin review
-     before it affects the safety score.
-   - Anti-abuse: rate-limit reports per user, flag rapid/duplicate
-     submissions, weight multi-user-confirmed reports higher than a single
-     unverified one.
-3. **Safe Walk mode**
-   - Background location via `react-native-background-geolocation` —
-     test on a real Android and iOS device early, this is the highest-risk
-     part of the whole build.
-   - Deviation handling: **warn first, let the user confirm they're okay,
-     escalate to trusted contacts only if they don't respond** within a
-     configured window. Do not auto-escalate on deviation alone — this
-     causes false alarms.
-   - Location sharing must auto-expire the moment the journey ends or is
-     cancelled.
-4. **SOS + Trusted Contacts** — capture location, create alert, notify
-   trusted contacts via FCM, store the event. Offline SOS is out of scope.
-5. **Admin Dashboard** — report counts/analytics, map view, moderation
-   (mark duplicate/fake/resolved) — ties directly into the anti-abuse logic
-   above.
-
----
-
-## 8. API Overview
-
-See `docs/api.md` for full request/response shapes. Core endpoints:
-
-```
-POST   /auth/signup
-POST   /auth/login
-
-GET    /reports?lat=&lng=&radius=
-POST   /reports
-PATCH  /reports/:id/confirm
-PATCH  /reports/:id/moderate      (admin only)
-
-GET    /safety-score?lat=&lng=
-
-POST   /journeys/start
-PATCH  /journeys/:id/location
-PATCH  /journeys/:id/complete
-PATCH  /journeys/:id/cancel
-
-POST   /sos
-
-GET    /trusted-contacts
-POST   /trusted-contacts
-DELETE /trusted-contacts/:id
-
-GET    /admin/reports
-GET    /admin/analytics
-```
-
----
-
-## 9. Testing
-
-**Backend**
-```bash
-cd apps/backend
-npm run test          # unit tests (Jest)
-npm run test:e2e      # API integration tests against a test DB
-```
-Cover at minimum: PostGIS distance query correctness, safety score decay
-calculation, clustering radius behavior, rate-limiting on report creation,
-deviation-warning-before-escalation logic.
-
-**Mobile**
-```bash
+In a third terminal:
+```powershell
 cd apps/mobile
-npm run test           # component tests (Jest + React Native Testing Library)
+npm run android
 ```
 
-**Manual test checklist before demo/submission**
-- [ ] Create a report, confirm it appears on the map and affects the heatmap
-- [ ] Confirm heatmap color updates as reports age (decay visible over test data)
-- [ ] Two reports within 50m cluster into one; two reports beyond 50m stay separate
-- [ ] Start Safe Walk, deviate from route, confirm warning appears before any
-      contact is notified
-- [ ] Let a Safe Walk timeout expire without confirming — trusted contact gets notified
-- [ ] End a Safe Walk — confirm location sharing stops immediately
-- [ ] Trigger SOS with and without internet connectivity (offline should
-      fail gracefully, not crash — offline SOS is out of scope, but the
-      app must not break when there's no signal)
-- [ ] Background location keeps working after the phone screen locks (test
-      on a real device, not just an emulator)
-- [ ] Free-text report field rejects/flags a submission containing a name
-- [ ] Admin can mark a report duplicate/fake and it stops counting toward
-      the safety score
+### 5. Build Standalone Debug APK
+To package the standalone APK for physical testing without a local dev server:
+```powershell
+cd apps/mobile/android
+.\gradlew assembleDebug
+```
+Compiled APK path:  
+`apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk` *(~59 MB, optimized for arm64-v8a)*
 
 ---
 
-## 10. Explicitly Out of Scope (Minor Project)
+## 🎯 Project Scope Boundaries
 
-Do not build these — they belong to the major-project phase:
+To maintain high quality within the academic timeline, strict boundaries are enforced:
 
-- Offline Bluetooth/Wi-Fi Direct mesh communication for SOS
-- AI-based safe-route scoring/recommendation (lighting/crowd/weather models)
-- AI image-based hazard detection from photos
-- Wearable/SOS device integration
+- **Included in Minor Project-I Scope**:
+  - Fully functional React Native mobile application.
+  - Node.js/Express backend with Socket.IO real-time location streaming.
+  - PostgreSQL + PostGIS spatial querying (`ST_DWithin`) and 50m DBSCAN hazard clustering.
+  - Safe Walk corridor compliance and 60-second deviation escalation.
+  - One-tap SOS emergency alert dispatch.
+  - Administrative moderation and system diagnostics.
+- **Explicitly Out of Scope (Future Major Project)**:
+  - AI-based safe-route recommendation (lighting/crowd/weather predictive models).
+  - Offline Bluetooth / Wi-Fi Direct mesh communication.
+  - AI image hazard detection from camera photos.
+  - Hardware wearable SOS device integration.
 
 ---
 
-## 11. For an AI Coding Agent Picking This Up
+## 📄 License & Academic Attribution
 
-If you are an AI agent implementing this from scratch:
-
-1. Scaffold the monorepo structure in Section 2 first, with the shared-types
-   package before either app, since both depend on it.
-2. Implement Section 5–6 (DB + setup) and get the PostGIS distance query in
-   Section 5 working and tested before writing any other backend logic.
-3. Follow the build order in Section 7 exactly — each phase is a
-   prerequisite for the next, not an independent task list.
-4. Treat every "Decision" note in this file as a hard constraint, not a
-   suggestion — they exist because a simpler alternative was already
-   considered and rejected for a stated reason.
-5. Stop at the boundary in Section 10. If asked to add anything listed
-   there, flag that it's a major-project feature rather than implementing it.
+This project is developed as an academic Minor Project-I under the School of Engineering and Computing (SoEC), **Dev Bhoomi Uttarakhand University (DBUU)**, Dehradun. All rights reserved by the project authors and institution.

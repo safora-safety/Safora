@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import { colors } from '../theme/colors';
 import { useAuthStore } from '../store/authStore';
+import { EditProfileModal } from '../components/EditProfileModal';
+import { useTheme } from '../theme/ThemeContext';
 
 interface Contact {
   id: string;
@@ -21,6 +23,8 @@ interface Contact {
 
 export const ProfileScreen: React.FC = () => {
   const { user, isGuest, logout } = useAuthStore();
+  const { colors, isDark, themeMode, setThemeMode } = useTheme();
+  const [showEditModal, setShowEditModal] = useState(false);
   const [highAccuracyGps, setHighAccuracyGps] = useState(true);
   const [nightAlerts, setNightAlerts] = useState(true);
   const [vibrateSos, setVibrateSos] = useState(true);
@@ -70,13 +74,26 @@ export const ProfileScreen: React.FC = () => {
   };
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={colors.background} />
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar
+        barStyle={isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={colors.backgroundCard}
+      />
 
       {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>User Profile & Safety</Text>
-        <Text style={styles.headerSubtitle}>
+      <View
+        style={[
+          styles.header,
+          {
+            backgroundColor: colors.backgroundCard,
+            borderBottomColor: colors.border,
+          },
+        ]}
+      >
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
+          User Profile & Safety
+        </Text>
+        <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
           Account & emergency responder settings
         </Text>
       </View>
@@ -86,20 +103,35 @@ export const ProfileScreen: React.FC = () => {
         showsVerticalScrollIndicator={false}
       >
         {/* Profile Card */}
-        <View style={styles.profileCard}>
-          <View style={styles.avatarCircle}>
+        <View
+          style={[
+            styles.profileCard,
+            {
+              backgroundColor: colors.backgroundCard,
+              borderColor: colors.border,
+            },
+          ]}
+        >
+          <View
+            style={[styles.avatarCircle, { backgroundColor: colors.primary }]}
+          >
             <Text style={styles.avatarText}>
               {isGuest ? '👤' : user?.name?.charAt(0) || 'U'}
             </Text>
           </View>
 
           <View style={styles.profileInfo}>
-            <Text style={styles.userName}>
+            <Text style={[styles.userName, { color: colors.textPrimary }]}>
               {user?.name || 'Guest Explorer'}
             </Text>
-            <Text style={styles.userEmail}>
+            <Text style={[styles.userEmail, { color: colors.textSecondary }]}>
               {user?.email || 'guest@safora.app'}
             </Text>
+            {user?.phone ? (
+              <Text style={[styles.userPhoneText, { color: colors.primary }]}>
+                📞 {user.phone}
+              </Text>
+            ) : null}
 
             <View
               style={[
@@ -112,7 +144,56 @@ export const ProfileScreen: React.FC = () => {
               </Text>
             </View>
           </View>
+
+          <TouchableOpacity
+            style={[
+              styles.editBtn,
+              {
+                backgroundColor: colors.backgroundInput,
+                borderColor: colors.border,
+              },
+            ]}
+            onPress={() => setShowEditModal(true)}
+            accessibilityLabel="Edit Profile"
+          >
+            <Text style={[styles.editBtnText, { color: colors.textPrimary }]}>
+              ✏️ Edit
+            </Text>
+          </TouchableOpacity>
         </View>
+
+        {/* Emergency Medical Credentials Card */}
+        <TouchableOpacity
+          style={[
+            styles.medicalCard,
+            { backgroundColor: colors.backgroundCard },
+          ]}
+          onPress={() => setShowEditModal(true)}
+          activeOpacity={0.8}
+        >
+          <View style={styles.medicalHeader}>
+            <Text style={styles.medicalTitle}>🩸 Emergency Medical Info</Text>
+            <Text style={[styles.medicalActionText, { color: colors.primary }]}>
+              Update ›
+            </Text>
+          </View>
+          <View style={styles.medicalContent}>
+            <View style={styles.bloodChip}>
+              <Text style={styles.bloodChipText}>
+                {user?.bloodGroup
+                  ? `Blood: ${user.bloodGroup}`
+                  : 'Blood: Not Set'}
+              </Text>
+            </View>
+            <Text
+              style={[styles.medicalNotes, { color: colors.textSecondary }]}
+              numberOfLines={2}
+            >
+              {user?.emergencyNotes ||
+                'Tap to add allergy or critical medical notes for first responders'}
+            </Text>
+          </View>
+        </TouchableOpacity>
 
         {/* Guest Upgrade Banner */}
         {isGuest && (
@@ -120,12 +201,14 @@ export const ProfileScreen: React.FC = () => {
             <Text style={styles.guestWarningTitle}>
               ⚠️ You are in Guest Mode
             </Text>
-            <Text style={styles.guestWarningDesc}>
+            <Text
+              style={[styles.guestWarningDesc, { color: colors.textSecondary }]}
+            >
               In guest mode, custom emergency contacts & verified report
               submissions are simulated.
             </Text>
             <TouchableOpacity style={styles.guestSwitchBtn} onPress={logout}>
-              <Text style={styles.guestSwitchText}>
+              <Text style={[styles.guestSwitchText, { color: colors.primary }]}>
                 Sign Up / Switch to Real Account →
               </Text>
             </TouchableOpacity>
@@ -134,23 +217,50 @@ export const ProfileScreen: React.FC = () => {
 
         {/* Emergency Contacts Management */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Emergency SOS Contacts</Text>
-          <TouchableOpacity onPress={addContactPrompt} style={styles.addBtn}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+            Emergency SOS Contacts
+          </Text>
+          <TouchableOpacity
+            onPress={addContactPrompt}
+            style={[styles.addBtn, { backgroundColor: colors.primary }]}
+          >
             <Text style={styles.addBtnText}>+ Add</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.contactsList}>
           {contacts.map(contact => (
-            <View key={contact.id} style={styles.contactItem}>
-              <View style={styles.contactIconCircle}>
+            <View
+              key={contact.id}
+              style={[
+                styles.contactItem,
+                {
+                  backgroundColor: colors.backgroundCard,
+                  borderColor: colors.border,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.contactIconCircle,
+                  { backgroundColor: colors.backgroundInput },
+                ]}
+              >
                 <Text style={styles.contactIcon}>📞</Text>
               </View>
 
               <View style={styles.contactDetails}>
-                <Text style={styles.contactName}>{contact.name}</Text>
-                <Text style={styles.contactRel}>{contact.relationship}</Text>
-                <Text style={styles.contactPhone}>{contact.phone}</Text>
+                <Text
+                  style={[styles.contactName, { color: colors.textPrimary }]}
+                >
+                  {contact.name}
+                </Text>
+                <Text style={[styles.contactRel, { color: colors.textMuted }]}>
+                  {contact.relationship}
+                </Text>
+                <Text style={[styles.contactPhone, { color: colors.primary }]}>
+                  {contact.phone}
+                </Text>
               </View>
 
               <TouchableOpacity
@@ -164,12 +274,30 @@ export const ProfileScreen: React.FC = () => {
         </View>
 
         {/* Safety Preferences */}
-        <Text style={styles.sectionTitle}>Safety Preferences</Text>
-        <View style={styles.settingsCard}>
-          <View style={styles.settingRow}>
+        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+          Safety Preferences
+        </Text>
+        <View
+          style={[
+            styles.settingsCard,
+            {
+              backgroundColor: colors.backgroundCard,
+              borderColor: colors.border,
+            },
+          ]}
+        >
+          <View
+            style={[styles.settingRow, { borderBottomColor: colors.border }]}
+          >
             <View style={styles.settingInfo}>
-              <Text style={styles.settingLabel}>High-Accuracy GPS Radar</Text>
-              <Text style={styles.settingDesc}>
+              <Text
+                style={[styles.settingLabel, { color: colors.textPrimary }]}
+              >
+                High-Accuracy GPS Radar
+              </Text>
+              <Text
+                style={[styles.settingDesc, { color: colors.textSecondary }]}
+              >
                 Continuous sub-meter PostGIS location buffer
               </Text>
             </View>
@@ -180,12 +308,18 @@ export const ProfileScreen: React.FC = () => {
             />
           </View>
 
-          <View style={styles.settingRow}>
+          <View
+            style={[styles.settingRow, { borderBottomColor: colors.border }]}
+          >
             <View style={styles.settingInfo}>
-              <Text style={styles.settingLabel}>
+              <Text
+                style={[styles.settingLabel, { color: colors.textPrimary }]}
+              >
                 Night Patrol Hazard Alerts
               </Text>
-              <Text style={styles.settingDesc}>
+              <Text
+                style={[styles.settingDesc, { color: colors.textSecondary }]}
+              >
                 Push warning when approaching unlit streets after 8 PM
               </Text>
             </View>
@@ -198,8 +332,14 @@ export const ProfileScreen: React.FC = () => {
 
           <View style={[styles.settingRow, { borderBottomWidth: 0 }]}>
             <View style={styles.settingInfo}>
-              <Text style={styles.settingLabel}>Haptic SOS Pulse</Text>
-              <Text style={styles.settingDesc}>
+              <Text
+                style={[styles.settingLabel, { color: colors.textPrimary }]}
+              >
+                Haptic SOS Pulse
+              </Text>
+              <Text
+                style={[styles.settingDesc, { color: colors.textSecondary }]}
+              >
                 Strong vibration confirmation upon SOS trigger
               </Text>
             </View>
@@ -211,6 +351,58 @@ export const ProfileScreen: React.FC = () => {
           </View>
         </View>
 
+        {/* Appearance & Theme Selector */}
+        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+          App Theme
+        </Text>
+        <View
+          style={[
+            styles.settingsCard,
+            {
+              backgroundColor: colors.backgroundCard,
+              borderColor: colors.border,
+            },
+          ]}
+        >
+          <View style={styles.themeSelectorRow}>
+            {[
+              { id: 'light', label: '☀️ Light' },
+              { id: 'dark', label: '🌙 Dark' },
+              { id: 'system', label: '⚙️ Auto' },
+            ].map(opt => {
+              const isSelected = themeMode === opt.id;
+              return (
+                <TouchableOpacity
+                  key={opt.id}
+                  style={[
+                    styles.themeBtn,
+                    {
+                      backgroundColor: isSelected
+                        ? colors.primary
+                        : colors.backgroundInput,
+                      borderColor: isSelected
+                        ? colors.primaryLight
+                        : colors.border,
+                    },
+                  ]}
+                  onPress={() => setThemeMode(opt.id as any)}
+                  activeOpacity={0.8}
+                >
+                  <Text
+                    style={[
+                      styles.themeBtnText,
+                      { color: isSelected ? '#FFFFFF' : colors.textSecondary },
+                      isSelected && { fontWeight: '800' },
+                    ]}
+                  >
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
         {/* Logout Button */}
         <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
           <Text style={styles.logoutText}>
@@ -218,74 +410,79 @@ export const ProfileScreen: React.FC = () => {
           </Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Edit Profile Bottom Sheet Modal */}
+      <EditProfileModal
+        visible={showEditModal}
+        onClose={() => setShowEditModal(false)}
+      />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
+  container: { flex: 1 },
   header: {
     paddingHorizontal: 20,
     paddingTop: 48,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.backgroundCard,
   },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: colors.textPrimary,
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  content: {
-    padding: 20,
-    gap: 16,
-    paddingBottom: 50,
-  },
+  headerTitle: { fontSize: 22, fontWeight: '900' },
+  headerSubtitle: { fontSize: 12, marginTop: 2 },
+  content: { padding: 20, gap: 16, paddingBottom: 50 },
   profileCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.backgroundCard,
     borderRadius: 18,
     padding: 16,
     borderWidth: 1,
-    borderColor: colors.border,
     gap: 16,
   },
   avatarCircle: {
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: {
-    fontSize: 26,
-    color: '#FFFFFF',
-    fontWeight: '800',
+  avatarText: { fontSize: 26, color: '#FFFFFF', fontWeight: '800' },
+  profileInfo: { flex: 1, gap: 4 },
+  userName: { fontSize: 18, fontWeight: '800' },
+  userEmail: { fontSize: 12 },
+  userPhoneText: { fontSize: 11, fontWeight: '600' },
+  editBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
   },
-  profileInfo: {
-    flex: 1,
-    gap: 4,
+  editBtnText: { fontSize: 11, fontWeight: '700' },
+  medicalCard: {
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    borderRadius: 14,
+    padding: 12,
+    gap: 8,
   },
-  userName: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: colors.textPrimary,
+  medicalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  userEmail: {
-    fontSize: 12,
-    color: colors.textSecondary,
+  medicalTitle: { fontSize: 13, fontWeight: '800', color: colors.danger },
+  medicalActionText: { fontSize: 11, fontWeight: '700' },
+  medicalContent: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  bloodChip: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderWidth: 1,
+    borderColor: colors.danger,
   },
+  bloodChipText: { fontSize: 10, fontWeight: '800', color: colors.danger },
+  medicalNotes: { flex: 1, fontSize: 11 },
   badge: {
     alignSelf: 'flex-start',
     paddingVertical: 3,
@@ -303,11 +500,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.success,
   },
-  badgeText: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: colors.textPrimary,
-  },
+  badgeText: { fontSize: 9, fontWeight: '800', color: colors.textPrimary },
   guestWarningCard: {
     backgroundColor: 'rgba(245, 158, 11, 0.1)',
     borderWidth: 1,
@@ -316,55 +509,24 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 6,
   },
-  guestWarningTitle: {
-    color: colors.warning,
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  guestWarningDesc: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  guestSwitchBtn: {
-    marginTop: 6,
-  },
-  guestSwitchText: {
-    color: colors.accent,
-    fontSize: 12,
-    fontWeight: '700',
-  },
+  guestWarningTitle: { color: colors.warning, fontSize: 13, fontWeight: '800' },
+  guestWarningDesc: { fontSize: 12, lineHeight: 18 },
+  guestSwitchBtn: { marginTop: 6 },
+  guestSwitchText: { fontSize: 12, fontWeight: '700' },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 8,
   },
-  sectionTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: colors.textPrimary,
-  },
-  addBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    backgroundColor: colors.primary,
-    borderRadius: 8,
-  },
-  addBtnText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  contactsList: {
-    gap: 8,
-  },
+  sectionTitle: { fontSize: 15, fontWeight: '800' },
+  addBtn: { paddingVertical: 4, paddingHorizontal: 10, borderRadius: 8 },
+  addBtnText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
+  contactsList: { gap: 8 },
   contactItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.backgroundCard,
     borderWidth: 1,
-    borderColor: colors.border,
     padding: 12,
     borderRadius: 14,
   },
@@ -372,31 +534,15 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: colors.backgroundInput,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
-  contactIcon: {
-    fontSize: 16,
-  },
-  contactDetails: {
-    flex: 1,
-  },
-  contactName: {
-    color: colors.textPrimary,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  contactRel: {
-    color: colors.textMuted,
-    fontSize: 11,
-  },
-  contactPhone: {
-    color: colors.accent,
-    fontSize: 11,
-    fontWeight: '600',
-  },
+  contactIcon: { fontSize: 16 },
+  contactDetails: { flex: 1 },
+  contactName: { fontSize: 13, fontWeight: '700' },
+  contactRel: { fontSize: 11 },
+  contactPhone: { fontSize: 11, fontWeight: '600' },
   testBtn: {
     paddingVertical: 5,
     paddingHorizontal: 12,
@@ -405,52 +551,35 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.danger,
   },
-  testBtnText: {
-    color: colors.danger,
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  settingsCard: {
-    backgroundColor: colors.backgroundCard,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 16,
-    paddingHorizontal: 16,
-  },
+  testBtnText: { color: colors.danger, fontSize: 11, fontWeight: '700' },
+  settingsCard: { borderRadius: 16, borderWidth: 1, paddingHorizontal: 16 },
   settingRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
   },
-  settingInfo: {
+  settingInfo: { flex: 1, marginRight: 12 },
+  settingLabel: { fontSize: 13, fontWeight: '700', marginBottom: 2 },
+  settingDesc: { fontSize: 11 },
+  themeSelectorRow: { flexDirection: 'row', gap: 10, paddingVertical: 12 },
+  themeBtn: {
     flex: 1,
-    marginRight: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
   },
-  settingLabel: {
-    color: colors.textPrimary,
-    fontSize: 13,
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  settingDesc: {
-    color: colors.textSecondary,
-    fontSize: 11,
-  },
+  themeBtnText: { fontSize: 12, fontWeight: '700' },
   logoutBtn: {
     backgroundColor: 'rgba(239, 68, 68, 0.15)',
     borderWidth: 1,
     borderColor: colors.danger,
-    paddingVertical: 15,
+    paddingVertical: 14,
     borderRadius: 14,
     alignItems: 'center',
-    marginTop: 12,
+    marginTop: 10,
   },
-  logoutText: {
-    color: colors.danger,
-    fontSize: 14,
-    fontWeight: '800',
-  },
+  logoutText: { color: colors.danger, fontSize: 14, fontWeight: '800' },
 });
