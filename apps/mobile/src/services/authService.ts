@@ -19,19 +19,12 @@ export class AuthService {
         user: response.data.user,
         token: response.data.token,
       };
-    } catch {
-      // Fallback for standalone demo simulation when PC backend is offline
-      const mockName = email.split('@')[0];
-      const capitalized = mockName.charAt(0).toUpperCase() + mockName.slice(1);
-      return {
-        user: {
-          id: 'user-' + Date.now(),
-          name: capitalized || 'Safora Member',
-          email: email.trim(),
-          role: 'user',
-        },
-        token: 'jwt-token-' + Date.now(),
-      };
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.message ||
+        err?.message ||
+        'Login failed. Please check your connection and try again.';
+      throw new Error(message);
     }
   }
 
@@ -49,17 +42,12 @@ export class AuthService {
         user: response.data.user,
         token: response.data.token,
       };
-    } catch {
-      return {
-        user: {
-          id: 'user-' + Date.now(),
-          name: name.trim(),
-          email: email.trim(),
-          phone: phone.trim(),
-          role: 'user',
-        },
-        token: 'jwt-token-' + Date.now(),
-      };
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.message ||
+        err?.message ||
+        'Registration failed. Please check your connection and try again.';
+      throw new Error(message);
     }
   }
 
@@ -83,18 +71,12 @@ export class AuthService {
       const updatedUser =
         response.data.user || (response.data as any).data?.user;
       return { user: updatedUser };
-    } catch {
-      return {
-        user: {
-          id: 'user-' + Date.now(),
-          name: data.name || 'Safora Member',
-          email: data.email || 'member@safora.app',
-          phone: data.phone,
-          bloodGroup: data.bloodGroup,
-          emergencyNotes: data.emergencyNotes,
-          role: 'user',
-        },
-      };
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.message ||
+        err?.message ||
+        'Profile update failed. Please check your connection and try again.';
+      throw new Error(message);
     }
   }
 }
