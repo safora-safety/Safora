@@ -10,7 +10,11 @@ import {
   Vibration,
   Platform,
 } from 'react-native';
-import MapView, { Marker, Polyline, UrlTile } from 'react-native-maps';
+import {
+  OpenMapView,
+  OpenMapViewRef,
+  MapMarkerItem,
+} from '../components/OpenMapView';
 import { useTheme } from '../theme/ThemeContext';
 import {
   getCurrentCoordinates,
@@ -44,7 +48,7 @@ const PRESETS: DestinationPreset[] = [
 
 export const SafeWalkScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
-  const mapRef = useRef<MapView | null>(null);
+  const mapRef = useRef<OpenMapViewRef | null>(null);
   const [userPos, setUserPos] =
     useState<LocationCoordinates>(CAMPUS_COORDINATES);
   const [destPos, setDestPos] = useState<{
@@ -191,9 +195,29 @@ export const SafeWalkScreen: React.FC = () => {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  const tileUrl = isDark
-    ? 'https://a.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png'
-    : 'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png';
+  const mapMarkers: MapMarkerItem[] = [
+    {
+      id: 'walker',
+      latitude: userPos.latitude,
+      longitude: userPos.longitude,
+      title: 'Start / Walker',
+      icon: '🚶‍♀️',
+      color: colors.primary,
+    },
+    {
+      id: 'destination',
+      latitude: destPos.latitude,
+      longitude: destPos.longitude,
+      title: destPos.name,
+      icon: '📍',
+      color: colors.danger,
+    },
+  ];
+
+  const polylinePoints = [
+    { latitude: userPos.latitude, longitude: userPos.longitude },
+    { latitude: destPos.latitude, longitude: destPos.longitude },
+  ];
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -234,68 +258,18 @@ export const SafeWalkScreen: React.FC = () => {
 
       {/* Real Interactive Map View */}
       <View style={styles.mapContainer}>
-        <MapView
+        <OpenMapView
           ref={mapRef}
+          center={{ latitude: userPos.latitude, longitude: userPos.longitude }}
+          zoom={15}
+          isDark={isDark}
+          markers={mapMarkers}
+          polyline={polylinePoints}
+          polylineColor={isDeviated ? colors.danger : colors.primary}
+          polylineDash={!isActive}
+          onMapPress={handleMapPress}
           style={styles.map}
-          mapType="none"
-          initialRegion={{
-            latitude: userPos.latitude,
-            longitude: userPos.longitude,
-            latitudeDelta: 0.018,
-            longitudeDelta: 0.018,
-          }}
-          onPress={e => handleMapPress(e.nativeEvent.coordinate)}
-          userInterfaceStyle={isDark ? 'dark' : 'light'}
-        >
-          {/* CartoDB Tiles */}
-          <UrlTile
-            urlTemplate={tileUrl}
-            maximumZ={19}
-            flipY={false}
-            tileSize={256}
-          />
-
-          {/* User Location Marker */}
-          <Marker
-            coordinate={{
-              latitude: userPos.latitude,
-              longitude: userPos.longitude,
-            }}
-            title="Start / Walker"
-          >
-            <View
-              style={[styles.walkerMarker, { backgroundColor: colors.primary }]}
-            >
-              <Text style={styles.walkerEmoji}>🚶‍♀️</Text>
-            </View>
-          </Marker>
-
-          {/* Destination Marker */}
-          <Marker
-            coordinate={{
-              latitude: destPos.latitude,
-              longitude: destPos.longitude,
-            }}
-            title={destPos.name}
-          >
-            <View
-              style={[styles.destMarker, { backgroundColor: colors.danger }]}
-            >
-              <Text style={styles.destEmoji}>📍</Text>
-            </View>
-          </Marker>
-
-          {/* Route Polyline connecting Walker to Destination */}
-          <Polyline
-            coordinates={[
-              { latitude: userPos.latitude, longitude: userPos.longitude },
-              { latitude: destPos.latitude, longitude: destPos.longitude },
-            ]}
-            strokeColor={isDeviated ? colors.danger : colors.primary}
-            strokeWidth={4}
-            lineDashPattern={isActive ? undefined : [6, 4]}
-          />
-        </MapView>
+        />
       </View>
 
       {/* Bottom Panel */}
@@ -329,13 +303,14 @@ export const SafeWalkScreen: React.FC = () => {
                       borderColor: isSelected ? colors.primary : colors.border,
                     },
                   ]}
-                  onPress={() =>
+                  onPress={() => {
                     setDestPos({
                       latitude: preset.latitude,
                       longitude: preset.longitude,
                       name: preset.name,
-                    })
-                  }
+                    });
+                    mapRef.current?.recenter(preset.latitude, preset.longitude);
+                  }}
                 >
                   <Text
                     style={[
