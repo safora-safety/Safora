@@ -22,6 +22,7 @@ import { SosService } from '../services/sosService';
 import { SafetyScoreResponse } from '@safora/shared-types';
 import { FakeCallModal } from '../components/FakeCallModal';
 import { CalculatorDecoyModal } from '../components/CalculatorDecoyModal';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface HomeScreenProps {
   onNavigateTab?: (tab: 'Home' | 'Map' | 'SafeWalk' | 'Profile') => void;
@@ -131,16 +132,34 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
   };
 
   // Offline SMS Fallback (Zero-Internet SOS Dispatch)
-  const dispatchOfflineSmsSos = () => {
+  const dispatchOfflineSmsSos = async () => {
+    let targetPhone = '112';
+    try {
+      const stored = await AsyncStorage.getItem(
+        '@safora_custom_emergency_contacts',
+      );
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const firstReal = parsed.find(
+            c => c.phone && c.phone.replace(/\D/g, '').length >= 10,
+          );
+          if (firstReal && firstReal.phone) {
+            targetPhone = firstReal.phone.replace(/\s+/g, '');
+          }
+        }
+      }
+    } catch {}
+
     const mapsLink = `https://maps.google.com/?q=${coords.latitude.toFixed(5)},${coords.longitude.toFixed(5)}`;
     const body = encodeURIComponent(
       `🚨 EMERGENCY SOS! I need immediate help. My live GPS coordinates: ${mapsLink} (${coords.areaName}) - Sent via SAFORA`,
     );
-    Linking.openURL(`sms:112?body=${body}`).catch(() => {
+    Linking.openURL(`sms:${targetPhone}?body=${body}`).catch(() => {
       Linking.openURL(`sms:?body=${body}`).catch(() => {
         Alert.alert(
           'Offline SMS',
-          `Emergency coordinates: ${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}\nPlease text Emergency 112.`,
+          `Emergency coordinates: ${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}\nPlease text ${targetPhone}.`,
         );
       });
     });

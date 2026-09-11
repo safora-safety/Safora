@@ -52,8 +52,6 @@ export interface OpenMapViewRef {
   setMapLayer: (layer: MapLayerType) => void;
 }
 
-const MAPTILER_KEY = 'NWS4ts6GlPJ2wfFvWYgJ';
-
 const generateHtml = (
   initialCenter: { latitude: number; longitude: number },
   initialZoom: number,
@@ -68,7 +66,7 @@ const generateHtml = (
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body, #map { width: 100%; height: 100%; background: ${bgColor}; overflow: hidden; }
@@ -100,9 +98,6 @@ const generateHtml = (
       border-radius: 50%;
       background: #38BDF8;
       border: 2.5px solid #FFFFFF;
-      box-shadow: 0 0 8px rgba(56, 189, 248, 0.8);
-      z-index: 2;
-    }
       box-shadow: 0 0 8px rgba(56, 189, 248, 0.8);
       z-index: 2;
     }
@@ -157,16 +152,30 @@ const generateHtml = (
       transform: scale(1.15);
     }
   </style>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    if (typeof L === 'undefined') {
+      document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"><\\/script>');
+      document.write('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />');
+    }
+  </script>
 </head>
 <body>
   <div id="map"></div>
   <script>
-    var map;
-    var tileLayer;
+    window.onerror = function(msg, url, line) {
+      if (window.ReactNativeWebView) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          type: 'error',
+          message: msg + ' at ' + url + ':' + line
+        }));
+      }
+    };
+
+    var map = null;
+    var tileLayer = null;
     var markersMap = {};
     var polylineLayer = null;
-    var CACHE_NAME = 'safora-offline-maptiles-v1';
     var currentIsDark = ${isDark};
     var currentLayer = '${initialLayer}';
 
@@ -177,67 +186,32 @@ const generateHtml = (
       if (layerType === 'street') {
         return 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
       }
-      // default themed streets
+      // default themed streets via high-speed CartoDB CDN (no API key required)
       return isDark
-        ? 'https://api.maptiler.com/maps/basic-v2-dark/256/{z}/{x}/{y}.png?key=' + MAPTILER_KEY
-        : 'https://api.maptiler.com/maps/streets-v2/256/{z}/{x}/{y}.png?key=' + MAPTILER_KEY;
+        ? 'https://a.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png'
+        : 'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png';
     }
 
-    // Custom Leaflet TileLayer with Offline System Storage Cache
-    var OfflineTileLayer = L.TileLayer.extend({
-      createTile: function(coords, done) {
-        var tile = document.createElement('img');
-        L.DomEvent.on(tile, 'load', L.Util.bind(this._tileOnLoad, this, done, tile));
-        L.DomEvent.on(tile, 'error', L.Util.bind(this._tileOnError, this, done, tile));
-        tile.alt = '';
-        tile.setAttribute('role', 'presentation');
-
-        var url = this.getTileUrl(coords);
-        if ('caches' in window) {
-          caches.open(CACHE_NAME).then(function(cache) {
-            cache.match(url).then(function(cachedResponse) {
-              if (cachedResponse) {
-                cachedResponse.blob().then(function(blob) {
-                  tile.src = URL.createObjectURL(blob);
-                });
-              } else {
-                fetch(url, { mode: 'cors' }).then(function(networkRes) {
-                  if (networkRes.ok) {
-                    cache.put(url, networkRes.clone());
-                    return networkRes.blob();
-                  }
-                }).then(function(blob) {
-                  if (blob) tile.src = URL.createObjectURL(blob);
-                  else tile.src = url;
-                }).catch(function() {
-                  tile.src = url;
-                });
-              }
-            }).catch(function() {
-              tile.src = url;
-            });
-          }).catch(function() {
-            tile.src = url;
-          });
-        } else {
-          tile.src = url;
-        }
-        return tile;
-      }
-    });
-
     function initMap() {
+      if (map) return;
+      if (typeof L === 'undefined') {
+        setTimeout(initMap, 80);
+        return;
+      }
+
       map = L.map('map', {
         zoomControl: false,
         attributionControl: false,
         center: [${initialCenter.latitude}, ${initialCenter.longitude}],
-        zoom: ${initialZoom}
+        zoom: ${initialZoom},
+        fadeAnimation: false
       });
 
       var initialUrl = getTileUrlForLayer(currentLayer, currentIsDark);
-      tileLayer = new OfflineTileLayer(initialUrl, {
+      tileLayer = L.tileLayer(initialUrl, {
         maxZoom: 19,
-        subdomains: ['a', 'b', 'c', 'd']
+        subdomains: ['a', 'b', 'c', 'd'],
+        crossOrigin: true
       }).addTo(map);
 
       map.on('click', function(e) {
@@ -249,9 +223,10 @@ const generateHtml = (
         }
       });
 
-      // Silently pre-cache surrounding 10km radius tiles for offline usage
       setTimeout(function() {
-        cacheSurrounding10km(${initialCenter.latitude}, ${initialCenter.longitude});
+        if (window.cacheSurrounding10km) {
+          window.cacheSurrounding10km(${initialCenter.latitude}, ${initialCenter.longitude});
+        }
       }, 1000);
 
       if (window.ReactNativeWebView) {
@@ -259,59 +234,37 @@ const generateHtml = (
       }
     }
 
-    // Pre-cache tiles covering 10km radius around given latitude/longitude
+    // Pre-cache surrounding 10km radius tiles into WebView disk cache
     window.cacheSurrounding10km = function(lat, lng) {
-      if (!('caches' in window)) return;
-
-      var deltaLat = 0.09; // ~10km in latitude
-      var deltaLng = 0.10; // ~10km in longitude
-      var minLat = lat - deltaLat;
-      var maxLat = lat + deltaLat;
-      var minLng = lng - deltaLng;
-      var maxLng = lng + deltaLng;
-
-      var zoomLevels = [13, 14, 15];
-      var tilesToFetch = [];
-
-      zoomLevels.forEach(function(z) {
-        var minX = Math.floor((minLng + 180) / 360 * Math.pow(2, z));
-        var maxX = Math.floor((maxLng + 180) / 360 * Math.pow(2, z));
-        var minY = Math.floor((1 - Math.log(Math.tan(maxLat * Math.PI / 180) + 1 / Math.cos(maxLat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, z));
-        var maxY = Math.floor((1 - Math.log(Math.tan(minLat * Math.PI / 180) + 1 / Math.cos(minLat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, z));
-
-        for (var x = minX; x <= maxX; x++) {
-          for (var y = minY; y <= maxY; y++) {
-            var url = getTileUrlForLayer(currentLayer, currentIsDark)
+      try {
+        var deltaLat = 0.09;
+        var deltaLng = 0.10;
+        var z = 15;
+        var minX = Math.floor((lng - deltaLng + 180) / 360 * Math.pow(2, z));
+        var maxX = Math.floor((lng + deltaLng + 180) / 360 * Math.pow(2, z));
+        var minY = Math.floor((1 - Math.log(Math.tan((lat + deltaLat) * Math.PI / 180) + 1 / Math.cos((lat + deltaLat) * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, z));
+        var maxY = Math.floor((1 - Math.log(Math.tan((lat - deltaLat) * Math.PI / 180) + 1 / Math.cos((lat - deltaLat) * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, z));
+        
+        var count = 0;
+        for (var x = minX; x <= maxX && count < 25; x++) {
+          for (var y = minY; y <= maxY && count < 25; y++) {
+            var tileUrl = getTileUrlForLayer(currentLayer, currentIsDark)
               .replace('{z}', z)
               .replace('{x}', x)
-              .replace('{y}', y);
-            tilesToFetch.push(url);
+              .replace('{y}', y)
+              .replace('{s}', 'a');
+            var preloader = new Image();
+            preloader.src = tileUrl;
+            count++;
           }
         }
-      });
-
-      caches.open(CACHE_NAME).then(function(cache) {
-        var cachedCount = 0;
-        tilesToFetch.slice(0, 36).forEach(function(url) {
-          cache.match(url).then(function(existing) {
-            if (!existing) {
-              fetch(url, { mode: 'cors' }).then(function(res) {
-                if (res.ok) {
-                  cache.put(url, res);
-                  cachedCount++;
-                }
-              }).catch(function() {});
-            }
-          });
-        });
-
         if (window.ReactNativeWebView) {
           window.ReactNativeWebView.postMessage(JSON.stringify({
             type: 'offlineCacheComplete',
-            tileCount: tilesToFetch.length
+            tileCount: count
           }));
         }
-      }).catch(function() {});
+      } catch(e) {}
     };
 
     window.setMapLayer = function(layerType) {
@@ -321,9 +274,10 @@ const generateHtml = (
       if (tileLayer) {
         map.removeLayer(tileLayer);
       }
-      tileLayer = new OfflineTileLayer(newUrl, {
+      tileLayer = L.tileLayer(newUrl, {
         maxZoom: 19,
-        subdomains: ['a', 'b', 'c', 'd']
+        subdomains: ['a', 'b', 'c', 'd'],
+        crossOrigin: true
       }).addTo(map);
 
       if (layerType === 'satellite') {
@@ -349,7 +303,9 @@ const generateHtml = (
     window.recenterMap = function(lat, lng, zoom) {
       if (map) {
         map.flyTo([lat, lng], zoom || map.getZoom(), { duration: 0.8 });
-        cacheSurrounding10km(lat, lng);
+        if (window.cacheSurrounding10km) {
+          window.cacheSurrounding10km(lat, lng);
+        }
       }
     };
 
@@ -422,7 +378,16 @@ const generateHtml = (
       }).addTo(map);
     };
 
-    window.onload = initMap;
+    function startMap() {
+      if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        initMap();
+      } else {
+        window.addEventListener('DOMContentLoaded', initMap);
+        window.addEventListener('load', initMap);
+      }
+    }
+    startMap();
+    setTimeout(startMap, 300);
   </script>
 </body>
 </html>`;
@@ -521,6 +486,8 @@ export const OpenMapView = forwardRef<OpenMapViewRef, OpenMapViewProps>(
           onMapPress(data.coordinate);
         } else if (data.type === 'offlineCacheComplete' && onOfflineCached) {
           onOfflineCached(data.tileCount);
+        } else if (data.type === 'error') {
+          console.warn('[OpenMapView Web Error]:', data.message);
         }
       } catch {
         // Ignore JSON parse errors
@@ -534,24 +501,21 @@ export const OpenMapView = forwardRef<OpenMapViewRef, OpenMapViewProps>(
           originWhitelist={['*']}
           source={{
             html: generateHtml(center, zoom, isDark, activeLayer),
-            baseUrl: 'https://safora.local',
           }}
           style={styles.webView}
           javaScriptEnabled={true}
           domStorageEnabled={true}
           cacheEnabled={true}
+          mixedContentMode="always"
+          allowFileAccess={true}
+          allowUniversalAccessFromFileURLs={true}
+          androidLayerType="hardware"
           scalesPageToFit={false}
           scrollEnabled={false}
           overScrollMode="never"
           showsHorizontalScrollIndicator={false}
           showsVerticalScrollIndicator={false}
           onMessage={handleMessage}
-          renderLoading={() => (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#4F46E5" />
-            </View>
-          )}
-          startInLoadingState={true}
         />
 
         {/* Floating Layer Switcher (Satellite / Street / Default) */}

@@ -16,6 +16,8 @@ import { EditProfileModal } from '../components/EditProfileModal';
 import { ContactModal, EditableContact } from '../components/ContactModal';
 import { useTheme } from '../theme/ThemeContext';
 
+import { SosService } from '../services/sosService';
+
 interface Contact {
   id: string;
   name: string;
@@ -70,25 +72,60 @@ export const ProfileScreen: React.FC = () => {
   const [editingContact, setEditingContact] = useState<EditableContact | null>(
     null,
   );
-  const [customContacts, setCustomContacts] = useState<Contact[]>(
-    INITIAL_FAMILY_CONTACTS,
-  );
+  const [customContacts, setCustomContacts] = useState<Contact[]>([]);
+  const [isContactsLoaded, setIsContactsLoaded] = useState(false);
 
-  // Load custom contacts from persistent storage on mount
+  // Load custom contacts from persistent storage and sync from database
   useEffect(() => {
-    AsyncStorage.getItem(CONTACTS_STORAGE_KEY).then(stored => {
-      if (stored) {
-        try {
+    const loadAndSyncContacts = async () => {
+      try {
+        const stored = await AsyncStorage.getItem(CONTACTS_STORAGE_KEY);
+        if (stored !== null) {
           const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed) && parsed.length > 0) {
+          if (Array.isArray(parsed)) {
             setCustomContacts(parsed);
           }
+        } else {
+          // First-time fresh install: provide sample contact
+          setCustomContacts(INITIAL_FAMILY_CONTACTS);
+        }
+      } catch {
+        setCustomContacts(INITIAL_FAMILY_CONTACTS);
+      } finally {
+        setIsContactsLoaded(true);
+      }
+
+      // If logged in, sync with PostgreSQL database
+      if (!isGuest && user) {
+        try {
+          const dbContacts = await SosService.getContacts();
+          const userOnly = dbContacts.filter(
+            c =>
+              !String(c.id).startsWith('police-') &&
+              !String(c.id).startsWith('ambulance-'),
+          );
+          if (userOnly.length > 0) {
+            const mapped: Contact[] = userOnly.map(c => ({
+              id: String(c.id),
+              name: c.name,
+              phone: c.phone,
+              relationship: c.relationship || 'Guardian',
+              isHelpline: false,
+            }));
+            setCustomContacts(mapped);
+            await AsyncStorage.setItem(
+              CONTACTS_STORAGE_KEY,
+              JSON.stringify(mapped),
+            );
+          }
         } catch {
-          // Use initial fallback
+          // Keep local list if offline
         }
       }
-    });
-  }, []);
+    };
+
+    loadAndSyncContacts();
+  }, [user, isGuest]);
 
   const saveCustomContacts = async (updated: Contact[]) => {
     setCustomContacts(updated);
@@ -112,18 +149,34 @@ export const ProfileScreen: React.FC = () => {
   const handleDeleteContact = (contact: Contact) => {
     Alert.alert(
       'Delete Emergency Contact',
-      `Are you sure you want to remove ${contact.name} from your emergency guardian list?`,
+      `Are you sure you want to permanently delete ${contact.name}?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => {
+          onPress: async () => {
+            // Update local state and AsyncStorage immediately
             const updated = customContacts.filter(c => c.id !== contact.id);
-            saveCustomContacts(updated);
+            await saveCustomContacts(updated);
+
+            // If real contact exists in DB, delete from PostgreSQL database
+            if (
+              !isGuest &&
+              user &&
+              !contact.id.startsWith('family-') &&
+              !contact.id.startsWith('custom-')
+            ) {
+              try {
+                await SosService.deleteContact(contact.id);
+              } catch {
+                // Handled gracefully
+              }
+            }
+
             Alert.alert(
               'Contact Removed',
-              `${contact.name} was removed from your emergency network.`,
+              `${contact.name} was permanently removed.`,
             );
           },
         },
@@ -131,7 +184,7 @@ export const ProfileScreen: React.FC = () => {
     );
   };
 
-  const handleSaveContact = (savedData: {
+  const handleSaveContact = async (savedData: {
     id?: string;
     name: string;
     phone: string;
@@ -149,25 +202,41 @@ export const ProfileScreen: React.FC = () => {
             }
           : c,
       );
-      saveCustomContacts(updated);
+      await saveCustomContacts(updated);
       Alert.alert(
         'Contact Updated',
         `${savedData.name}'s details have been saved.`,
       );
     } else {
-      // Add new
+      // Add new contact - save to PostgreSQL database if logged in
+      let assignedId = `custom-${Date.now()}`;
+      if (!isGuest && user) {
+        try {
+          const dbContact = await SosService.addContact({
+            name: savedData.name,
+            phone: savedData.phone,
+            relationship: savedData.relationship,
+          });
+          if (dbContact && dbContact.id) {
+            assignedId = String(dbContact.id);
+          }
+        } catch {
+          // Fallback to local ID
+        }
+      }
+
       const newContact: Contact = {
-        id: `custom-${Date.now()}`,
+        id: assignedId,
         name: savedData.name,
         phone: savedData.phone,
         relationship: savedData.relationship,
         isHelpline: false,
       };
       const updated = [...customContacts, newContact];
-      saveCustomContacts(updated);
+      await saveCustomContacts(updated);
       Alert.alert(
         'Guardian Added',
-        `${savedData.name} will now receive your SOS alerts and live GPS tracking.`,
+        `${savedData.name} has been added to your emergency network.`,
       );
     }
   };
