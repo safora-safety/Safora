@@ -149,7 +149,7 @@ export const CalculatorDecoyModal: React.FC<CalculatorDecoyModalProps> = ({
 
   return (
     <Modal visible={visible} animationType="fade" transparent={false}>
-      <StatusBar barStyle="light-content" backgroundColor="#000000" />
+      <StatusBar barStyle="light-content" />
       <SafeAreaView style={styles.container}>
         {/* Stealth Header */}
         <View style={styles.header}>

@@ -45,53 +45,37 @@ export const RootNavigator: React.FC = () => {
     );
   }
 
+  // Dynamically calculate initial route so it always exists in the navigator
+  const initialRoute = isAuthenticated
+    ? 'MainTabs'
+    : !hasSeenOnboarding
+      ? 'Onboarding'
+      : 'AccountSelect';
+
   return (
     <NavigationContainer>
       <Stack.Navigator
         id="root"
-        initialRouteName={!hasSeenOnboarding ? 'Onboarding' : 'AccountSelect'}
+        initialRouteName={initialRoute}
         screenOptions={{
           headerShown: false,
           animation: 'fade',
         }}
       >
-        {!isAuthenticated ? (
-          <>
-            {!hasSeenOnboarding ? (
-              <>
-                <Stack.Screen name="Onboarding" component={OnboardingScreen} />
-                <Stack.Screen
-                  name="AccountSelect"
-                  component={AccountSelectScreen}
-                />
-                <Stack.Screen name="Auth" component={AuthScreen} />
-              </>
-            ) : (
-              <>
-                <Stack.Screen
-                  name="AccountSelect"
-                  component={AccountSelectScreen}
-                />
-                <Stack.Screen name="Auth" component={AuthScreen} />
-                <Stack.Screen name="Onboarding" component={OnboardingScreen} />
-              </>
-            )}
-          </>
-        ) : (
-          <>
-            <Stack.Screen name="MainTabs" component={MainTabNavigator} />
-            <Stack.Screen
-              name="Settings"
-              component={SettingsScreen}
-              options={{ animation: 'slide_from_right' }}
-            />
-            <Stack.Screen
-              name="Notifications"
-              component={NotificationScreen}
-              options={{ animation: 'slide_from_right' }}
-            />
-          </>
-        )}
+        <Stack.Screen name="MainTabs" component={MainTabNavigator} />
+        <Stack.Screen name="AccountSelect" component={AccountSelectScreen} />
+        <Stack.Screen name="Auth" component={AuthScreen} />
+        <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+        <Stack.Screen
+          name="Settings"
+          component={SettingsScreen}
+          options={{ animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
+          name="Notifications"
+          component={NotificationScreen}
+          options={{ animation: 'slide_from_right' }}
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );

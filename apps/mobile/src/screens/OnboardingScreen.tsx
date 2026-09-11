@@ -77,7 +77,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   navigation,
 }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<any>(null);
   const completeOnboarding = useAuthStore(state => state.completeOnboarding);
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -106,7 +106,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={colors.background} />
+      <StatusBar barStyle="light-content" />
 
       {/* Top Header with Skip */}
       <View style={styles.topBar}>
