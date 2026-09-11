@@ -10,8 +10,10 @@ import {
   Linking,
   ActivityIndicator,
   Animated,
+  Platform,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
 import { SosService } from '../services/sosService';
 import { SosNotification } from '@safora/shared-types';
@@ -19,6 +21,10 @@ import { SosNotification } from '@safora/shared-types';
 export const NotificationScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
+  const statusBarHeight =
+    Platform.OS === 'android' ? StatusBar.currentHeight || 24 : 0;
+  const headerTopPadding = Math.max(insets.top, statusBarHeight) + 12;
 
   const [notifications, setNotifications] = useState<SosNotification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -373,6 +379,7 @@ export const NotificationScreen: React.FC = () => {
           {
             backgroundColor: colors.backgroundCard,
             borderBottomColor: colors.border,
+            paddingTop: headerTopPadding,
           },
         ]}
       >

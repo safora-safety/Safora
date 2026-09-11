@@ -294,6 +294,13 @@ export const ProfileScreen: React.FC = () => {
       return;
     }
 
+    const cleanPhone = contact.phone
+      ? contact.phone.replace(/[^\d+]/g, '')
+      : '';
+    const mapsLink = 'https://maps.google.com/?q=30.3165,78.0322';
+    const drillMsg = `[SAFORA SAFETY DRILL] 🚨 Test SOS alert from your emergency contact. All safe! Test GPS: ${mapsLink} - Sent via SAFORA`;
+
+    // If contact has a registered Safora account/email, dispatch in-app push drill first
     if (contact.email) {
       try {
         const res = await SosService.testGuardian({
@@ -301,22 +308,59 @@ export const ProfileScreen: React.FC = () => {
           email: contact.email,
         });
 
-        Alert.alert(
-          res.deliveredToApp
-            ? '🔔 Safety Drill Dispatched'
-            : '📱 Cellular SMS Test',
-          res.message,
-          [{ text: 'OK' }],
-        );
-        return;
+        if (res.deliveredToApp) {
+          Alert.alert(
+            '🔔 Safety Drill Dispatched',
+            `${res.message}\n\nWould you also like to test direct cellular SMS to ${contact.name} (${contact.phone})?`,
+            [
+              { text: 'Done', style: 'cancel' },
+              {
+                text: '📱 Test SMS Too',
+                onPress: () => {
+                  if (cleanPhone) {
+                    Linking.openURL(
+                      `sms:${cleanPhone}?body=${encodeURIComponent(drillMsg)}`,
+                    ).catch(() => {
+                      Linking.openURL(
+                        `sms:?body=${encodeURIComponent(drillMsg)}`,
+                      );
+                    });
+                  }
+                },
+              },
+            ],
+          );
+          return;
+        }
       } catch {
-        // Fallback to simulation
+        // Fall through to SMS test
       }
     }
 
+    // Direct Cellular SMS Test for personal contacts
     Alert.alert(
-      '🚨 Test Alert Dispatched',
-      `Simulated live SOS SMS alert to ${contact.name} (${contact.phone}):\n\n"EMERGENCY ALERT: Safora user triggered SOS. Live coordinates: 30.3165°N, 78.0322°E."`,
+      '📱 Send Test SOS SMS',
+      `Ready to test SOS delivery to ${contact.name} (${contact.phone}).\n\nThis will open your SMS messaging app with a pre-filled safety drill alert with live coordinates.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Send Test SMS',
+          onPress: () => {
+            if (cleanPhone) {
+              Linking.openURL(
+                `sms:${cleanPhone}?body=${encodeURIComponent(drillMsg)}`,
+              ).catch(() => {
+                Linking.openURL(`sms:?body=${encodeURIComponent(drillMsg)}`);
+              });
+            } else {
+              Alert.alert(
+                'Missing Phone Number',
+                'Please update this contact with a valid phone number.',
+              );
+            }
+          },
+        },
+      ],
     );
   };
 
@@ -543,7 +587,7 @@ export const ProfileScreen: React.FC = () => {
 
         {/* Custom Emergency Family & Friends Contacts */}
         <View style={styles.sectionHeader}>
-          <View>
+          <View style={styles.sectionTitleWrap}>
             <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
               Family & Personal Guardians
             </Text>
@@ -556,7 +600,7 @@ export const ProfileScreen: React.FC = () => {
             style={[styles.addBtn, { backgroundColor: colors.primary }]}
             activeOpacity={0.8}
           >
-            <Text style={styles.addBtnText}>+ Add Real Contact</Text>
+            <Text style={styles.addBtnText}>+ Add Contact</Text>
           </TouchableOpacity>
         </View>
 
@@ -922,13 +966,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 4,
+    gap: 10,
+  },
+  sectionTitleWrap: {
+    flex: 1,
   },
   sectionTitle: { fontSize: 14, fontWeight: '800', letterSpacing: 0.5 },
-  sectionSub: { fontSize: 11, marginTop: 1 },
+  sectionSub: { fontSize: 11, marginTop: 1, lineHeight: 15 },
   addBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 14,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
     borderRadius: 12,
+    flexShrink: 0,
   },
   addBtnText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
   emptyCard: {
