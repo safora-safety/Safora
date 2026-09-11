@@ -367,10 +367,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({ onNavigateTab }) => {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar
-        barStyle={isDark ? 'light-content' : 'dark-content'}
-        backgroundColor={colors.backgroundCard}
-      />
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
       {/* Header Overlay */}
       <View
@@ -928,7 +925,7 @@ const styles = StyleSheet.create({
   pinBtn: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12 },
   pinBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 12 },
   mapWrapper: { flex: 1, position: 'relative' },
-  map: { ...StyleSheet.absoluteFillObject },
+  map: { ...(StyleSheet.absoluteFill as object) },
 
   // Floating Google Maps Location Search Bar
   searchOverlay: {
