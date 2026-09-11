@@ -12,6 +12,7 @@ import {
   Linking,
   Modal,
   ActivityIndicator,
+  BackHandler,
 } from 'react-native';
 import {
   OpenMapView,
@@ -113,6 +114,24 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
     });
     return () => unsub();
   }, [isActive]);
+
+  // Handle hardware back press inside SafeWalkScreen
+  useEffect(() => {
+    const onBackPress = () => {
+      if (searchResults.length > 0 || searchQuery.length > 0) {
+        setSearchResults([]);
+        setSearchQuery('');
+        return true;
+      }
+      return false; // Bubble up to MainTabNavigator
+    };
+
+    const backSub = BackHandler.addEventListener(
+      'hardwareBackPress',
+      onBackPress,
+    );
+    return () => backSub.remove();
+  }, [searchResults, searchQuery]);
 
   const recenterMap = async () => {
     const c = await getCurrentCoordinates();

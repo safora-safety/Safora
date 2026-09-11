@@ -315,12 +315,12 @@ Cancels a journey and deactivates the tracking session.
 
 ---
 
-## 6. Emergency SOS
+## 6. Emergency SOS & Two-Way Guardian Alerts
 
 ### 6.1 Trigger SOS Alert
 `POST /sos` *(Requires Auth)*
 
-Creates an emergency incident and triggers push notifications to all configured trusted contacts.
+Creates an emergency incident, stores the live GPS position and 30-second audio evidence, looks up registered guardian accounts by email/phone, inserts in-app notification inbox records, and dispatches high-priority Firebase push notifications.
 
 **Request Body:**
 ```json
@@ -329,17 +329,67 @@ Creates an emergency incident and triggers push notifications to all configured 
   "longitude": 78.0322,
   "accuracy": 4.5,
   "battery_percentage": 68,
-  "journey_id": "j_98234"
+  "journey_id": "j_98234",
+  "audio_url": "https://safora-safety.s3.amazonaws.com/evidence/sos-audio.mp3"
 }
 ```
 
 **Success Response (201 Created):**
 ```json
 {
-  "alert_id": "sos_5541",
-  "status": "dispatched",
-  "contacts_notified": 2,
-  "created_at": "2026-09-10T12:20:00.000Z"
+  "success": true,
+  "message": "Emergency SOS dispatched",
+  "alert": {
+    "id": 12,
+    "userId": 1,
+    "latitude": 30.3165,
+    "longitude": 78.0322,
+    "batteryPercentage": 68,
+    "audioUrl": "https://safora-safety.s3.amazonaws.com/evidence/sos-audio.mp3",
+    "status": "dispatched",
+    "createdAt": "2026-09-12T12:20:00.000Z"
+  },
+  "contactsNotified": 2
+}
+```
+
+---
+
+### 6.2 Check Guardian Account
+`GET /sos/check-guardian?email=guardian@example.com` *(Requires Auth)*
+
+Performs real-time verification to determine whether an email belongs to an existing registered Safora user (enabling in-app push alerts and 30s audio evidence).
+
+**Success Response (200 OK):**
+```json
+{
+  "success": true,
+  "exists": true,
+  "name": "David Smith"
+}
+```
+
+---
+
+### 6.3 Test Guardian Alert (Safety Drill)
+`POST /sos/test-guardian` *(Requires Auth)*
+
+Dispatches a harmless safety test drill notification to the guardian's Safora account (or indicates cellular SMS readiness if unregistered).
+
+**Request Body:**
+```json
+{
+  "contactId": 5,
+  "email": "guardian@example.com"
+}
+```
+
+**Success Response (200 OK):**
+```json
+{
+  "success": true,
+  "deliveredToApp": true,
+  "message": "Test alert successfully delivered to David Smith's Safora app!"
 }
 ```
 
@@ -348,30 +398,73 @@ Creates an emergency incident and triggers push notifications to all configured 
 ## 7. Trusted Contacts Endpoints
 
 ### 7.1 List Contacts
-`GET /sos/contacts` (or `GET /trusted-contacts`) *(Requires Auth)*
+`GET /sos/contacts` *(Requires Auth)*
 
-Returns all emergency contacts registered for the authenticated user.
+Returns all emergency contacts registered for the authenticated user, automatically tagged with `hasSaforaAccount: true/false`.
 
 ### 7.2 Add Contact
-`POST /sos/contacts` (or `POST /trusted-contacts`) *(Requires Auth)*
+`POST /sos/contacts` *(Requires Auth)*
 
 **Request Body:**
 ```json
 {
-  "name": "Alex Smith",
+  "name": "David Smith",
   "phone": "+919876543211",
-  "relationship": "Sister"
+  "email": "guardian@example.com",
+  "relationship": "Father"
 }
 ```
 
 ### 7.3 Delete Contact
-`DELETE /sos/contacts/:id` (or `DELETE /trusted-contacts/:id`) *(Requires Auth)*
+`DELETE /sos/contacts/:id` *(Requires Auth)*
 
-Deletes the emergency contact by ID and cascades removal from ongoing journey notifier lists.
+Deletes the emergency contact by ID from the database.
 
 ---
 
-## 8. System & Diagnostics
+## 8. Safety Notifications Center Endpoints
+
+### 8.1 List Safety Notifications
+`GET /notifications` *(Requires Auth)*
+
+Fetches incoming emergency SOS alerts and test drills received by the authenticated user as a guardian.
+
+**Success Response (200 OK):**
+```json
+{
+  "success": true,
+  "count": 1,
+  "notifications": [
+    {
+      "id": 1,
+      "userId": 2,
+      "senderId": 1,
+      "senderName": "Aditi Sharma",
+      "senderPhone": "+919876543210",
+      "type": "sos_alert",
+      "title": "🚨 EMERGENCY SOS from Aditi Sharma",
+      "body": "Immediate distress signal at 30.3165°N, 78.0322°E. Battery: 88%.",
+      "latitude": 30.3165,
+      "longitude": 78.0322,
+      "batteryPercentage": 88,
+      "audioUrl": "https://safora-safety.s3.amazonaws.com/evidence/sos-audio.mp3",
+      "isTest": false,
+      "isRead": false,
+      "createdAt": "2026-09-12T12:20:00.000Z"
+    }
+  ]
+}
+```
+
+### 8.2 Mark Single Notification Read
+`PATCH /notifications/:id/read` *(Requires Auth)*
+
+### 8.3 Mark All Notifications Read
+`PATCH /notifications/read-all` *(Requires Auth)*
+
+---
+
+## 9. System & Diagnostics
 
 ### 8.1 Health Check
 `GET /health`

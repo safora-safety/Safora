@@ -10,13 +10,16 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
+import { SosService } from '../services/sosService';
 
 export interface EditableContact {
   id?: string;
   name: string;
   phone: string;
+  email?: string;
   relationship: string;
   isHelpline?: boolean;
 }
@@ -27,6 +30,7 @@ interface ContactModalProps {
   onSave: (contact: {
     name: string;
     phone: string;
+    email?: string;
     relationship: string;
     id?: string;
   }) => void;
@@ -53,14 +57,21 @@ export const ContactModal: React.FC<ContactModalProps> = ({
   const { colors, isDark } = useTheme();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [relationship, setRelationship] = useState('Guardian');
   const [customRel, setCustomRel] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Real-time guardian account verification state
+  const [isCheckingEmail, setIsCheckingEmail] = useState(false);
+  const [hasAccount, setHasAccount] = useState<boolean | null>(null);
+  const [guardianName, setGuardianName] = useState<string | null>(null);
 
   useEffect(() => {
     if (initialData) {
       setName(initialData.name || '');
       setPhone(initialData.phone || '');
+      setEmail(initialData.email || '');
       if (RELATIONSHIP_PRESETS.includes(initialData.relationship)) {
         setRelationship(initialData.relationship);
         setCustomRel('');
@@ -71,15 +82,39 @@ export const ContactModal: React.FC<ContactModalProps> = ({
     } else {
       setName('');
       setPhone('');
+      setEmail('');
       setRelationship('Guardian');
       setCustomRel('');
     }
     setFormError(null);
+    setHasAccount(null);
+    setGuardianName(null);
   }, [initialData, visible]);
+
+  // Debounced email check against Safora DB
+  useEffect(() => {
+    const trimmed = email.trim().toLowerCase();
+    if (!trimmed || !trimmed.includes('@') || !trimmed.includes('.')) {
+      setHasAccount(null);
+      setGuardianName(null);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsCheckingEmail(true);
+      const res = await SosService.checkGuardian(trimmed);
+      setHasAccount(res.exists);
+      setGuardianName(res.name || null);
+      setIsCheckingEmail(false);
+    }, 450);
+
+    return () => clearTimeout(timer);
+  }, [email]);
 
   const handleSave = () => {
     const trimmedName = name.trim();
     const trimmedPhone = phone.trim().replace(/[^0-9+]/g, '');
+    const trimmedEmail = email.trim().toLowerCase();
 
     if (trimmedName.length < 2) {
       setFormError('Please enter a valid full name (at least 2 characters).');
@@ -90,6 +125,14 @@ export const ContactModal: React.FC<ContactModalProps> = ({
     const digitsOnly = trimmedPhone.replace(/[^0-9]/g, '');
     if (digitsOnly.length < 10) {
       setFormError('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+
+    if (
+      trimmedEmail.length > 0 &&
+      (!trimmedEmail.includes('@') || !trimmedEmail.includes('.'))
+    ) {
+      setFormError('Please enter a valid email address.');
       return;
     }
 
@@ -104,6 +147,7 @@ export const ContactModal: React.FC<ContactModalProps> = ({
       phone: trimmedPhone.startsWith('+')
         ? trimmedPhone
         : `+91 ${trimmedPhone}`,
+      email: trimmedEmail || undefined,
       relationship: finalRel,
     });
 
@@ -201,6 +245,59 @@ export const ContactModal: React.FC<ContactModalProps> = ({
                 value={phone}
                 onChangeText={setPhone}
               />
+            </View>
+
+            {/* Email Address Input (for In-App Alerts & 30s Audio) */}
+            <View style={styles.group}>
+              <View style={styles.labelWithBadge}>
+                <Text style={[styles.label, { color: colors.textPrimary }]}>
+                  Email Address{' '}
+                  <Text style={styles.optional}>
+                    (for in-app alerts & 30s audio)
+                  </Text>
+                </Text>
+                {isCheckingEmail && (
+                  <ActivityIndicator size="small" color="#38BDF8" />
+                )}
+              </View>
+              <TextInput
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: colors.backgroundInput,
+                    borderColor:
+                      hasAccount === true
+                        ? '#10B981'
+                        : hasAccount === false
+                          ? '#F59E0B'
+                          : colors.border,
+                    color: colors.textPrimary,
+                  },
+                ]}
+                placeholder="e.g. parent@gmail.com"
+                placeholderTextColor={colors.textMuted}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                value={email}
+                onChangeText={setEmail}
+              />
+              {/* Dynamic Safora Account Badge */}
+              {hasAccount === true && (
+                <View style={styles.badgeSuccess}>
+                  <Text style={styles.badgeSuccessText}>
+                    🟢 Registered on Safora ({guardianName || 'Active Account'})
+                    • In-app push alerts & 30s live audio enabled!
+                  </Text>
+                </View>
+              )}
+              {hasAccount === false && (
+                <View style={styles.badgeWarning}>
+                  <Text style={styles.badgeWarningText}>
+                    📱 Direct SMS Only • Guardian is not registered on Safora
+                    yet. They will receive cellular SMS text alerts.
+                  </Text>
+                </View>
+              )}
             </View>
 
             {/* Relationship Presets */}
@@ -361,7 +458,13 @@ const styles = StyleSheet.create({
   },
   errorText: { color: '#EF4444', fontSize: 12, fontWeight: '600' },
   group: { gap: 8 },
+  labelWithBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   label: { fontSize: 13, fontWeight: '700' },
+  optional: { fontSize: 11, fontWeight: '500', color: '#94A3B8' },
   req: { color: '#EF4444' },
   input: {
     borderWidth: 1,
@@ -369,6 +472,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     fontSize: 13,
+  },
+  badgeSuccess: {
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.4)',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+  },
+  badgeSuccessText: {
+    color: '#10B981',
+    fontSize: 11,
+    fontWeight: '600',
+    lineHeight: 15,
+  },
+  badgeWarning: {
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+  },
+  badgeWarningText: {
+    color: '#F59E0B',
+    fontSize: 11,
+    fontWeight: '600',
+    lineHeight: 15,
   },
   presetsWrap: {
     flexDirection: 'row',

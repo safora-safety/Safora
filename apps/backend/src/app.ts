@@ -8,6 +8,7 @@ import authRoutes from "./routes/authRoutes";
 import reportRoutes from "./routes/reportRoutes";
 import journeyRoutes from "./routes/journeyRoutes";
 import sosRoutes from "./routes/sosRoutes";
+import notificationRoutes from "./routes/notificationRoutes";
 import { errorHandler } from "./middleware/errorHandler";
 
 dotenv.config();
@@ -53,6 +54,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/journeys", journeyRoutes);
 app.use("/api/sos", sosRoutes);
+app.use("/api/notifications", notificationRoutes);
 
 // Centralized Error Handling Middleware (Always registered last)
 app.use(errorHandler);

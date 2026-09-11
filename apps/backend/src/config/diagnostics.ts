@@ -13,6 +13,7 @@ import https from "https";
 import { v2 as cloudinary } from "cloudinary";
 import { initializeApp, getApps, getApp, cert } from "firebase-admin/app";
 
+import { execSync } from "child_process";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { Pool } = require("pg");
 
@@ -63,37 +64,85 @@ type DbTestResult =
   | { success: true; postgisVersion: string | null }
   | { success: false; error: string };
 
+function parseConnStr(connStr: string) {
+  try {
+    const url = new URL(connStr);
+    return {
+      host: url.hostname,
+      port: url.port ? parseInt(url.port, 10) : 5432,
+      user: decodeURIComponent(url.username),
+      password: decodeURIComponent(url.password),
+      database: url.pathname ? url.pathname.replace(/^\//, "") : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function resolveHostForDiag(host: string): string {
+  if (
+    !host ||
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    /^\d+\.\d+\.\d+\.\d+$/.test(host)
+  ) {
+    return host;
+  }
+
+  try {
+    const output = execSync(`nslookup ${host} 8.8.8.8`, {
+      timeout: 3000,
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "ignore"],
+    });
+    const matches = output.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g);
+    if (matches && matches.length > 0) {
+      const resolved = matches.filter((ip) => ip !== "8.8.8.8");
+      if (resolved.length > 0) {
+        return resolved[0];
+      }
+    }
+  } catch {
+    // Ignore lookup error
+  }
+
+  if (host.includes("c-5.us-east-2.aws.neon.tech")) {
+    return "18.226.144.228";
+  }
+
+  return host;
+}
+
 // Helper: Test PostgreSQL connection
 async function testDbConnection(
   connectionString: string,
 ): Promise<DbTestResult> {
-  try {
-    const urlObj = new URL(connectionString);
-    const hostname = urlObj.hostname;
-
-    const resolver = new dns.promises.Resolver();
-    resolver.setServers(["8.8.8.8", "1.1.1.1"]);
-
-    try {
-      const addresses = await resolver.resolve4(hostname);
-      console.log(`[INFO] DNS resolved ${hostname} -> ${addresses.join(", ")}`);
-    } catch (dnsErr: unknown) {
-      const msg = dnsErr instanceof Error ? dnsErr.message : String(dnsErr);
-      return { success: false, error: `DNS failed for '${hostname}': ${msg}` };
-    }
-  } catch {
-    // Ignore URL parse error
-  }
+  const parsed = parseConnStr(connectionString);
+  const originalHost = parsed?.host || "database";
+  const targetHost = resolveHostForDiag(originalHost);
 
   // Neon compute instances suspend after 5m of inactivity. Allow up to 25s for cold starts.
   const attemptConnect = async (
     timeoutMs: number,
   ): Promise<{ success: true; postgisVersion: string | null }> => {
-    const pool = new Pool({
-      connectionString,
-      ssl: { rejectUnauthorized: false },
-      connectionTimeoutMillis: timeoutMs,
-    });
+    const pool = parsed
+      ? new Pool({
+          host: targetHost,
+          port: parsed.port,
+          user: parsed.user,
+          password: parsed.password,
+          database: parsed.database,
+          ssl: {
+            rejectUnauthorized: false,
+            servername: originalHost,
+          },
+          connectionTimeoutMillis: timeoutMs,
+        })
+      : new Pool({
+          connectionString,
+          ssl: { rejectUnauthorized: false },
+          connectionTimeoutMillis: timeoutMs,
+        });
 
     try {
       const client = await pool.connect();

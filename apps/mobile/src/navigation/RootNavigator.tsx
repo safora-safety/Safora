@@ -7,6 +7,7 @@ import { AccountSelectScreen } from '../screens/AccountSelectScreen';
 import { AuthScreen } from '../screens/AuthScreen';
 import { OnboardingScreen } from '../screens/OnboardingScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
+import { NotificationScreen } from '../screens/NotificationScreen';
 import { MainTabNavigator } from './MainTabNavigator';
 import { colors } from '../theme/colors';
 
@@ -22,6 +23,7 @@ export type RootStackParamList = {
   Onboarding: undefined;
   MainTabs: undefined;
   Settings: undefined;
+  Notifications: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -81,6 +83,11 @@ export const RootNavigator: React.FC = () => {
             <Stack.Screen
               name="Settings"
               component={SettingsScreen}
+              options={{ animation: 'slide_from_right' }}
+            />
+            <Stack.Screen
+              name="Notifications"
+              component={NotificationScreen}
               options={{ animation: 'slide_from_right' }}
             />
           </>

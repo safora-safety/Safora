@@ -10,6 +10,7 @@ import {
   Alert,
   Modal,
   Image,
+  BackHandler,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import {
@@ -97,6 +98,32 @@ export const MapScreen: React.FC<MapScreenProps> = ({ onNavigateTab }) => {
 
     return () => clearTimeout(timer);
   }, [searchQuery, userLivePos.latitude, userLivePos.longitude]);
+
+  // Handle hardware back press inside MapScreen
+  useEffect(() => {
+    const onBackPress = () => {
+      if (searchResults.length > 0 || searchQuery.length > 0) {
+        setSearchResults([]);
+        setSearchQuery('');
+        return true;
+      }
+      if (selectedHazard !== null) {
+        setSelectedHazard(null);
+        return true;
+      }
+      if (activeRoute !== null) {
+        setActiveRoute(null);
+        return true;
+      }
+      return false; // Bubble up to MainTabNavigator
+    };
+
+    const backSub = BackHandler.addEventListener(
+      'hardwareBackPress',
+      onBackPress,
+    );
+    return () => backSub.remove();
+  }, [searchResults, searchQuery, selectedHazard, activeRoute]);
 
   const loadMapData = async () => {
     setLoading(true);

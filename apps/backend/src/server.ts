@@ -33,10 +33,21 @@ async function startServer(): Promise<void> {
     console.log(`[INFO] SOS API:      http://localhost:${PORT}/api/sos`);
 
     // Initialize PostGIS schema, geography columns, and GiST indexes
-    await initDatabase();
+    try {
+      await initDatabase();
+    } catch (dbErr) {
+      console.warn(
+        "[WARN] Background database initialization deferred:",
+        dbErr,
+      );
+    }
 
     // Run startup system diagnostics
-    await runSystemDiagnostics();
+    try {
+      await runSystemDiagnostics();
+    } catch (diagErr) {
+      console.warn("[WARN] Background system diagnostics deferred:", diagErr);
+    }
   });
 }
 

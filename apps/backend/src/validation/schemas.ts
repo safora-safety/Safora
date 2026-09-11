@@ -75,10 +75,13 @@ export const sosAlertSchema = z.object({
   accuracy: z.number().optional(),
   battery_percentage: z.number().min(0).max(100).optional(),
   journey_id: z.number().or(z.string()).optional().nullable(),
+  audio_url: z.string().optional().nullable(),
+  audioUrl: z.string().optional().nullable(),
 });
 
 export const trustedContactSchema = z.object({
   name: z.string().min(2).max(100),
   phone: z.string().min(7).max(20),
+  email: z.string().email().optional().nullable().or(z.literal("")),
   relationship: z.string().max(50).optional(),
 });

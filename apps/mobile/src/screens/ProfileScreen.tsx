@@ -23,6 +23,8 @@ interface Contact {
   name: string;
   relationship: string;
   phone: string;
+  email?: string;
+  hasSaforaAccount?: boolean;
   isHelpline?: boolean;
 }
 
@@ -56,6 +58,7 @@ const INITIAL_FAMILY_CONTACTS: Contact[] = [
     name: 'Emergency Guardian (Family)',
     relationship: 'Parent / Primary Guardian',
     phone: '+91 98765 43210',
+    email: 'guardian@gmail.com',
     isHelpline: false,
   },
 ];
@@ -73,6 +76,21 @@ export const ProfileScreen: React.FC = () => {
     null,
   );
   const [customContacts, setCustomContacts] = useState<Contact[]>([]);
+  const [unreadNotifications, setUnreadNotifications] = useState<number>(0);
+
+  // Monitor unread safety notifications for bell counter badge
+  useEffect(() => {
+    const fetchUnread = async () => {
+      try {
+        const notifs = await SosService.getNotifications();
+        const unread = notifs.filter(n => !n.isRead).length;
+        setUnreadNotifications(unread);
+      } catch {}
+    };
+    fetchUnread();
+    const unsub = navigation.addListener('focus', fetchUnread);
+    return unsub;
+  }, [navigation]);
   const [isContactsLoaded, setIsContactsLoaded] = useState(false);
 
   // Load custom contacts from persistent storage and sync from database
@@ -188,8 +206,15 @@ export const ProfileScreen: React.FC = () => {
     id?: string;
     name: string;
     phone: string;
+    email?: string;
     relationship: string;
   }) => {
+    let hasAccount = false;
+    if (savedData.email) {
+      const checkRes = await SosService.checkGuardian(savedData.email);
+      hasAccount = checkRes.exists;
+    }
+
     if (savedData.id) {
       // Edit existing
       const updated = customContacts.map(c =>
@@ -198,6 +223,8 @@ export const ProfileScreen: React.FC = () => {
               ...c,
               name: savedData.name,
               phone: savedData.phone,
+              email: savedData.email,
+              hasSaforaAccount: hasAccount,
               relationship: savedData.relationship,
             }
           : c,
@@ -215,10 +242,14 @@ export const ProfileScreen: React.FC = () => {
           const dbContact = await SosService.addContact({
             name: savedData.name,
             phone: savedData.phone,
+            email: savedData.email,
             relationship: savedData.relationship,
           });
           if (dbContact && dbContact.id) {
             assignedId = String(dbContact.id);
+            if (dbContact.hasSaforaAccount !== undefined) {
+              hasAccount = dbContact.hasSaforaAccount;
+            }
           }
         } catch {
           // Fallback to local ID
@@ -229,6 +260,8 @@ export const ProfileScreen: React.FC = () => {
         id: assignedId,
         name: savedData.name,
         phone: savedData.phone,
+        email: savedData.email,
+        hasSaforaAccount: hasAccount,
         relationship: savedData.relationship,
         isHelpline: false,
       };
@@ -236,12 +269,16 @@ export const ProfileScreen: React.FC = () => {
       await saveCustomContacts(updated);
       Alert.alert(
         'Guardian Added',
-        `${savedData.name} has been added to your emergency network.`,
+        `${savedData.name} has been added to your emergency network.${
+          hasAccount
+            ? '\n\n🟢 Guardian is registered on Safora! In-app push alerts & 30s live audio enabled.'
+            : '\n\n📱 Guardian will receive direct cellular SMS alerts.'
+        }`,
       );
     }
   };
 
-  const testAlert = (contact: Contact) => {
+  const testAlert = async (contact: Contact) => {
     if (contact.isHelpline) {
       Alert.alert(
         `Direct Call: ${contact.name}`,
@@ -255,6 +292,26 @@ export const ProfileScreen: React.FC = () => {
         ],
       );
       return;
+    }
+
+    if (contact.email) {
+      try {
+        const res = await SosService.testGuardian({
+          contactId: contact.id,
+          email: contact.email,
+        });
+
+        Alert.alert(
+          res.deliveredToApp
+            ? '🔔 Safety Drill Dispatched'
+            : '📱 Cellular SMS Test',
+          res.message,
+          [{ text: 'OK' }],
+        );
+        return;
+      } catch {
+        // Fallback to simulation
+      }
     }
 
     Alert.alert(
@@ -305,20 +362,47 @@ export const ProfileScreen: React.FC = () => {
           </Text>
         </View>
 
-        {/* Dedicated Settings Button */}
-        <TouchableOpacity
-          style={[
-            styles.settingsIconBtn,
-            {
-              backgroundColor: colors.backgroundInput,
-              borderColor: colors.border,
-            },
-          ]}
-          onPress={() => navigation.navigate('Settings')}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.settingsIconEmoji}>⚙️</Text>
-        </TouchableOpacity>
+        {/* Header Action Buttons: Notifications Bell & Settings */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          {/* Notification Bell Button */}
+          <TouchableOpacity
+            style={[
+              styles.settingsIconBtn,
+              {
+                backgroundColor: colors.backgroundInput,
+                borderColor:
+                  unreadNotifications > 0 ? '#EF4444' : colors.border,
+                position: 'relative',
+              },
+            ]}
+            onPress={() => navigation.navigate('Notifications')}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.settingsIconEmoji}>🔔</Text>
+            {unreadNotifications > 0 && (
+              <View style={styles.bellBadge}>
+                <Text style={styles.bellBadgeText}>
+                  {unreadNotifications > 9 ? '9+' : unreadNotifications}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          {/* Dedicated Settings Button */}
+          <TouchableOpacity
+            style={[
+              styles.settingsIconBtn,
+              {
+                backgroundColor: colors.backgroundInput,
+                borderColor: colors.border,
+              },
+            ]}
+            onPress={() => navigation.navigate('Settings')}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.settingsIconEmoji}>⚙️</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -539,6 +623,33 @@ export const ProfileScreen: React.FC = () => {
                   >
                     {contact.phone}
                   </Text>
+                  {contact.email ? (
+                    <Text
+                      style={[
+                        styles.contactEmail,
+                        { color: colors.textSecondary },
+                      ]}
+                    >
+                      ✉️ {contact.email}
+                    </Text>
+                  ) : null}
+
+                  {/* Safora App Registration Status Badge */}
+                  <View style={styles.badgeRow}>
+                    {contact.hasSaforaAccount ? (
+                      <View style={styles.badgeSaforaActive}>
+                        <Text style={styles.badgeSaforaActiveText}>
+                          🟢 Safora Member (Push + 30s Audio)
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={styles.badgeSmsOnly}>
+                        <Text style={styles.badgeSmsOnlyText}>
+                          📱 Direct Cellular SMS
+                        </Text>
+                      </View>
+                    )}
+                  </View>
                 </View>
 
                 {/* Edit, Delete & Test Actions */}
@@ -560,10 +671,20 @@ export const ProfileScreen: React.FC = () => {
                   </TouchableOpacity>
 
                   <TouchableOpacity
-                    style={styles.testBtn}
+                    style={[
+                      styles.testBtn,
+                      contact.hasSaforaAccount && styles.testBtnSafora,
+                    ]}
                     onPress={() => testAlert(contact)}
                   >
-                    <Text style={styles.testBtnText}>Test SOS</Text>
+                    <Text
+                      style={[
+                        styles.testBtnText,
+                        contact.hasSaforaAccount && styles.testBtnSaforaText,
+                      ]}
+                    >
+                      {contact.hasSaforaAccount ? '🔔 Test Drill' : 'Test SOS'}
+                    </Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -848,10 +969,55 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   contactIcon: { fontSize: 20 },
+  bellBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#EF4444',
+    borderRadius: 9,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    minWidth: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bellBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '800',
+  },
   contactDetails: { flex: 1 },
   contactName: { fontSize: 14, fontWeight: '800', marginBottom: 2 },
   contactRel: { fontSize: 11, marginBottom: 3 },
   contactPhone: { fontSize: 12, fontWeight: '700' },
+  contactEmail: { fontSize: 11, marginTop: 2 },
+  badgeRow: { flexDirection: 'row', marginTop: 4 },
+  badgeSaforaActive: {
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+  },
+  badgeSaforaActiveText: {
+    color: '#10B981',
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  badgeSmsOnly: {
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+  },
+  badgeSmsOnlyText: {
+    color: '#F59E0B',
+    fontSize: 9,
+    fontWeight: '700',
+  },
   contactActionsCol: {
     alignItems: 'flex-end',
     gap: 5,
@@ -871,6 +1037,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     borderRadius: 6,
     backgroundColor: 'rgba(56, 189, 248, 0.1)',
+  },
+  testBtnSafora: {
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.4)',
+  },
+  testBtnSaforaText: {
+    color: '#10B981',
   },
   testBtnCall: {
     backgroundColor: 'rgba(239, 68, 68, 0.1)',

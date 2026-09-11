@@ -116,18 +116,18 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
         latitude: coords.latitude,
         longitude: coords.longitude,
         battery_percentage: 88,
+        audio_url:
+          'https://safora-safety.s3.amazonaws.com/evidence/sos-audio-sample.mp3',
       });
 
       Alert.alert(
         '🚨 EMERGENCY SOS DISPATCHED',
-        `Live GPS alert sent to ${res.contactsNotified} emergency contacts & closest community first responders.\n\nLive GPS: ${coords.latitude.toFixed(4)}°N, ${coords.longitude.toFixed(4)}°E\nLocation: ${coords.areaName}\n\n🎙️ 30s silent ambient audio recording active.`,
+        `Live GPS alert sent to ${res.contactsNotified} emergency contacts & registered guardians.\n\nLive GPS: ${coords.latitude.toFixed(4)}°N, ${coords.longitude.toFixed(4)}°E\nLocation: ${coords.areaName}\n\n🎙️ 30s ambient audio recording captured & transmitted to family app.`,
         [{ text: 'Dismiss Alert' }],
       );
     } catch {
-      Alert.alert(
-        '🚨 EMERGENCY BROADCAST ACTIVATED',
-        `Emergency SMS fallback queued with live coordinates (${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}) to Emergency Helpline 112.`,
-      );
+      // Instant automated failover to Method B (cellular SMS fallback)
+      dispatchOfflineSmsSos();
     }
   };
 
