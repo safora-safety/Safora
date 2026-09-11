@@ -126,7 +126,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
                 },
                 email.length > 0 && !isEmailValid(email) && styles.inputInvalid,
               ]}
-              placeholder="e.g. aditi@dbuu.ac.in"
+              placeholder="e.g. aditi@example.com"
               placeholderTextColor={colors.textMuted}
               keyboardType="email-address"
               autoCapitalize="none"

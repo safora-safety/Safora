@@ -3,26 +3,31 @@ import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuthStore } from '../store/authStore';
+import { AccountSelectScreen } from '../screens/AccountSelectScreen';
+import { AuthScreen } from '../screens/AuthScreen';
 import { OnboardingScreen } from '../screens/OnboardingScreen';
-import { WelcomeScreen } from '../screens/WelcomeScreen';
-import { LoginScreen } from '../screens/LoginScreen';
-import { RegisterScreen } from '../screens/RegisterScreen';
+import { SettingsScreen } from '../screens/SettingsScreen';
 import { MainTabNavigator } from './MainTabNavigator';
 import { colors } from '../theme/colors';
 
 export type RootStackParamList = {
+  AccountSelect: undefined;
+  Auth:
+    | {
+        initialTab?: 'login' | 'register';
+        prefillEmail?: string;
+        prefillName?: string;
+      }
+    | undefined;
   Onboarding: undefined;
-  Welcome: undefined;
-  Login: undefined;
-  Register: undefined;
   MainTabs: undefined;
+  Settings: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const RootNavigator: React.FC = () => {
-  const { isAuthenticated, hasSeenOnboarding, isHydrated, hydrateAuth } =
-    useAuthStore();
+  const { isAuthenticated, isHydrated, hydrateAuth } = useAuthStore();
 
   useEffect(() => {
     hydrateAuth();
@@ -43,20 +48,37 @@ export const RootNavigator: React.FC = () => {
         id="root"
         screenOptions={{
           headerShown: false,
-          animation: 'slide_from_right',
+          animation: 'fade',
         }}
       >
         {!isAuthenticated ? (
           <>
-            {!hasSeenOnboarding && (
-              <Stack.Screen name="Onboarding" component={OnboardingScreen} />
-            )}
-            <Stack.Screen name="Welcome" component={WelcomeScreen} />
-            <Stack.Screen name="Login" component={LoginScreen} />
-            <Stack.Screen name="Register" component={RegisterScreen} />
+            <Stack.Screen
+              name="AccountSelect"
+              component={AccountSelectScreen}
+            />
+            <Stack.Screen name="Auth" component={AuthScreen} />
+            <Stack.Screen name="Onboarding" component={OnboardingScreen} />
           </>
         ) : (
-          <Stack.Screen name="MainTabs" component={MainTabNavigator} />
+          <>
+            <Stack.Screen name="MainTabs" component={MainTabNavigator} />
+            <Stack.Screen
+              name="Settings"
+              component={SettingsScreen}
+              options={{ animation: 'slide_from_right' }}
+            />
+            <Stack.Screen
+              name="Auth"
+              component={AuthScreen}
+              options={{ animation: 'slide_from_bottom' }}
+            />
+            <Stack.Screen
+              name="AccountSelect"
+              component={AccountSelectScreen}
+              options={{ animation: 'fade' }}
+            />
+          </>
         )}
       </Stack.Navigator>
     </NavigationContainer>
@@ -66,7 +88,7 @@ export const RootNavigator: React.FC = () => {
 const styles = StyleSheet.create({
   loaderContainer: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: '#070A11',
     justifyContent: 'center',
     alignItems: 'center',
   },

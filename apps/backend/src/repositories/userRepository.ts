@@ -46,6 +46,7 @@ export class UserRepository {
       phone?: string | null;
       blood_group?: string | null;
       emergency_notes?: string | null;
+      fcm_token?: string | null;
     },
   ): Promise<UserRow | null> {
     const fields: string[] = [];
@@ -71,6 +72,10 @@ export class UserRepository {
     if (data.emergency_notes !== undefined) {
       fields.push(`emergency_notes = $${idx++}`);
       values.push(data.emergency_notes ? data.emergency_notes.trim() : null);
+    }
+    if (data.fcm_token !== undefined) {
+      fields.push(`fcm_token = $${idx++}`);
+      values.push(data.fcm_token ? data.fcm_token.trim() : null);
     }
 
     if (fields.length === 0) {

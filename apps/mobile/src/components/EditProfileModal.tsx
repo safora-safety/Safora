@@ -209,7 +209,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                 ]}
                 value={email}
                 onChangeText={setEmail}
-                placeholder="e.g. aditi@dbuu.ac.in"
+                placeholder="e.g. aditi@example.com"
                 placeholderTextColor={colors.textMuted}
                 keyboardType="email-address"
                 autoCapitalize="none"
