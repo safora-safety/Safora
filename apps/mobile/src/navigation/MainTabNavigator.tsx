@@ -23,15 +23,30 @@ const TABS: TabItem[] = [
 
 export const MainTabNavigator: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabKey>('Home');
+  const [safeWalkDestination, setSafeWalkDestination] = useState<
+    | {
+        latitude: number;
+        longitude: number;
+        name: string;
+      }
+    | undefined
+  >(undefined);
+
+  const handleNavigateTab = (tab: TabKey, params?: any) => {
+    if (params?.destination) {
+      setSafeWalkDestination(params.destination);
+    }
+    setActiveTab(tab);
+  };
 
   const renderActiveScreen = () => {
     switch (activeTab) {
       case 'Home':
-        return <HomeScreen onNavigateTab={tab => setActiveTab(tab)} />;
+        return <HomeScreen onNavigateTab={tab => handleNavigateTab(tab)} />;
       case 'Map':
-        return <MapScreen />;
+        return <MapScreen onNavigateTab={handleNavigateTab} />;
       case 'SafeWalk':
-        return <SafeWalkScreen />;
+        return <SafeWalkScreen initialDestination={safeWalkDestination} />;
       case 'Profile':
         return <ProfileScreen />;
     }

@@ -348,12 +348,12 @@ Creates an emergency incident and triggers push notifications to all configured 
 ## 7. Trusted Contacts Endpoints
 
 ### 7.1 List Contacts
-`GET /trusted-contacts` *(Requires Auth)*
+`GET /sos/contacts` (or `GET /trusted-contacts`) *(Requires Auth)*
 
 Returns all emergency contacts registered for the authenticated user.
 
 ### 7.2 Add Contact
-`POST /trusted-contacts` *(Requires Auth)*
+`POST /sos/contacts` (or `POST /trusted-contacts`) *(Requires Auth)*
 
 **Request Body:**
 ```json
@@ -365,7 +365,9 @@ Returns all emergency contacts registered for the authenticated user.
 ```
 
 ### 7.3 Delete Contact
-`DELETE /trusted-contacts/:id` *(Requires Auth)*
+`DELETE /sos/contacts/:id` (or `DELETE /trusted-contacts/:id`) *(Requires Auth)*
+
+Deletes the emergency contact by ID and cascades removal from ongoing journey notifier lists.
 
 ---
 

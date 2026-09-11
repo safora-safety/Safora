@@ -2,6 +2,7 @@ import { AppError } from "../errors/AppError";
 import { HazardReport, SafetyScoreResponse } from "@safora/shared-types";
 import { ReportRepository } from "../repositories/reportRepository";
 import { ReportModel } from "../models/Report";
+import { MemoryCache } from "../utils/cache";
 
 export class ReportService {
   static async createReport(data: {
@@ -27,13 +28,22 @@ export class ReportService {
       photoUrl: data.photo_url || null,
     });
 
+    // Invalidate cached reports across spatial grids
+    MemoryCache.invalidatePattern("reports_");
+
     return ReportModel.fromRow(row);
   }
 
   static async getReports(limit = 50): Promise<HazardReport[]> {
     const boundedLimit = Math.min(100, Math.max(1, limit));
+    const cacheKey = `reports_list_${boundedLimit}`;
+    const cached = MemoryCache.get<HazardReport[]>(cacheKey);
+    if (cached) return cached;
+
     const rows = await ReportRepository.findAll(boundedLimit);
-    return rows.map((r) => ReportModel.fromRow(r));
+    const reports = rows.map((r) => ReportModel.fromRow(r));
+    MemoryCache.set(cacheKey, reports, 20);
+    return reports;
   }
 
   static async getNearbyReports(
@@ -41,9 +51,17 @@ export class ReportService {
     lng: number,
     radiusMeters = 5000,
   ): Promise<{ reports: HazardReport[]; source: string }> {
+    const cacheKey = `reports_nearby_${lat.toFixed(3)}_${lng.toFixed(3)}_${radiusMeters}`;
+    const cached = MemoryCache.get<{ reports: HazardReport[]; source: string }>(
+      cacheKey,
+    );
+    if (cached) return cached;
+
     const rows = await ReportRepository.findNearby(lat, lng, radiusMeters, 100);
     const reports = rows.map((r) => ReportModel.fromRow(r));
-    return { reports, source: "postgis_gist" };
+    const result = { reports, source: "postgis_gist" };
+    MemoryCache.set(cacheKey, result, 20);
+    return result;
   }
 
   static async calculateSafetyScore(
@@ -122,6 +140,7 @@ export class ReportService {
     if (newCount === null) {
       throw new AppError("Hazard report not found", 404);
     }
+    MemoryCache.invalidatePattern("reports_");
     return newCount;
   }
 

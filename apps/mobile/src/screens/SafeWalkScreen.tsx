@@ -21,6 +21,7 @@ import {
 import { useTheme } from '../theme/ThemeContext';
 import {
   getCurrentCoordinates,
+  watchUserLocation,
   LocationCoordinates,
   CAMPUS_COORDINATES,
 } from '../services/locationService';
@@ -32,7 +33,17 @@ import {
   RouteCoord,
 } from '../services/routingService';
 
-export const SafeWalkScreen: React.FC = () => {
+export interface SafeWalkScreenProps {
+  initialDestination?: {
+    latitude: number;
+    longitude: number;
+    name: string;
+  };
+}
+
+export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
+  initialDestination,
+}) => {
   const { colors, isDark } = useTheme();
   const mapRef = useRef<OpenMapViewRef | null>(null);
   const [userPos, setUserPos] =
@@ -46,6 +57,19 @@ export const SafeWalkScreen: React.FC = () => {
     longitude: 78.0322,
     name: 'Clock Tower / City Center',
   });
+
+  useEffect(() => {
+    if (initialDestination) {
+      setDestPos(initialDestination);
+      if (mapRef.current) {
+        mapRef.current.recenter(
+          initialDestination.latitude,
+          initialDestination.longitude,
+          15,
+        );
+      }
+    }
+  }, [initialDestination]);
 
   // Search & Routing state
   const [searchQuery, setSearchQuery] = useState('');
@@ -68,8 +92,34 @@ export const SafeWalkScreen: React.FC = () => {
   useEffect(() => {
     getCurrentCoordinates().then(c => {
       setUserPos(c);
+      if (c.isLive && mapRef.current) {
+        mapRef.current.recenter(c.latitude, c.longitude, 15);
+      }
     });
   }, []);
+
+  // Live GPS tracking when Safe Walk escort is active
+  useEffect(() => {
+    if (!isActive) return;
+    const unsub = watchUserLocation(updatedCoords => {
+      setUserPos(prev => ({
+        ...prev,
+        latitude: updatedCoords.latitude,
+        longitude: updatedCoords.longitude,
+        accuracy: updatedCoords.accuracy,
+        isLive: true,
+      }));
+    });
+    return () => unsub();
+  }, [isActive]);
+
+  const recenterMap = async () => {
+    const c = await getCurrentCoordinates();
+    setUserPos(c);
+    if (mapRef.current) {
+      mapRef.current.recenter(c.latitude, c.longitude, 16);
+    }
+  };
 
   // Update street route whenever start or destination changes
   useEffect(() => {
@@ -248,6 +298,16 @@ export const SafeWalkScreen: React.FC = () => {
     return `${meters} m`;
   };
 
+  const formatWalkDuration = (seconds: number) => {
+    const mins = Math.ceil(seconds / 60);
+    if (mins >= 60) {
+      const hrs = Math.floor(mins / 60);
+      const rem = mins % 60;
+      return rem > 0 ? `${hrs}h ${rem}m walk` : `${hrs}h walk`;
+    }
+    return `${mins} min walk`;
+  };
+
   const mapMarkers: MapMarkerItem[] = [
     {
       id: 'walker',
@@ -412,11 +472,26 @@ export const SafeWalkScreen: React.FC = () => {
                 style={[styles.routeBadgeText, { color: colors.textPrimary }]}
               >
                 {formatDistance(routeDistanceMeters)} •{' '}
-                {Math.ceil(routeDurationSeconds / 60)} min walk
+                {formatWalkDuration(routeDurationSeconds)}
               </Text>
             </>
           )}
         </View>
+
+        {/* Recenter Live GPS Button */}
+        <TouchableOpacity
+          style={[
+            styles.recenterFab,
+            {
+              backgroundColor: colors.backgroundCard,
+              borderColor: colors.border,
+            },
+          ]}
+          onPress={recenterMap}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.recenterIcon}>🎯</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Bottom Panel */}
@@ -791,4 +866,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
+  recenterFab: {
+    position: 'absolute',
+    bottom: 16,
+    right: 16,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    zIndex: 10,
+  },
+  recenterIcon: { fontSize: 20 },
 });

@@ -16,31 +16,68 @@ This guide covers the mobile client architecture, screen flows, state management
 
 ## 2. Screen & Navigation Flow
 
-The mobile application utilizes a native stack navigator with automatic authentication-aware routing:
+The mobile application utilizes a native stack navigator with automatic authentication-aware routing and session rehydration:
 
 ```mermaid
 graph TD
-    A[App Launch] --> B{Token in Storage?}
-    B -->|No| C[WelcomeScreen]
-    C --> D[OnboardingScreen]
-    D --> E[LoginScreen / RegisterScreen]
-    E -->|Success| F[HomeScreen]
-    B -->|Yes| F[HomeScreen]
+    A[App Launch] --> Hydrate{Session Hydrated?}
+    Hydrate -->|No| Splash[Dark Hydration Loader]
+    Hydrate -->|Yes| CheckAuth{Authenticated?}
     
-    F --> G[MapScreen: Interactive Hazards & Heatmap]
-    F --> H[SafeWalkScreen: Live Tracking & Route Deviation]
-    F --> I[ProfileScreen: Emergency Contacts & Settings]
-    F --> J[One-Tap SOS Modal / Trigger]
+    CheckAuth -->|No| CheckOnboard{First Install?}
+    CheckOnboard -->|Yes (hasSeenOnboarding=false)| Onboard[OnboardingScreen (4 Slides)]
+    Onboard -->|Skip / Get Started| AccountSelect[AccountSelectScreen]
+    CheckOnboard -->|No| AccountSelect
+    AccountSelect --> Auth[AuthScreen: Login & Register Tabs]
+    Auth -->|Guest Mode| MainTabs[MainTabNavigator]
+    Auth -->|Auth Success| MainTabs
+    
+    CheckAuth -->|Yes| MainTabs
+    
+    MainTabs --> Home[HomeScreen: Safety Status & Quick SOS]
+    MainTabs --> Map[MapScreen: Radar Canvas, Hazards & Multi-Modal Route]
+    MainTabs --> SafeWalk[SafeWalkScreen: Live Route Tracker & Deviation HUD]
+    MainTabs --> Profile[ProfileScreen: Emergency Contacts CRUD & Medical ID]
+    MainTabs --> Settings[SettingsScreen: Dark/Light Mode & Safety Settings]
 ```
 
 ### Screen Directory Structure (`apps/mobile/src/screens/`)
-- **`WelcomeScreen.tsx`**: High-impact brand introduction with safety highlights.
-- **`OnboardingScreen.tsx`**: Visual walk-through of Hazard Reporting, Safe Walk, and Instant SOS.
-- **`LoginScreen.tsx` / `RegisterScreen.tsx`**: Authenticates users against the Express backend and saves JWT to storage.
-- **`HomeScreen.tsx`**: Dashboard displaying live safety status, quick-action buttons, recent local alerts, and active Safe Walk cards.
-- **`MapScreen.tsx`**: Full-screen map rendering nearby hazards, filtering categories (lighting, road hazards, waterlogging), and displaying safety clusters.
-- **`SafeWalkScreen.tsx`**: Journey configuration (destination picker, contacts selection), active route view, and emergency escalation timers.
-- **`ProfileScreen.tsx`**: User profile, trusted emergency contacts CRUD, and notification preferences.
+- **`OnboardingScreen.tsx`**: 4-step interactive carousel highlighting Safety Heatmap, Safe Walk, Instant SOS, and Community Alerts with "Skip" and "Get Started" buttons.
+- **`AccountSelectScreen.tsx`**: Clean portal presenting Student / Campus Walker sign-in, account creation, or Examiner Guest Mode.
+- **`AuthScreen.tsx`**: Segmented tab switcher between Login and Register with live form validation, eye password toggles, and direct routing to `MainTabs`.
+- **`HomeScreen.tsx`**: Main safety dashboard with live score indicator, quick-trigger SOS (with 5-second cancel window), recent verified hazards feed, and active Safe Walk status card.
+- **`MapScreen.tsx`**: Full-screen interactive radar canvas with category filtering, PostGIS hazard clusters, multi-modal routing (Car, 2-Wheeler, Walk), local place search, and map layer controls.
+- **`SafeWalkScreen.tsx`**: Real-time walking journey engine with dual GPS tracking, continuous path rendering, calibrated walk times, 150m corridor monitoring, and deviation grace timers.
+- **`ProfileScreen.tsx`**: Emergency contacts management (Add, Edit, Delete, Test SOS Alert), Blood Group, medical notes, and theme toggle.
+- **`SettingsScreen.tsx`**: Granular safety preferences (silent vs siren SOS, corridor buffer, emergency hotlines).
+
+---
+
+## 3. Core Geospatial & Routing Architecture
+
+### 3.1 Open Geospatial Canvas Engine (`OpenMapView.tsx`)
+Rather than relying on proprietary Google Maps SDKs that require active billing accounts and can crash without API keys, SAFORA features an open-source, resilient geospatial canvas powered by Leaflet inside a hardware-accelerated `WebView`:
+- **Dynamic Layer Switcher**:
+  - **Clean / Default**: Vector raster tiles via MapTiler.
+  - **Street View**: OpenStreetMap cartography (`https://tile.openstreetmap.org/{z}/{x}/{y}.png`).
+  - **Satellite View**: High-resolution satellite imagery via Esri World Imagery (`https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}`).
+- **10km Offline Map Caching**:
+  - The map injects `window.cacheSurrounding10km(lat, lon, radiusKm)` upon coordinate load.
+  - Automatically fetches and stores the 10km bounding box matrix of tiles into the device's HTML5 `CacheStorage`.
+  - When the phone enters offline or no-signal zones, cached map tiles load instantly from internal storage.
+
+### 3.2 Calibrated Multi-Modal Routing Engine (`routingService.ts`)
+Standard routing services often fail to represent real-world pedestrian speeds. SAFORA implements calibrated travel-time mathematics:
+- **Walking Pace**: Calibrated to $1.60\text{ m/s}$ ($5.8\text{ km/h}$), accurately yielding **~10.4 minutes per 1 km**.
+- **2-Wheeler (Bike/Scooter)**: Calibrated to $8.88\text{ m/s}$ ($32\text{ km/h}$) $+ 20\text{s}$ agile traffic buffer $\rightarrow$ **~2.2 minutes per 1 km**.
+- **Car**: Calibrated to $7.22\text{ m/s}$ ($26\text{ km/h}$) $+ 45\text{s}$ signal/parking buffer $\rightarrow$ **~3.0 minutes per 1 km**.
+- **Routing Geometry**: Queries OSRM (`router.project-osrm.org`) for actual road networks, falling back to a $1.25\times$ road curvature factor over Haversine calculations when offline.
+- **Local Search Engine**: Employs Photon OpenStreetMap geocoding with user GPS latitude/longitude biasing, falling back to MapTiler geocoding.
+
+### 3.3 Dual-Strategy Geolocation (`locationService.ts`)
+- **Primary Strategy**: High-accuracy GPS (`enableHighAccuracy: true`, timeout: 6,000ms).
+- **Secondary Fallback**: Wi-Fi/Cellular network triangulation (`enableHighAccuracy: false`, timeout: 10,000ms).
+- **Continuous Tracking**: `watchUserLocation(onUpdate, onError)` streams live coordinate updates with a 3-meter displacement filter, ensuring buttery-smooth position tracking during Safe Walk.
 
 ---
 

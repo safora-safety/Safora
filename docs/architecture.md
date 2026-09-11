@@ -11,20 +11,27 @@
 ```mermaid
 flowchart TD
     subgraph ClientLayer ["Mobile Client Tier (React Native + TypeScript)"]
-        UI["Mobile App UI<br/>(Screens: Home, Map, SafeWalk, SOS)"]
-        Zustand["Global State & Storage<br/>(Zustand + AsyncStorage)"]
-        LocService["Location Engine<br/>(GPS Watcher / Background Tracking)"]
+        UI["Mobile App UI<br/>(Screens: Onboarding, Home, Map, SafeWalk, SOS, Profile)"]
+        Zustand["Global State & Storage<br/>(Zustand + AsyncStorage Offline Queue)"]
+        LocService["Dual-Strategy Location Engine<br/>(Fine GPS + Network Fallback + Live Watcher)"]
+        OpenMap["Open Geospatial Canvas (OpenMapView)<br/>(10km CacheStorage + Layer Switcher)"]
+        RoutingEng["Multi-Modal Routing Engine<br/>(OSRM Geometry + Calibrated Walk/Car/Bike Times)"]
+        
         UI --> Zustand
         UI --> LocService
+        UI --> OpenMap
+        UI --> RoutingEng
     end
 
     subgraph APILayer ["Backend Application Tier (Node.js + Express + TypeScript)"]
         Gateway["HTTP REST & WebSocket Gateway<br/>(Express + Socket.IO)"]
+        RAMCache["In-Memory RAM Cache<br/>(<2ms Latency + Auto-Invalidation)"]
         AuthModule["Auth & Security Guard<br/>(JWT + bcrypt + Helmet)"]
         ReportModule["Hazard Ingestion & DBSCAN Clustering"]
         SafeWalkModule["Journey Corridor Monitor & Deviation Engine"]
-        SOSModule["Emergency SOS Dispatcher"]
+        SOSModule["Emergency SOS Dispatcher & Contacts CRUD"]
         
+        Gateway --> RAMCache
         Gateway --> AuthModule
         Gateway --> ReportModule
         Gateway --> SafeWalkModule
@@ -38,14 +45,16 @@ flowchart TD
     end
 
     subgraph ExternalServices ["External Infrastructure"]
-        FCM["Firebase Cloud Messaging (FCM)<br/>(Push Notifications)"]
+        FCM["Firebase Cloud Messaging (FCM v14)<br/>(Push Notifications)"]
         Cloudinary["Cloudinary CDN<br/>(Hazard Photo Storage)"]
+        MapServices["Open Map Providers<br/>(OSM, MapTiler, Esri World Imagery, Photon)"]
     end
 
     ClientLayer <==>|"HTTPS (REST) & WSS (Socket.IO)"| Gateway
+    ClientLayer -.->|"Tiles & Geocoding"| MapServices
     ReportModule -->|"ST_DWithin & ST_ClusterDBSCAN"| PG
     SafeWalkModule -->|"Corridor Queries & Journey Log"| PG
-    SOSModule -->|"Incident Insert"| PG
+    SOSModule -->|"Incident Insert & Contacts Sync"| PG
     AuthModule -->|"User Credential Validation"| PG
     
     SOSModule -->|"Dispatch Alert Payload"| FCM

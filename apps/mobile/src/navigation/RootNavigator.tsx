@@ -27,7 +27,8 @@ export type RootStackParamList = {
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const RootNavigator: React.FC = () => {
-  const { isAuthenticated, isHydrated, hydrateAuth } = useAuthStore();
+  const { isAuthenticated, isHydrated, hasSeenOnboarding, hydrateAuth } =
+    useAuthStore();
 
   useEffect(() => {
     hydrateAuth();
@@ -46,6 +47,7 @@ export const RootNavigator: React.FC = () => {
     <NavigationContainer>
       <Stack.Navigator
         id="root"
+        initialRouteName={!hasSeenOnboarding ? 'Onboarding' : 'AccountSelect'}
         screenOptions={{
           headerShown: false,
           animation: 'fade',
@@ -53,12 +55,25 @@ export const RootNavigator: React.FC = () => {
       >
         {!isAuthenticated ? (
           <>
-            <Stack.Screen
-              name="AccountSelect"
-              component={AccountSelectScreen}
-            />
-            <Stack.Screen name="Auth" component={AuthScreen} />
-            <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+            {!hasSeenOnboarding ? (
+              <>
+                <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+                <Stack.Screen
+                  name="AccountSelect"
+                  component={AccountSelectScreen}
+                />
+                <Stack.Screen name="Auth" component={AuthScreen} />
+              </>
+            ) : (
+              <>
+                <Stack.Screen
+                  name="AccountSelect"
+                  component={AccountSelectScreen}
+                />
+                <Stack.Screen name="Auth" component={AuthScreen} />
+                <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+              </>
+            )}
           </>
         ) : (
           <>
@@ -67,16 +82,6 @@ export const RootNavigator: React.FC = () => {
               name="Settings"
               component={SettingsScreen}
               options={{ animation: 'slide_from_right' }}
-            />
-            <Stack.Screen
-              name="Auth"
-              component={AuthScreen}
-              options={{ animation: 'slide_from_bottom' }}
-            />
-            <Stack.Screen
-              name="AccountSelect"
-              component={AccountSelectScreen}
-              options={{ animation: 'fade' }}
             />
           </>
         )}

@@ -32,29 +32,39 @@ const SLIDES: Slide[] = [
     badge: 'COMMUNITY SAFETY SHIELD',
     emoji: '🛡️',
     title: 'Welcome to SAFORA',
-    subtitle: 'Your Personal Guardian',
+    subtitle: 'Your Personal Safety Companion',
     description:
-      'A community-driven safety ecosystem protecting students and citizens with proactive alerts, real-time safety scores, and instant emergency response.',
+      'A proactive women & citizen safety network with real-time hazard radar, 256-bit encrypted coordinates, and immediate guardian alerts.',
     accentColor: colors.accent,
   },
   {
     id: '2',
-    badge: 'POSTGIS SPATIAL GRID',
-    emoji: '⚠️',
-    title: 'Real-Time Hazards',
-    subtitle: 'Campus & City Radar',
+    badge: 'SAFETY RADAR & 10KM CACHE',
+    emoji: '🗺️',
+    title: 'Live Radar & Maps',
+    subtitle: 'Satellite, Street & Offline Views',
     description:
-      'Identify unlit streets, waterlogged paths, and construction trenches with sub-second spatial queries powered by PostgreSQL PostGIS.',
-    accentColor: colors.warning,
+      'Spot poorly lit roads, isolated spots, and hazards. Includes multi-modal routing for Car, 2-Wheeler, and Walk with automatic 10km offline map caching.',
+    accentColor: '#38BDF8',
   },
   {
     id: '3',
     badge: 'VIRTUAL ESCORT',
     emoji: '🚶‍♀️',
-    title: 'Safe Walk & SOS',
+    title: 'Safe Walk Escort',
     subtitle: 'Never Walk Alone',
     description:
-      'Start a timed Safe Walk escort with automatic check-in timers and an instant SOS beacon that broadcasts your live coordinates to trusted contacts.',
+      'Live road corridor tracking with automatic timer checks, corridor deviation detection, and one-tap safe arrival sharing to loved ones.',
+    accentColor: colors.warning,
+  },
+  {
+    id: '4',
+    badge: 'LOW-INTERNET RESILIENT',
+    emoji: '🚨',
+    title: 'Instant SOS & Decoy',
+    subtitle: 'Zero-Internet Safety Fallbacks',
+    description:
+      '30-second ambient audio recording, offline SMS SOS with GPS coordinates targeting 112, and a stealth working calculator decoy for discreet emergencies.',
     accentColor: colors.danger,
   },
 ];
@@ -85,13 +95,13 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       });
     } else {
       await completeOnboarding();
-      navigation.replace('Welcome');
+      navigation.replace('AccountSelect');
     }
   };
 
   const handleSkip = async () => {
     await completeOnboarding();
-    navigation.replace('Welcome');
+    navigation.replace('AccountSelect');
   };
 
   return (

@@ -35,7 +35,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
-  const { login, register, isLoading, error, clearError } = useAuthStore();
+  const { login, register, enterAsGuest, isLoading, error, clearError } =
+    useAuthStore();
 
   const isEmailValid = (val: string) =>
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val.trim());
@@ -55,7 +56,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     }
 
     if (activeTab === 'login') {
-      await login(email.trim(), password);
+      const ok = await login(email.trim(), password);
+      if (ok) {
+        navigation.navigate('MainTabs');
+      }
     } else {
       if (!name.trim()) {
         setLocalError('Please enter your full name.');
@@ -69,7 +73,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         setLocalError('Password must be at least 6 characters.');
         return;
       }
-      await register(name.trim(), email.trim(), phone.trim(), password);
+      const ok = await register(
+        name.trim(),
+        email.trim(),
+        phone.trim(),
+        password,
+      );
+      if (ok) {
+        navigation.navigate('MainTabs');
+      }
     }
   };
 
@@ -267,6 +279,21 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               </Text>
             )}
           </TouchableOpacity>
+
+          {/* Low / No Internet Offline Emergency Entry */}
+          <TouchableOpacity
+            style={styles.offlineEntryBtn}
+            onPress={async () => {
+              await enterAsGuest();
+              navigation.navigate('MainTabs');
+            }}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.offlineEntryIcon}>📶</Text>
+            <Text style={styles.offlineEntryText}>
+              In low or no internet? Continue with Offline Safety Shield →
+            </Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -447,5 +474,28 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
     letterSpacing: 0.5,
+  },
+  offlineEntryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(79, 70, 229, 0.12)',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(99, 102, 241, 0.3)',
+    marginTop: 16,
+    gap: 8,
+  },
+  offlineEntryIcon: {
+    fontSize: 16,
+  },
+  offlineEntryText: {
+    color: '#A5B4FC',
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+    flex: 1,
   },
 });
