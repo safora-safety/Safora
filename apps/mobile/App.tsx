@@ -9,11 +9,7 @@ function AppContent(): React.JSX.Element {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar
-        barStyle={isDark ? 'light-content' : 'dark-content'}
-        backgroundColor={colors.background}
-        translucent={false}
-      />
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
       <RootNavigator />
     </View>
   );
