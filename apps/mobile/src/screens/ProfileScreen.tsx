@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,9 +9,11 @@ import {
   Alert,
   Linking,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { useAuthStore } from '../store/authStore';
 import { EditProfileModal } from '../components/EditProfileModal';
+import { ContactModal, EditableContact } from '../components/ContactModal';
 import { useTheme } from '../theme/ThemeContext';
 
 interface Contact {
@@ -22,43 +24,153 @@ interface Contact {
   isHelpline?: boolean;
 }
 
+const DEFAULT_HELPLINES: Contact[] = [
+  {
+    id: 'police-112',
+    name: 'Police Emergency Response',
+    relationship: 'National Emergency Helpline',
+    phone: '112',
+    isHelpline: true,
+  },
+  {
+    id: 'ambulance-108',
+    name: 'Ambulance & Medical Emergency',
+    relationship: 'National Medical Dispatch',
+    phone: '108',
+    isHelpline: true,
+  },
+  {
+    id: 'women-helpline',
+    name: 'Women Safety Helpline',
+    relationship: '24/7 Citizen Women Helpline',
+    phone: '1090',
+    isHelpline: true,
+  },
+];
+
+const INITIAL_FAMILY_CONTACTS: Contact[] = [
+  {
+    id: 'family-1',
+    name: 'Emergency Guardian (Family)',
+    relationship: 'Parent / Primary Guardian',
+    phone: '+91 98765 43210',
+    isHelpline: false,
+  },
+];
+
+const CONTACTS_STORAGE_KEY = '@safora_custom_emergency_contacts';
+
 export const ProfileScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { user, isGuest, logout } = useAuthStore();
   const { colors, isDark } = useTheme();
-  const [showEditModal, setShowEditModal] = useState(false);
 
-  // Universal Emergency Responders & Helplines (Police 112, Ambulance 108, Women 1090)
-  const [contacts, setContacts] = useState<Contact[]>([
-    {
-      id: 'police-112',
-      name: 'Police Emergency Response',
-      relationship: 'National Emergency Helpline',
-      phone: '112',
-      isHelpline: true,
-    },
-    {
-      id: 'ambulance-108',
-      name: 'Ambulance & Medical Emergency',
-      relationship: 'National Medical Dispatch',
-      phone: '108',
-      isHelpline: true,
-    },
-    {
-      id: 'women-helpline',
-      name: 'Women Safety Helpline',
-      relationship: '24/7 Citizen Women Helpline',
-      phone: '1090',
-      isHelpline: true,
-    },
-    {
-      id: 'family-1',
-      name: 'Emergency Guardian (Family)',
-      relationship: 'Primary Family Guardian',
-      phone: '+91 98765 43210',
-      isHelpline: false,
-    },
-  ]);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [editingContact, setEditingContact] = useState<EditableContact | null>(
+    null,
+  );
+  const [customContacts, setCustomContacts] = useState<Contact[]>(
+    INITIAL_FAMILY_CONTACTS,
+  );
+
+  // Load custom contacts from persistent storage on mount
+  useEffect(() => {
+    AsyncStorage.getItem(CONTACTS_STORAGE_KEY).then(stored => {
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setCustomContacts(parsed);
+          }
+        } catch {
+          // Use initial fallback
+        }
+      }
+    });
+  }, []);
+
+  const saveCustomContacts = async (updated: Contact[]) => {
+    setCustomContacts(updated);
+    try {
+      await AsyncStorage.setItem(CONTACTS_STORAGE_KEY, JSON.stringify(updated));
+    } catch {
+      // Ignore storage error
+    }
+  };
+
+  const handleOpenAddModal = () => {
+    setEditingContact(null);
+    setShowContactModal(true);
+  };
+
+  const handleOpenEditModal = (contact: Contact) => {
+    setEditingContact(contact);
+    setShowContactModal(true);
+  };
+
+  const handleDeleteContact = (contact: Contact) => {
+    Alert.alert(
+      'Delete Emergency Contact',
+      `Are you sure you want to remove ${contact.name} from your emergency guardian list?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            const updated = customContacts.filter(c => c.id !== contact.id);
+            saveCustomContacts(updated);
+            Alert.alert(
+              'Contact Removed',
+              `${contact.name} was removed from your emergency network.`,
+            );
+          },
+        },
+      ],
+    );
+  };
+
+  const handleSaveContact = (savedData: {
+    id?: string;
+    name: string;
+    phone: string;
+    relationship: string;
+  }) => {
+    if (savedData.id) {
+      // Edit existing
+      const updated = customContacts.map(c =>
+        c.id === savedData.id
+          ? {
+              ...c,
+              name: savedData.name,
+              phone: savedData.phone,
+              relationship: savedData.relationship,
+            }
+          : c,
+      );
+      saveCustomContacts(updated);
+      Alert.alert(
+        'Contact Updated',
+        `${savedData.name}'s details have been saved.`,
+      );
+    } else {
+      // Add new
+      const newContact: Contact = {
+        id: `custom-${Date.now()}`,
+        name: savedData.name,
+        phone: savedData.phone,
+        relationship: savedData.relationship,
+        isHelpline: false,
+      };
+      const updated = [...customContacts, newContact];
+      saveCustomContacts(updated);
+      Alert.alert(
+        'Guardian Added',
+        `${savedData.name} will now receive your SOS alerts and live GPS tracking.`,
+      );
+    }
+  };
 
   const testAlert = (contact: Contact) => {
     if (contact.isHelpline) {
@@ -79,29 +191,6 @@ export const ProfileScreen: React.FC = () => {
     Alert.alert(
       '🚨 Test Alert Dispatched',
       `Simulated live SOS SMS alert to ${contact.name} (${contact.phone}):\n\n"EMERGENCY ALERT: Safora user triggered SOS. Live coordinates: 30.3165°N, 78.0322°E."`,
-    );
-  };
-
-  const addContactPrompt = () => {
-    Alert.alert(
-      'Add Family Guardian',
-      'Add a trusted family member or close friend to your emergency network.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Add Sample Guardian',
-          onPress: () => {
-            const newC: Contact = {
-              id: Date.now().toString(),
-              name: 'Dr. A. Verma',
-              relationship: 'Trusted Family Contact',
-              phone: '+91 98112 34567',
-              isHelpline: false,
-            };
-            setContacts([...contacts, newC]);
-          },
-        },
-      ],
     );
   };
 
@@ -299,23 +388,136 @@ export const ProfileScreen: React.FC = () => {
           </View>
         )}
 
-        {/* Universal Emergency Contacts & Helplines */}
+        {/* Custom Emergency Family & Friends Contacts */}
         <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-            Emergency Responders & Guardians
-          </Text>
+          <View>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+              Family & Personal Guardians
+            </Text>
+            <Text style={[styles.sectionSub, { color: colors.textSecondary }]}>
+              Will receive instant SOS calls, live GPS, and audio evidence
+            </Text>
+          </View>
           <TouchableOpacity
-            onPress={addContactPrompt}
+            onPress={handleOpenAddModal}
             style={[styles.addBtn, { backgroundColor: colors.primary }]}
+            activeOpacity={0.8}
           >
-            <Text style={styles.addBtnText}>+ Add</Text>
+            <Text style={styles.addBtnText}>+ Add Real Contact</Text>
           </TouchableOpacity>
         </View>
 
+        {customContacts.length === 0 ? (
+          <View
+            style={[
+              styles.emptyCard,
+              {
+                backgroundColor: colors.backgroundCard,
+                borderColor: colors.border,
+              },
+            ]}
+          >
+            <Text style={styles.emptyEmoji}>👥</Text>
+            <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
+              No Personal Guardians Added Yet
+            </Text>
+            <Text style={[styles.emptySub, { color: colors.textSecondary }]}>
+              Add trusted family members or friends who should be notified when
+              you trigger SOS or Safe Walk alerts.
+            </Text>
+            <TouchableOpacity
+              style={[styles.addFirstBtn, { backgroundColor: colors.primary }]}
+              onPress={handleOpenAddModal}
+            >
+              <Text style={styles.addFirstBtnText}>+ Add First Guardian</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.contactsList}>
+            {customContacts.map(contact => (
+              <View
+                key={contact.id}
+                style={[
+                  styles.contactItem,
+                  {
+                    backgroundColor: colors.backgroundCard,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.contactIconCircle,
+                    { backgroundColor: 'rgba(56, 189, 248, 0.12)' },
+                  ]}
+                >
+                  <Text style={styles.contactIcon}>👥</Text>
+                </View>
+
+                <View style={styles.contactDetails}>
+                  <Text
+                    style={[styles.contactName, { color: colors.textPrimary }]}
+                  >
+                    {contact.name}
+                  </Text>
+                  <Text
+                    style={[styles.contactRel, { color: colors.textMuted }]}
+                  >
+                    {contact.relationship}
+                  </Text>
+                  <Text
+                    style={[styles.contactPhone, { color: colors.primary }]}
+                  >
+                    {contact.phone}
+                  </Text>
+                </View>
+
+                {/* Edit, Delete & Test Actions */}
+                <View style={styles.contactActionsCol}>
+                  <TouchableOpacity
+                    style={styles.actionPill}
+                    onPress={() => handleOpenEditModal(contact)}
+                  >
+                    <Text style={styles.actionPillText}>✏️ Edit</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.actionPill, styles.deletePill]}
+                    onPress={() => handleDeleteContact(contact)}
+                  >
+                    <Text style={[styles.actionPillText, { color: '#EF4444' }]}>
+                      🗑️ Delete
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.testBtn}
+                    onPress={() => testAlert(contact)}
+                  >
+                    <Text style={styles.testBtnText}>Test SOS</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Pinned Universal National Helplines */}
+        <View style={[styles.sectionHeader, { marginTop: 10 }]}>
+          <View>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+              Universal Emergency Services
+            </Text>
+            <Text style={[styles.sectionSub, { color: colors.textSecondary }]}>
+              Verified 24/7 national citizen helplines
+            </Text>
+          </View>
+        </View>
+
         <View style={styles.contactsList}>
-          {contacts.map(contact => (
+          {DEFAULT_HELPLINES.map(helpline => (
             <View
-              key={contact.id}
+              key={helpline.id}
               style={[
                 styles.contactItem,
                 {
@@ -327,46 +529,32 @@ export const ProfileScreen: React.FC = () => {
               <View
                 style={[
                   styles.contactIconCircle,
-                  {
-                    backgroundColor: contact.isHelpline
-                      ? 'rgba(239, 68, 68, 0.12)'
-                      : colors.backgroundInput,
-                  },
+                  { backgroundColor: 'rgba(239, 68, 68, 0.12)' },
                 ]}
               >
-                <Text style={styles.contactIcon}>
-                  {contact.isHelpline ? '🚨' : '👥'}
-                </Text>
+                <Text style={styles.contactIcon}>🚨</Text>
               </View>
 
               <View style={styles.contactDetails}>
                 <Text
                   style={[styles.contactName, { color: colors.textPrimary }]}
                 >
-                  {contact.name}
+                  {helpline.name}
                 </Text>
                 <Text style={[styles.contactRel, { color: colors.textMuted }]}>
-                  {contact.relationship}
+                  {helpline.relationship}
                 </Text>
-                <Text style={[styles.contactPhone, { color: colors.primary }]}>
-                  {contact.phone}
+                <Text style={[styles.contactPhone, { color: '#EF4444' }]}>
+                  Dial {helpline.phone}
                 </Text>
               </View>
 
               <TouchableOpacity
-                style={[
-                  styles.testBtn,
-                  contact.isHelpline && styles.testBtnCall,
-                ]}
-                onPress={() => testAlert(contact)}
+                style={[styles.testBtn, styles.testBtnCall]}
+                onPress={() => testAlert(helpline)}
               >
-                <Text
-                  style={[
-                    styles.testBtnText,
-                    contact.isHelpline && { color: '#EF4444' },
-                  ]}
-                >
-                  {contact.isHelpline ? 'Call' : 'Test'}
+                <Text style={[styles.testBtnText, { color: '#EF4444' }]}>
+                  📞 Call
                 </Text>
               </TouchableOpacity>
             </View>
@@ -401,7 +589,7 @@ export const ProfileScreen: React.FC = () => {
                 { color: colors.textSecondary },
               ]}
             >
-              Vibration, Siren SOS, Push notifications, Theme switcher & Cache
+              Vibration, Siren SOS, Offline map cache, Theme switcher
             </Text>
           </View>
           <Text
@@ -431,6 +619,14 @@ export const ProfileScreen: React.FC = () => {
       <EditProfileModal
         visible={showEditModal}
         onClose={() => setShowEditModal(false)}
+      />
+
+      {/* Add / Edit Real Emergency Contact Modal */}
+      <ContactModal
+        visible={showContactModal}
+        onClose={() => setShowContactModal(false)}
+        onSave={handleSaveContact}
+        initialData={editingContact}
       />
     </View>
   );
@@ -538,43 +734,82 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   sectionTitle: { fontSize: 14, fontWeight: '800', letterSpacing: 0.5 },
+  sectionSub: { fontSize: 11, marginTop: 1 },
   addBtn: {
-    paddingVertical: 5,
-    paddingHorizontal: 12,
-    borderRadius: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 12,
   },
   addBtnText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
+  emptyCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 24,
+    alignItems: 'center',
+    gap: 8,
+  },
+  emptyEmoji: { fontSize: 32, marginBottom: 4 },
+  emptyTitle: { fontSize: 14, fontWeight: '800' },
+  emptySub: {
+    fontSize: 11,
+    textAlign: 'center',
+    lineHeight: 16,
+    marginBottom: 8,
+  },
+  addFirstBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+  },
+  addFirstBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 12 },
   contactsList: { gap: 10 },
   contactItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    borderRadius: 14,
+    padding: 14,
+    borderRadius: 16,
     borderWidth: 1,
     gap: 12,
   },
   contactIconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  contactIcon: { fontSize: 18 },
+  contactIcon: { fontSize: 20 },
   contactDetails: { flex: 1 },
-  contactName: { fontSize: 13, fontWeight: '700', marginBottom: 1 },
-  contactRel: { fontSize: 10, marginBottom: 2 },
-  contactPhone: { fontSize: 11, fontWeight: '600' },
+  contactName: { fontSize: 14, fontWeight: '800', marginBottom: 2 },
+  contactRel: { fontSize: 11, marginBottom: 3 },
+  contactPhone: { fontSize: 12, fontWeight: '700' },
+  contactActionsCol: {
+    alignItems: 'flex-end',
+    gap: 5,
+  },
+  actionPill: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  deletePill: {
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+  },
+  actionPillText: { fontSize: 10, fontWeight: '700', color: '#94A3B8' },
   testBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    backgroundColor: 'rgba(56, 189, 248, 0.1)',
   },
   testBtnCall: {
     backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
   },
-  testBtnText: { color: '#94A3B8', fontSize: 11, fontWeight: '700' },
+  testBtnText: { color: '#38BDF8', fontSize: 11, fontWeight: '700' },
   settingsShortcutCard: {
     flexDirection: 'row',
     alignItems: 'center',

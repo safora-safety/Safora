@@ -27,14 +27,29 @@ import {
 import { ReportService } from '../services/reportService';
 import { HazardReport } from '@safora/shared-types';
 import { ReportHazardModal } from '../components/ReportHazardModal';
-import { searchPlaces, PlaceSearchResult } from '../services/routingService';
+import {
+  searchPlaces,
+  PlaceSearchResult,
+  fetchMultiModalRoute,
+  MultiModalTravelTimes,
+  RouteCoord,
+} from '../services/routingService';
 
-export const MapScreen: React.FC = () => {
+export interface MapScreenProps {
+  onNavigateTab?: (
+    tab: 'Home' | 'Map' | 'SafeWalk' | 'Profile',
+    params?: any,
+  ) => void;
+}
+
+export const MapScreen: React.FC<MapScreenProps> = ({ onNavigateTab }) => {
   const navigation = useNavigation<any>();
   const { colors, isDark } = useTheme();
   const { isGuest } = useAuthStore();
   const mapRef = useRef<OpenMapViewRef | null>(null);
   const [coords, setCoords] = useState<LocationCoordinates>(CAMPUS_COORDINATES);
+  const [userLivePos, setUserLivePos] =
+    useState<LocationCoordinates>(CAMPUS_COORDINATES);
   const [hazards, setHazards] = useState<HazardReport[]>([]);
   const [selectedHazard, setSelectedHazard] = useState<HazardReport | null>(
     null,
@@ -42,6 +57,17 @@ export const MapScreen: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [showGuestGuardModal, setShowGuestGuardModal] = useState(false);
+
+  // Multi-Modal Path Routing State (Car, 2-Wheeler, Walk)
+  const [activeRoute, setActiveRoute] = useState<{
+    destinationName: string;
+    destinationCoord: RouteCoord;
+    coordinates: RouteCoord[];
+    distanceMeters: number;
+    travelTimes: MultiModalTravelTimes;
+  } | null>(null);
+  const [travelMode, setTravelMode] = useState<'car' | 'bike' | 'walk'>('car');
+  const [isCalculatingRoute, setIsCalculatingRoute] = useState(false);
 
   // Google Maps-style Location Search State
   const [searchQuery, setSearchQuery] = useState('');
@@ -62,20 +88,21 @@ export const MapScreen: React.FC = () => {
     const timer = setTimeout(async () => {
       setIsSearching(true);
       const results = await searchPlaces(searchQuery, {
-        latitude: coords.latitude,
-        longitude: coords.longitude,
+        latitude: userLivePos.latitude,
+        longitude: userLivePos.longitude,
       });
       setSearchResults(results);
       setIsSearching(false);
     }, 400);
 
     return () => clearTimeout(timer);
-  }, [searchQuery, coords.latitude, coords.longitude]);
+  }, [searchQuery, userLivePos.latitude, userLivePos.longitude]);
 
   const loadMapData = async () => {
     setLoading(true);
     try {
       const userPos = await getCurrentCoordinates();
+      setUserLivePos(userPos);
       setCoords(userPos);
       const data = await ReportService.getNearby(
         userPos.latitude,
@@ -87,6 +114,44 @@ export const MapScreen: React.FC = () => {
       // Fallback handled inside services
     } finally {
       setLoading(false);
+    }
+  };
+
+  const plotRouteTo = async (destination: {
+    latitude: number;
+    longitude: number;
+    name: string;
+  }) => {
+    setIsCalculatingRoute(true);
+    try {
+      const start: RouteCoord = {
+        latitude: userLivePos.latitude,
+        longitude: userLivePos.longitude,
+      };
+      const end: RouteCoord = {
+        latitude: destination.latitude,
+        longitude: destination.longitude,
+      };
+      const result = await fetchMultiModalRoute(start, end);
+      setActiveRoute({
+        destinationName: destination.name,
+        destinationCoord: end,
+        coordinates: result.coordinates,
+        distanceMeters: result.distanceMeters,
+        travelTimes: result.travelTimes,
+      });
+
+      if (mapRef.current) {
+        mapRef.current.recenter(
+          (start.latitude + end.latitude) / 2,
+          (start.longitude + end.longitude) / 2,
+          14,
+        );
+      }
+    } catch (err) {
+      console.warn('[MapScreen] Failed to calculate multi-modal route:', err);
+    } finally {
+      setIsCalculatingRoute(false);
     }
   };
 
@@ -104,6 +169,13 @@ export const MapScreen: React.FC = () => {
       mapRef.current.recenter(item.latitude, item.longitude, 16);
     }
 
+    // Automatically plot multi-modal route to the selected place
+    plotRouteTo({
+      latitude: item.latitude,
+      longitude: item.longitude,
+      name: item.name,
+    });
+
     setLoading(true);
     try {
       const data = await ReportService.getNearby(
@@ -119,10 +191,35 @@ export const MapScreen: React.FC = () => {
     }
   };
 
+  const handleMapPress = (coord: { latitude: number; longitude: number }) => {
+    plotRouteTo({
+      latitude: coord.latitude,
+      longitude: coord.longitude,
+      name: `Point (${coord.latitude.toFixed(4)}, ${coord.longitude.toFixed(4)})`,
+    });
+  };
+
   const recenterMap = () => {
     if (mapRef.current) {
-      mapRef.current.recenter(coords.latitude, coords.longitude, 15);
+      mapRef.current.recenter(userLivePos.latitude, userLivePos.longitude, 15);
     }
+  };
+
+  const formatDistance = (meters: number) => {
+    if (meters >= 1000) {
+      return `${(meters / 1000).toFixed(1)} km`;
+    }
+    return `${meters} m`;
+  };
+
+  const formatDurationText = (seconds: number) => {
+    const mins = Math.ceil(seconds / 60);
+    if (mins >= 60) {
+      const hrs = Math.floor(mins / 60);
+      const rem = mins % 60;
+      return rem > 0 ? `${hrs}h ${rem}m` : `${hrs}h`;
+    }
+    return `${mins} min`;
   };
 
   const handlePinHazardPress = () => {
@@ -212,12 +309,24 @@ export const MapScreen: React.FC = () => {
   const mapMarkers: MapMarkerItem[] = [
     {
       id: 'user-loc',
-      latitude: coords.latitude,
-      longitude: coords.longitude,
-      title: 'Current Focus',
-      description: coords.areaName,
+      latitude: userLivePos.latitude,
+      longitude: userLivePos.longitude,
+      title: 'Your Location',
+      description: userLivePos.areaName,
       isUser: true,
     },
+    ...(activeRoute
+      ? [
+          {
+            id: 'route-dest',
+            latitude: activeRoute.destinationCoord.latitude,
+            longitude: activeRoute.destinationCoord.longitude,
+            title: activeRoute.destinationName,
+            icon: '📍',
+            color: '#EF4444',
+          },
+        ]
+      : []),
     ...hazards.map(item => ({
       id: item.id,
       latitude: item.latitude,
@@ -267,7 +376,7 @@ export const MapScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      {/* Real Full-Screen MapView */}
+      {/* Real Full-Screen MapView with Multi-Modal Polyline */}
       <View style={styles.mapWrapper}>
         <OpenMapView
           ref={mapRef}
@@ -275,6 +384,17 @@ export const MapScreen: React.FC = () => {
           zoom={15}
           isDark={isDark}
           markers={mapMarkers}
+          polyline={activeRoute ? activeRoute.coordinates : undefined}
+          polylineColor={
+            travelMode === 'car'
+              ? '#3B82F6'
+              : travelMode === 'bike'
+                ? '#10B981'
+                : '#6366F1'
+          }
+          polylineDash={false}
+          layerSwitcherTop={68}
+          onMapPress={handleMapPress}
           onMarkerPress={markerId => {
             const found = hazards.find(h => String(h.id) === String(markerId));
             if (found) {
@@ -363,6 +483,7 @@ export const MapScreen: React.FC = () => {
             {
               backgroundColor: colors.backgroundCard,
               borderColor: colors.border,
+              bottom: activeRoute ? 215 : selectedHazard ? 245 : 24,
             },
           ]}
           onPress={recenterMap}
@@ -473,7 +594,7 @@ export const MapScreen: React.FC = () => {
             </View>
           ) : null}
 
-          {/* Voting Action Row: Still Present vs Resolved */}
+          {/* Voting Action Row: Still Present vs Resolved + Show Route */}
           <View style={styles.cardActionRow}>
             <TouchableOpacity
               style={[styles.confirmBtn, { backgroundColor: colors.primary }]}
@@ -488,7 +609,188 @@ export const MapScreen: React.FC = () => {
             >
               <Text style={styles.resolveBtnText}>✅ Resolved</Text>
             </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.routeHazardBtn, { borderColor: colors.primary }]}
+              onPress={() => {
+                plotRouteTo({
+                  latitude: selectedHazard.latitude,
+                  longitude: selectedHazard.longitude,
+                  name: selectedHazard.title,
+                });
+                setSelectedHazard(null);
+              }}
+            >
+              <Text
+                style={[styles.routeHazardBtnText, { color: colors.primary }]}
+              >
+                🧭 Route
+              </Text>
+            </TouchableOpacity>
           </View>
+        </View>
+      )}
+
+      {/* Multi-Modal Path Routing Card (Car, 2-Wheeler, Walk) */}
+      {activeRoute && !selectedHazard && (
+        <View
+          style={[
+            styles.routeCard,
+            {
+              backgroundColor: colors.backgroundCard,
+              borderColor: colors.border,
+            },
+          ]}
+        >
+          <View style={styles.routeHeader}>
+            <View style={{ flex: 1 }}>
+              <Text
+                style={[styles.routeDestTitle, { color: colors.textPrimary }]}
+                numberOfLines={1}
+              >
+                📍 {activeRoute.destinationName}
+              </Text>
+              <Text
+                style={[
+                  styles.routeDistanceSub,
+                  { color: colors.textSecondary },
+                ]}
+              >
+                Distance: {formatDistance(activeRoute.distanceMeters)}
+                {isCalculatingRoute ? ' • Calculating...' : ''}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.closeRouteBtn}
+              onPress={() => setActiveRoute(null)}
+            >
+              <Text style={styles.closeRouteBtnText}>✕ Clear</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Transport Mode Options: Car, 2-Wheeler, Walk */}
+          <View style={styles.modeTabsRow}>
+            {/* Car Mode */}
+            <TouchableOpacity
+              style={[
+                styles.modeTab,
+                travelMode === 'car' && styles.modeTabActiveCar,
+              ]}
+              onPress={() => setTravelMode('car')}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.modeTabEmoji}>🚗</Text>
+              <Text
+                style={[
+                  styles.modeTabTitle,
+                  travelMode === 'car' && styles.modeTabTitleActive,
+                ]}
+              >
+                Car
+              </Text>
+              <Text
+                style={[
+                  styles.modeTabEta,
+                  travelMode === 'car' && styles.modeTabEtaActive,
+                ]}
+              >
+                {formatDurationText(activeRoute.travelTimes.carSeconds)}
+              </Text>
+            </TouchableOpacity>
+
+            {/* 2-Wheeler Mode */}
+            <TouchableOpacity
+              style={[
+                styles.modeTab,
+                travelMode === 'bike' && styles.modeTabActiveBike,
+              ]}
+              onPress={() => setTravelMode('bike')}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.modeTabEmoji}>🛵</Text>
+              <Text
+                style={[
+                  styles.modeTabTitle,
+                  travelMode === 'bike' && styles.modeTabTitleActive,
+                ]}
+              >
+                2-Wheeler
+              </Text>
+              <Text
+                style={[
+                  styles.modeTabEta,
+                  travelMode === 'bike' && styles.modeTabEtaActive,
+                ]}
+              >
+                {formatDurationText(activeRoute.travelTimes.bikeSeconds)}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Walk Mode */}
+            <TouchableOpacity
+              style={[
+                styles.modeTab,
+                travelMode === 'walk' && styles.modeTabActiveWalk,
+              ]}
+              onPress={() => setTravelMode('walk')}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.modeTabEmoji}>🚶</Text>
+              <Text
+                style={[
+                  styles.modeTabTitle,
+                  travelMode === 'walk' && styles.modeTabTitleActive,
+                ]}
+              >
+                Walk
+              </Text>
+              <Text
+                style={[
+                  styles.modeTabEta,
+                  travelMode === 'walk' && styles.modeTabEtaActive,
+                ]}
+              >
+                {formatDurationText(activeRoute.travelTimes.walkSeconds)}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Action below modes */}
+          {travelMode === 'walk' ? (
+            <TouchableOpacity
+              style={[
+                styles.startSafeWalkBtn,
+                { backgroundColor: colors.primary },
+              ]}
+              onPress={() => {
+                onNavigateTab?.('SafeWalk', {
+                  destination: {
+                    latitude: activeRoute.destinationCoord.latitude,
+                    longitude: activeRoute.destinationCoord.longitude,
+                    name: activeRoute.destinationName,
+                  },
+                });
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.startSafeWalkBtnText}>
+                🛡️ Start Safe Walk Escort
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.trafficNoteRow}>
+              <Text
+                style={[
+                  styles.trafficNoteText,
+                  { color: colors.textSecondary },
+                ]}
+              >
+                {travelMode === 'car'
+                  ? '🚦 Realistic urban driving speed with traffic & intersection buffers'
+                  : '⚡ Optimized for 2-wheelers with agile traffic maneuverability'}
+              </Text>
+            </View>
+          )}
         </View>
       )}
 
@@ -814,5 +1116,141 @@ const styles = StyleSheet.create({
     color: '#38BDF8',
     fontSize: 10,
     fontWeight: '800',
+  },
+  routeHazardBtn: {
+    flex: 1,
+    borderWidth: 1,
+    paddingVertical: 10,
+    borderRadius: 12,
+    alignItems: 'center',
+    backgroundColor: 'rgba(79, 70, 229, 0.12)',
+  },
+  routeHazardBtnText: {
+    fontWeight: '800',
+    fontSize: 12,
+  },
+
+  // Multi-Modal Path Routing Bottom Card
+  routeCard: {
+    position: 'absolute',
+    bottom: 20,
+    left: 16,
+    right: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 16,
+    elevation: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    zIndex: 40,
+  },
+  routeHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  routeDestTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  routeDistanceSub: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  closeRouteBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  closeRouteBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#94A3B8',
+  },
+  modeTabsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  modeTab: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+  },
+  modeTabActiveCar: {
+    backgroundColor: '#2563EB',
+    borderColor: '#3B82F6',
+    elevation: 4,
+  },
+  modeTabActiveBike: {
+    backgroundColor: '#059669',
+    borderColor: '#10B981',
+    elevation: 4,
+  },
+  modeTabActiveWalk: {
+    backgroundColor: '#4F46E5',
+    borderColor: '#6366F1',
+    elevation: 4,
+  },
+  modeTabEmoji: {
+    fontSize: 20,
+    marginBottom: 2,
+  },
+  modeTabTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#94A3B8',
+    marginBottom: 1,
+  },
+  modeTabTitleActive: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+  },
+  modeTabEta: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#E2E8F0',
+  },
+  modeTabEtaActive: {
+    color: '#FFFFFF',
+    fontWeight: '900',
+  },
+  startSafeWalkBtn: {
+    paddingVertical: 12,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#4F46E5',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  startSafeWalkBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 13,
+    letterSpacing: 0.3,
+  },
+  trafficNoteRow: {
+    paddingVertical: 4,
+    alignItems: 'center',
+  },
+  trafficNoteText: {
+    fontSize: 11,
+    fontWeight: '500',
+    textAlign: 'center',
+    lineHeight: 15,
   },
 });

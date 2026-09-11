@@ -78,22 +78,34 @@ All detailed technical specifications, architectural diagrams, mathematical mode
 
 Based on Section 4.2 of the [Project Synopsis](file:///D:/Safora/docs/SAFORA_Synopsis_Formatted.pdf):
 
-1. **Module 1: User Authentication & Profile Management**
+1. **Module 1: User Authentication, Onboarding & Session Management**
    - Secure stateless authentication using JSON Web Tokens (JWT) and bcrypt password hashing.
-   - Profile management with customizable emergency contact relationships.
-2. **Module 2: Community Hazard Reporting**
+   - **4-Slide First-Install Onboarding Flow** (`OnboardingScreen.tsx`) introducing Safety Heatmap, Safe Walk, Instant SOS, and Community Alerts with "Skip" and "Get Started" triggers.
+   - Rehydration splash loader preventing login screen flicker on app resume; guest mode examiner bypass.
+2. **Module 2: Community Hazard Reporting & Offline Queue**
    - Crowdsourced hazard pinning with category selection (lighting, construction, waterlogging, isolated trail, traffic) and severity ratings (1 to 5).
    - Anti-abuse mechanisms: Rate limiting (max 5/hr) and text filters against personal names.
-3. **Module 3: Safety Score & Heatmap Engine**
+   - **Sub-2ms In-Memory RAM Caching** with automatic cache invalidation upon report submission.
+   - **Offline Incident Queue**: Stores unsubmitted hazard reports in `AsyncStorage` when internet drops, automatically syncing once connection is restored.
+3. **Module 3: Safety Score & Calibrated Multi-Modal Routing Engine**
    - Real-time score computation (0 to 100) combining hazard frequency, severity, recency exponential decay ($t_{\text{half}} = 24\text{h}$), and community confirmations.
    - Spatial clustering via PostGIS `ST_ClusterDBSCAN` grouping hazards within **50 meters** to prevent duplicate marker clutter.
-4. **Module 4: Safe Walk Mode & Trusted Contacts**
+   - **Calibrated Multi-Modal Travel Times**:
+     - **Walk**: Calibrated to $1.60\text{ m/s}$ ($5.8\text{ km/h}$) $\rightarrow$ exactly **~10.4 mins per 1 km**.
+     - **2-Wheeler (Bike/Scooter)**: $8.88\text{ m/s}$ ($32\text{ km/h}$) $+ 20\text{s}$ buffer $\rightarrow$ **~2.2 mins per 1 km**.
+     - **Car**: $7.22\text{ m/s}$ ($26\text{ km/h}$) $+ 45\text{s}$ signal buffer $\rightarrow$ **~3.0 mins per 1 km**.
+   - Proximity-biased local search powered by Photon OpenStreetMap engine + MapTiler fallback.
+4. **Module 4: Safe Walk Mode, Dual GPS & 10km Offline Map Caching**
    - Live route compliance monitoring along a configured 150-meter corridor.
+   - **Dual-Strategy Geolocation**: High-accuracy GPS with automatic fallback to cellular triangulation, plus continuous live watcher (`watchUserLocation`).
+   - **10km Offline Map Caching**: HTML5 `CacheStorage` pre-caches surrounding 10km radius tiles for complete offline exploration.
+   - **Dynamic Layer Switcher**: Toggle between Clean Vector (MapTiler), Street View (OpenStreetMap), and Satellite Imagery (Esri World Imagery).
    - **Confirm-Before-Escalate**: If a deviation occurs, the walker receives a 60-second grace prompt before alerting contacts, eliminating false alarms.
-   - Ephemeral location sharing automatically terminated once the journey ends.
-5. **Module 5: One-Tap SOS Alert System**
-   - Immediate distress signal capturing high-accuracy coordinates and battery level.
+5. **Module 5: One-Tap SOS Alert System & Emergency Contacts CRUD**
+   - Immediate distress signal capturing high-accuracy coordinates, accuracy radius, and battery level.
    - Instant dispatch to assigned emergency contacts with a live tracking URL.
+   - **Full Emergency Contacts CRUD** (`ContactModal.tsx` + `ProfileScreen.tsx`): Add, Edit, Delete, and Test SOS alert dispatch to individual guardians.
+   - One-tap native telephone dialer fallback (`tel:112`, `tel:108`).
 6. **Module 6: Administrative Moderation & Diagnostics**
    - Moderation workflows to mark reports as active, resolved, duplicate, or fake.
    - Live system health checks and database latency diagnostics (`/api/diagnostics`).
@@ -105,12 +117,13 @@ Based on Section 4.2 of the [Project Synopsis](file:///D:/Safora/docs/SAFORA_Syn
 | Layer | Technology | Engineering Rationale |
 |---|---|---|
 | **Mobile App** | React Native `0.87.1` + TypeScript | Native mobile performance with **Hermes** bytecode engine and **Fabric (New Architecture)** enabled. |
-| **Spatial Canvas** | Native Safety Radar & Open Geospatial Canvas | Coordinates and radius rings plotted mathematically via PostGIS (`ST_DWithin`), eliminating external Google Maps API billing and quota failure points. |
-| **State & Navigation** | Zustand + Native Stack Navigator | Fast, decoupled state management with native transitions and persistent session storage. |
-| **Backend API** | Node.js + Express + TypeScript | Lightweight asynchronous REST API and Socket.IO WebSocket gateway. |
+| **Spatial Canvas** | Open Geospatial Canvas (`OpenMapView.tsx`) | Leaflet-powered hardware-accelerated WebView with 10km offline tile caching (`CacheStorage`) and multi-layer switcher (Esri Satellite, OSM Street, MapTiler Default). |
+| **Routing Engine** | OSRM + Calibrated Multi-Modal Matrix | Real street-network polylines with human-accurate pedestrian walking speed ($1.60\text{ m/s}$) and 2-wheeler/car estimates. |
+| **State & Navigation** | Zustand + Native Stack Navigator | Fast, decoupled state management with native transitions, session hydration, and persistent AsyncStorage. |
+| **Backend API** | Node.js + Express + TypeScript | Lightweight asynchronous REST API with in-memory RAM caching (<2ms responses) and Socket.IO WebSocket gateway. |
 | **Database** | PostgreSQL 15+ with PostGIS | Uses `geography(Point, 4326)` for true ellipsoidal distance accuracy across the earth's curved surface. |
-| **Spatial Indexing** | GiST (`reports_location_idx`) | $O(\log N)$ bounding-box search for high-throughput spatial radius lookups. |
-| **Notifications** | Firebase Cloud Messaging (FCM) | High-priority push alerts for deviation escalation and SOS dispatch. |
+| **Spatial Indexing** | GiST (`reports_location_gist_idx`) | $O(\log N)$ bounding-box search for high-throughput spatial radius lookups (`ST_DWithin`). |
+| **Notifications** | Firebase Cloud Messaging (FCM) v14 | High-priority push alerts for deviation escalation and SOS dispatch. |
 
 ---
 

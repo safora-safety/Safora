@@ -31,17 +31,18 @@ This is the **minor project scope**. Offline (Bluetooth/Wi-Fi Direct) SOS commun
 | Layer | Technology | Notes |
 |---|---|---|
 | Mobile app | React Native + TypeScript | Pure mobile app, no separate web frontend (Hermes + Fabric enabled) |
-| Backend | Node.js + Express + TypeScript | REST API + Socket.IO real-time gateway |
-| Database | PostgreSQL + PostGIS | Uses `geography(Point, 4326)` for coordinates, **not** `geometry` — for real-world ellipsoidal distance accuracy |
-| ORM / Driver | `pg` Pool / TypeORM / Knex | Native PostGIS spatial queries via SQL |
-| Background location | `react-native-background-geolocation` / Geolocation Watcher | Keeps tracking under iOS/Android background restrictions — required for Safe Walk mode when phone is asleep |
-| Spatial Mapping | Native Safety Radar & Open Geospatial Canvas | Driven directly by PostGIS (`ST_DWithin`) and live device GPS, avoiding Google Maps API billing/quota limits |
-| Real-time | Socket.IO | Live location updates during a journey |
-| Notifications | Firebase Cloud Messaging (FCM) | Safe Walk start/end, SOS, arrival timeout |
-| Auth | JWT + bcrypt | Stateless bearer tokens; optional OAuth later |
+| Backend | Node.js + Express + TypeScript | REST API + Socket.IO real-time gateway + In-memory RAM cache (<2ms responses) |
+| Database | PostgreSQL + PostGIS | Uses `geography(Point, 4326)` for coordinates with GiST spatial indexes |
+| ORM / Driver | `pg` Pool / TypeORM | Native PostGIS spatial queries via SQL |
+| Background location | Dual-strategy GPS + Geolocation Watcher | Fine GPS + network fallback; continuous tracking for Safe Walk corridor monitoring |
+| Spatial Mapping | Open Geospatial Canvas (`OpenMapView.tsx`) | Leaflet engine inside WebView with 10km HTML5 `CacheStorage` tile pre-caching and layer switcher (Satellite/Street/Clean) |
+| Routing Engine | OSRM + Multi-Modal Travel Time Matrix | Street geometry with calibrated walking speed ($1.60\text{ m/s} \approx 10\text{ min/km}$) and 2-wheeler/car buffers |
+| Real-time | Socket.IO | Live location updates during a journey (`journey:${id}`) |
+| Notifications | Firebase Cloud Messaging (FCM) v14 | Safe Walk start/end, SOS dispatch, arrival timeout |
+| Auth & Onboarding | JWT + bcrypt + 4-Step Carousel | Stateless bearer tokens, first-install onboarding flow, session rehydration |
 | Image storage | Cloudinary | Optional report photo attachments |
-| Deployment (backend) | Render or Railway | |
-| Deployment (database) | Neon (managed PostgreSQL + PostGIS) | |
+| Deployment (backend) | Render | Zero-downtime container deployment with `/api/health` |
+| Deployment (database) | Neon (managed PostgreSQL + PostGIS) | Serverless PostgreSQL with PostGIS extensions |
 
 ---
 
