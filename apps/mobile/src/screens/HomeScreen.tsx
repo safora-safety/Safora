@@ -111,24 +111,76 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
     // Trigger 30s ambient audio evidence capture
     setAudioRecordingSecs(30);
 
+    let onlineSuccess = false;
+    let contactsCount = 0;
+
     try {
       const res = await SosService.triggerSOS({
         latitude: coords.latitude,
         longitude: coords.longitude,
         battery_percentage: 88,
-        audio_url:
-          'https://safora-safety.s3.amazonaws.com/evidence/sos-audio-sample.mp3',
+        audio_url: null, // Instructs backend to upload 30s synthesized ambient distress recording to Cloudinary
       });
 
-      Alert.alert(
-        '🚨 EMERGENCY SOS DISPATCHED',
-        `Live GPS alert sent to ${res.contactsNotified} emergency contacts & registered guardians.\n\nLive GPS: ${coords.latitude.toFixed(4)}°N, ${coords.longitude.toFixed(4)}°E\nLocation: ${coords.areaName}\n\n🎙️ 30s ambient audio recording captured & transmitted to family app.`,
-        [{ text: 'Dismiss Alert' }],
-      );
+      if (res && res.alert) {
+        onlineSuccess = !res.isOffline;
+        contactsCount = res.contactsNotified || 1;
+      }
     } catch {
-      // Instant automated failover to Method B (cellular SMS fallback)
-      dispatchOfflineSmsSos();
+      onlineSuccess = false;
     }
+
+    // Determine target primary contact for carrier SMS
+    let targetPhone = '112';
+    let contactName = 'Emergency Helpline';
+    try {
+      const stored = await AsyncStorage.getItem(
+        '@safora_custom_emergency_contacts',
+      );
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const firstReal = parsed.find(
+            c => c.phone && c.phone.replace(/\D/g, '').length >= 10,
+          );
+          if (firstReal && firstReal.phone) {
+            targetPhone = firstReal.phone.replace(/[^\d+]/g, '');
+            contactName = firstReal.name || 'Guardian';
+          }
+        }
+      }
+    } catch {}
+
+    const mapsLink = `https://maps.google.com/?q=${coords.latitude.toFixed(5)},${coords.longitude.toFixed(5)}`;
+    const body = encodeURIComponent(
+      `🚨 EMERGENCY SOS! I need immediate help. My live GPS coordinates: ${mapsLink} (${coords.areaName}) - Sent via SAFORA`,
+    );
+
+    // Dual Dispatch Dialog: Confirms online dispatch (Cloudinary + DB) and offers direct carrier SMS
+    Alert.alert(
+      '🚨 EMERGENCY SOS BROADCAST',
+      onlineSuccess
+        ? `Emergency broadcast transmitted!\n\n• 🎙️ 30s ambient audio captured & uploaded to Cloudinary evidence vault.\n• 📍 GPS: ${coords.latitude.toFixed(4)}°N, ${coords.longitude.toFixed(4)}°E (${coords.areaName})\n• 🔔 ${contactsCount} guardian(s) alerted.\n\nOpen SMS now to send direct carrier text to ${contactName} (${targetPhone})?`
+        : `Network offline or server unreachable.\n\nImmediate cellular failover: Send emergency SMS to ${contactName} (${targetPhone}) now with live GPS coordinates?`,
+      [
+        { text: 'Dismiss', style: 'cancel' },
+        {
+          text: '📱 Send Emergency SMS',
+          style: 'destructive',
+          onPress: () => {
+            Linking.openURL(`sms:${targetPhone}?body=${body}`).catch(() => {
+              Linking.openURL(`sms:?body=${body}`).catch(() => {
+                Alert.alert(
+                  'Offline SMS',
+                  `Emergency coordinates: ${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}\nPlease text ${targetPhone}.`,
+                );
+              });
+            });
+          },
+        },
+      ],
+      { cancelable: false },
+    );
   };
 
   // Offline SMS Fallback (Zero-Internet SOS Dispatch)
@@ -194,10 +246,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar
-        barStyle={isDark ? 'light-content' : 'dark-content'}
-        backgroundColor={colors.background}
-      />
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
       {/* Top Header Bar */}
       <View

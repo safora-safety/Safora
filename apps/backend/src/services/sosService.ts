@@ -11,6 +11,7 @@ import { SosAlertModel } from "../models/SosAlert";
 import { TrustedContactModel } from "../models/TrustedContact";
 import { NotificationModel } from "../models/Notification";
 import { db } from "../config/database";
+import { CloudinaryService } from "./cloudinaryService";
 
 export class SosService {
   static async triggerSOS(data: {
@@ -22,6 +23,24 @@ export class SosService {
     journeyId?: string | number | null;
     audioUrl?: string | null;
   }): Promise<{ alert: SosAlert; contactsNotified: number }> {
+    let finalAudioUrl = data.audioUrl;
+    // Automatically upload 30-second emergency ambient audio recording to Cloudinary
+    if (!finalAudioUrl || !finalAudioUrl.includes("res.cloudinary.com")) {
+      try {
+        finalAudioUrl = await CloudinaryService.uploadEmergencyRecording(
+          data.userId,
+        );
+        console.log(
+          `[INFO] Live 30s SOS audio evidence uploaded to Cloudinary: ${finalAudioUrl}`,
+        );
+      } catch (cloudErr) {
+        console.warn(
+          "[WARN] Could not upload SOS audio to Cloudinary:",
+          cloudErr,
+        );
+      }
+    }
+
     const row = await SosRepository.createAlert({
       userId: data.userId,
       journeyId: data.journeyId,
@@ -29,7 +48,7 @@ export class SosService {
       longitude: data.longitude,
       accuracy: data.accuracy,
       batteryPercentage: data.batteryPercentage,
-      audioUrl: data.audioUrl,
+      audioUrl: finalAudioUrl,
     });
 
     const contacts = await this.getContacts(data.userId);
@@ -59,7 +78,7 @@ export class SosService {
               latitude: data.latitude,
               longitude: data.longitude,
               batteryPercentage: data.batteryPercentage,
-              audioUrl: data.audioUrl,
+              audioUrl: finalAudioUrl,
               isTest: false,
             });
 

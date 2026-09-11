@@ -367,10 +367,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar
-        barStyle={isDark ? 'light-content' : 'dark-content'}
-        backgroundColor={colors.backgroundCard}
-      />
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
       {/* Top Header */}
       <View
@@ -487,6 +484,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
           polyline={routeCoords}
           polylineColor={isDeviated ? '#EF4444' : '#4F46E5'}
           polylineDash={!isActive}
+          layerSwitcherTop={isActive ? 16 : 74}
           onMapPress={handleMapPress}
           style={styles.map}
         />
@@ -768,7 +766,7 @@ const styles = StyleSheet.create({
 
   // Map
   mapContainer: { flex: 1, position: 'relative' },
-  map: { ...StyleSheet.absoluteFillObject },
+  map: { ...(StyleSheet.absoluteFill as object) },
   routeBadge: {
     position: 'absolute',
     bottom: 16,

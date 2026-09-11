@@ -21,7 +21,11 @@ export class SosService {
    */
   static async triggerSOS(
     payload: TriggerSosPayload,
-  ): Promise<{ alert: SosAlert; contactsNotified: number }> {
+  ): Promise<{
+    alert: SosAlert;
+    contactsNotified: number;
+    isOffline?: boolean;
+  }> {
     try {
       const res = await apiClient.post<
         ApiResponse<{ alert: SosAlert; contactsNotified: number }> & {
@@ -36,6 +40,7 @@ export class SosService {
           res.data.contactsNotified ??
           (res.data as any).data?.contactsNotified ??
           0,
+        isOffline: false,
       };
     } catch {
       return {
@@ -49,6 +54,7 @@ export class SosService {
           createdAt: new Date().toISOString(),
         },
         contactsNotified: 2,
+        isOffline: true,
       };
     }
   }
