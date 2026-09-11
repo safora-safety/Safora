@@ -44,7 +44,7 @@ export const AccountSelectScreen: React.FC<AccountSelectScreenProps> = ({
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#070A11" />
+      <StatusBar barStyle="light-content" />
 
       {/* Ambient Top Glow Header */}
       <View style={styles.header}>

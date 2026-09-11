@@ -77,24 +77,46 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
         AsyncStorage.getItem(STORAGE_KEYS.SAVED_PROFILES),
       ]);
 
-      const parsedProfiles: SavedProfile[] = storedProfiles
-        ? JSON.parse(storedProfiles)
-        : [];
+      let parsedProfiles: SavedProfile[] = [];
+      try {
+        parsedProfiles = storedProfiles ? JSON.parse(storedProfiles) : [];
+      } catch {
+        parsedProfiles = [];
+      }
 
-      if (storedUser && storedToken) {
+      const isGuest = storedGuest === 'true';
+      const hasSeenOnboarding = storedOnboarding === 'true';
+
+      if (storedUser && (storedToken || isGuest)) {
+        let parsedUser: User;
+        try {
+          parsedUser = JSON.parse(storedUser) as User;
+        } catch {
+          parsedUser = {
+            id: 'guest-user',
+            name: 'Guest Explorer',
+            email: 'guest@safora.app',
+            role: 'user',
+          };
+        }
+
         set({
-          user: JSON.parse(storedUser) as User,
-          token: storedToken,
+          user: parsedUser,
+          token: storedToken || 'guest-session-token',
           isAuthenticated: true,
-          isGuest: storedGuest === 'true',
-          hasSeenOnboarding: storedOnboarding === 'true',
+          isGuest,
+          hasSeenOnboarding: true,
           isHydrated: true,
           savedProfiles: parsedProfiles,
         });
       } else {
         set({
+          user: null,
+          token: null,
+          isAuthenticated: false,
+          isGuest: false,
           isHydrated: true,
-          hasSeenOnboarding: storedOnboarding === 'true',
+          hasSeenOnboarding,
           savedProfiles: parsedProfiles,
         });
       }
@@ -122,6 +144,7 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
 
     try {
       await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(guestUser));
+      await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, 'guest-session-token');
       await AsyncStorage.setItem(STORAGE_KEYS.IS_GUEST, 'true');
       await AsyncStorage.setItem(STORAGE_KEYS.ONBOARDING_SEEN, 'true');
     } catch {

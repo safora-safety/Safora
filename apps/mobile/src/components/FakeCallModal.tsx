@@ -87,7 +87,7 @@ export const FakeCallModal: React.FC<FakeCallModalProps> = ({
       transparent={false}
       statusBarTranslucent
     >
-      <StatusBar barStyle="light-content" backgroundColor="#070A11" />
+      <StatusBar barStyle="light-content" />
       <SafeAreaView style={styles.container}>
         {callState === 'incoming' ? (
           <View style={styles.incomingView}>
