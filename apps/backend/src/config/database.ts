@@ -39,6 +39,7 @@ export async function initDatabase(): Promise<void> {
       );
       ALTER TABLE users ADD COLUMN IF NOT EXISTS blood_group VARCHAR(10);
       ALTER TABLE users ADD COLUMN IF NOT EXISTS emergency_notes TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS fcm_token TEXT;
     `);
 
     // 3. Hazard Reports Table (with PostGIS location column & GiST spatial index)

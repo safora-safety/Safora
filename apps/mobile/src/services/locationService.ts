@@ -9,14 +9,46 @@ export interface LocationCoordinates {
   isLive: boolean;
 }
 
-// Default fallback to Dev Bhoomi Uttarakhand University campus coordinates
-export const CAMPUS_COORDINATES: LocationCoordinates = {
+const MAPTILER_KEY = 'NWS4ts6GlPJ2wfFvWYgJ';
+
+// Default universal fallback
+export const DEFAULT_COORDINATES: LocationCoordinates = {
   latitude: 30.3165,
   longitude: 78.0322,
-  accuracy: 12,
-  areaName: 'DBUU Campus, Chakrata Rd, Dehradun',
+  accuracy: 10,
+  areaName: 'Dehradun, Uttarakhand',
   isLive: false,
 };
+
+// Backwards compatibility alias
+export const CAMPUS_COORDINATES = DEFAULT_COORDINATES;
+
+export async function reverseGeocode(
+  latitude: number,
+  longitude: number,
+): Promise<string> {
+  try {
+    const res = await fetch(
+      `https://api.maptiler.com/geocoding/${longitude},${latitude}.json?key=${MAPTILER_KEY}`,
+    );
+    if (!res.ok) return 'Live GPS Location';
+    const data = await res.json();
+    if (data.features && data.features.length > 0) {
+      // Pick best readable place name (e.g. "Rajpur Road, Dehradun")
+      const primary = data.features[0];
+      const placeName = primary.place_name || primary.text;
+      // Truncate if overly long
+      const parts = placeName.split(',');
+      if (parts.length > 2) {
+        return `${parts[0].trim()}, ${parts[1].trim()}`;
+      }
+      return placeName;
+    }
+    return 'Live GPS Location';
+  } catch {
+    return 'Live GPS Location';
+  }
+}
 
 export async function requestLocationPermission(): Promise<boolean> {
   if (Platform.OS === 'ios') {
@@ -31,10 +63,10 @@ export async function requestLocationPermission(): Promise<boolean> {
         {
           title: 'SAFORA Location Permission',
           message:
-            'SAFORA requires access to your GPS location for emergency SOS broadcasts and Safe Walk navigation.',
-          buttonNeutral: 'Ask Me Later',
+            'SAFORA requires access to your GPS location for emergency SOS broadcasts, Safe Walk navigation, and nearby hazard alerts.',
+          buttonNeutral: 'Ask Later',
           buttonNegative: 'Cancel',
-          buttonPositive: 'Grant Access',
+          buttonPositive: 'Grant GPS Access',
         },
       );
       return granted === PermissionsAndroid.RESULTS.GRANTED;
@@ -49,20 +81,25 @@ export async function requestLocationPermission(): Promise<boolean> {
 export function getCurrentCoordinates(): Promise<LocationCoordinates> {
   return new Promise(resolve => {
     Geolocation.getCurrentPosition(
-      position => {
+      async position => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        const accuracy = Math.round(position.coords.accuracy || 8);
+        const resolvedName = await reverseGeocode(lat, lng);
+
         resolve({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy: Math.round(position.coords.accuracy || 10),
-          areaName: 'Dehradun, Uttarakhand',
+          latitude: lat,
+          longitude: lng,
+          accuracy,
+          areaName: resolvedName,
           isLive: true,
         });
       },
       () => {
-        // Fallback gracefully to DBUU Campus coordinates if GPS hardware or permission unavailable
-        resolve(CAMPUS_COORDINATES);
+        // Fallback gracefully if GPS hardware or permission unavailable
+        resolve(DEFAULT_COORDINATES);
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 10000 },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 10000 },
     );
   });
 }

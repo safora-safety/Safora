@@ -5,6 +5,7 @@ import { SosRepository } from "../repositories/sosRepository";
 import { UserRepository } from "../repositories/userRepository";
 import { SosAlertModel } from "../models/SosAlert";
 import { TrustedContactModel } from "../models/TrustedContact";
+import { db } from "../config/database";
 
 export class SosService {
   static async triggerSOS(data: {
@@ -30,7 +31,25 @@ export class SosService {
     const userRow = await UserRepository.findById(data.userId);
     const userName = userRow?.name || "SAFORA User";
 
-    FirebaseService.sendSosNotification([], {
+    // Lookup guardian accounts whose phone matches trusted contact phone numbers
+    let fcmTokens: string[] = [];
+    try {
+      const contactPhones = contacts
+        .map((c) => c.phone?.trim())
+        .filter((p): p is string => Boolean(p && p.length >= 6));
+
+      if (contactPhones.length > 0) {
+        const queryRes = await db.query(
+          "SELECT fcm_token FROM users WHERE phone = ANY($1) AND fcm_token IS NOT NULL;",
+          [contactPhones],
+        );
+        fcmTokens = queryRes.rows.map((r: any) => r.fcm_token).filter(Boolean);
+      }
+    } catch (e) {
+      console.log("[WARN] Error resolving guardian FCM tokens:", e);
+    }
+
+    FirebaseService.sendSosNotification(fcmTokens, {
       alertId: row.id,
       userName,
       latitude: data.latitude,

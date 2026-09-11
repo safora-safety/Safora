@@ -5,6 +5,15 @@ import { AuthService } from '../services/authService';
 
 export type UserProfile = User;
 
+export interface SavedProfile {
+  id: string | number;
+  name: string;
+  email: string;
+  phone?: string;
+  token?: string;
+  lastActive?: string;
+}
+
 interface AuthState {
   user: User | null;
   token: string | null;
@@ -14,6 +23,7 @@ interface AuthState {
   isHydrated: boolean;
   isLoading: boolean;
   error: string | null;
+  savedProfiles: SavedProfile[];
 
   // Actions
   hydrateAuth: () => Promise<void>;
@@ -28,6 +38,7 @@ interface AuthState {
   ) => Promise<boolean>;
   logout: () => Promise<void>;
   updateProfile: (data: Partial<User>) => Promise<boolean>;
+  removeSavedProfile: (id: string | number) => Promise<void>;
   clearError: () => void;
 }
 
@@ -36,6 +47,7 @@ const STORAGE_KEYS = {
   TOKEN: '@safora_token',
   IS_GUEST: '@safora_is_guest',
   ONBOARDING_SEEN: '@safora_onboarding_seen',
+  SAVED_PROFILES: '@safora_saved_profiles',
 };
 
 export const useAuthStore = create<AuthState>((set, _get) => ({
@@ -47,16 +59,27 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
   isHydrated: false,
   isLoading: false,
   error: null,
+  savedProfiles: [],
 
   hydrateAuth: async () => {
     try {
-      const [storedUser, storedToken, storedGuest, storedOnboarding] =
-        await Promise.all([
-          AsyncStorage.getItem(STORAGE_KEYS.USER),
-          AsyncStorage.getItem(STORAGE_KEYS.TOKEN),
-          AsyncStorage.getItem(STORAGE_KEYS.IS_GUEST),
-          AsyncStorage.getItem(STORAGE_KEYS.ONBOARDING_SEEN),
-        ]);
+      const [
+        storedUser,
+        storedToken,
+        storedGuest,
+        storedOnboarding,
+        storedProfiles,
+      ] = await Promise.all([
+        AsyncStorage.getItem(STORAGE_KEYS.USER),
+        AsyncStorage.getItem(STORAGE_KEYS.TOKEN),
+        AsyncStorage.getItem(STORAGE_KEYS.IS_GUEST),
+        AsyncStorage.getItem(STORAGE_KEYS.ONBOARDING_SEEN),
+        AsyncStorage.getItem(STORAGE_KEYS.SAVED_PROFILES),
+      ]);
+
+      const parsedProfiles: SavedProfile[] = storedProfiles
+        ? JSON.parse(storedProfiles)
+        : [];
 
       if (storedUser && storedToken) {
         set({
@@ -66,11 +89,13 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
           isGuest: storedGuest === 'true',
           hasSeenOnboarding: storedOnboarding === 'true',
           isHydrated: true,
+          savedProfiles: parsedProfiles,
         });
       } else {
         set({
           isHydrated: true,
           hasSeenOnboarding: storedOnboarding === 'true',
+          savedProfiles: parsedProfiles,
         });
       }
     } catch {
@@ -123,6 +148,23 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
       await AsyncStorage.setItem(STORAGE_KEYS.IS_GUEST, 'false');
       await AsyncStorage.setItem(STORAGE_KEYS.ONBOARDING_SEEN, 'true');
 
+      // Update saved profiles
+      const newProfile: SavedProfile = {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        lastActive: new Date().toISOString(),
+      };
+      const filtered = _get().savedProfiles.filter(
+        p => String(p.id) !== String(user.id) && p.email !== user.email,
+      );
+      const updatedProfiles = [newProfile, ...filtered];
+      await AsyncStorage.setItem(
+        STORAGE_KEYS.SAVED_PROFILES,
+        JSON.stringify(updatedProfiles),
+      );
+
       set({
         user,
         token,
@@ -130,6 +172,7 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
         isGuest: false,
         hasSeenOnboarding: true,
         isLoading: false,
+        savedProfiles: updatedProfiles,
       });
       return true;
     } catch (err: unknown) {
@@ -159,6 +202,23 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
       await AsyncStorage.setItem(STORAGE_KEYS.IS_GUEST, 'false');
       await AsyncStorage.setItem(STORAGE_KEYS.ONBOARDING_SEEN, 'true');
 
+      // Update saved profiles
+      const newProfile: SavedProfile = {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        lastActive: new Date().toISOString(),
+      };
+      const filtered = _get().savedProfiles.filter(
+        p => String(p.id) !== String(user.id) && p.email !== user.email,
+      );
+      const updatedProfiles = [newProfile, ...filtered];
+      await AsyncStorage.setItem(
+        STORAGE_KEYS.SAVED_PROFILES,
+        JSON.stringify(updatedProfiles),
+      );
+
       set({
         user,
         token,
@@ -166,6 +226,7 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
         isGuest: false,
         hasSeenOnboarding: true,
         isLoading: false,
+        savedProfiles: updatedProfiles,
       });
       return true;
     } catch (err: unknown) {
@@ -176,6 +237,34 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
   },
 
   logout: async () => {
+    const currentUser = _get().user;
+    let profiles = _get().savedProfiles;
+
+    // Ensure valid non-guest user is preserved in saved profiles list
+    if (currentUser && !_get().isGuest && currentUser.id !== 'guest-user') {
+      const profileRecord: SavedProfile = {
+        id: currentUser.id,
+        name: currentUser.name,
+        email: currentUser.email,
+        phone: currentUser.phone,
+        lastActive: new Date().toISOString(),
+      };
+      const filtered = profiles.filter(
+        p =>
+          String(p.id) !== String(currentUser.id) &&
+          p.email !== currentUser.email,
+      );
+      profiles = [profileRecord, ...filtered];
+      try {
+        await AsyncStorage.setItem(
+          STORAGE_KEYS.SAVED_PROFILES,
+          JSON.stringify(profiles),
+        );
+      } catch {
+        // Fallback
+      }
+    }
+
     try {
       await Promise.all([
         AsyncStorage.removeItem(STORAGE_KEYS.USER),
@@ -192,7 +281,23 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
       isAuthenticated: false,
       isGuest: false,
       error: null,
+      savedProfiles: profiles,
     });
+  },
+
+  removeSavedProfile: async (id: string | number) => {
+    const updated = _get().savedProfiles.filter(
+      p => String(p.id) !== String(id),
+    );
+    try {
+      await AsyncStorage.setItem(
+        STORAGE_KEYS.SAVED_PROFILES,
+        JSON.stringify(updated),
+      );
+    } catch {
+      // Fallback
+    }
+    set({ savedProfiles: updated });
   },
 
   updateProfile: async (data: Partial<User>) => {

@@ -61,18 +61,18 @@ export class SosService {
     } catch {
       return [
         {
-          id: '1',
+          id: 'police-112',
           userId: 'u1',
-          name: 'Campus Security Dispatch',
-          relationship: 'DBUU Security Control Room',
-          phone: '+91 135 269 4241',
+          name: 'Police Emergency Response',
+          relationship: 'National Emergency Helpline',
+          phone: '112',
         },
         {
-          id: '2',
+          id: 'ambulance-108',
           userId: 'u1',
-          name: 'Emergency Guardian (Pooja)',
-          relationship: 'Sister / Family',
-          phone: '+91 98765 43210',
+          name: 'National Ambulance Helpline',
+          relationship: 'Medical Emergency Dispatch',
+          phone: '108',
         },
       ];
     }

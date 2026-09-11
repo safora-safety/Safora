@@ -6,10 +6,10 @@ import {
   TouchableOpacity,
   ScrollView,
   StatusBar,
-  Switch,
   Alert,
+  Linking,
 } from 'react-native';
-import { colors } from '../theme/colors';
+import { useNavigation } from '@react-navigation/native';
 import { useAuthStore } from '../store/authStore';
 import { EditProfileModal } from '../components/EditProfileModal';
 import { useTheme } from '../theme/ThemeContext';
@@ -19,42 +19,73 @@ interface Contact {
   name: string;
   relationship: string;
   phone: string;
+  isHelpline?: boolean;
 }
 
 export const ProfileScreen: React.FC = () => {
+  const navigation = useNavigation<any>();
   const { user, isGuest, logout } = useAuthStore();
-  const { colors, isDark, themeMode, setThemeMode } = useTheme();
+  const { colors, isDark } = useTheme();
   const [showEditModal, setShowEditModal] = useState(false);
-  const [highAccuracyGps, setHighAccuracyGps] = useState(true);
-  const [nightAlerts, setNightAlerts] = useState(true);
-  const [vibrateSos, setVibrateSos] = useState(true);
 
+  // Universal Emergency Responders & Helplines (Police 112, Ambulance 108, Women 1090)
   const [contacts, setContacts] = useState<Contact[]>([
     {
-      id: '1',
-      name: 'Campus Security Dispatch',
-      relationship: 'DBUU Security Control Room',
-      phone: '+91 135 269 4241',
+      id: 'police-112',
+      name: 'Police Emergency Response',
+      relationship: 'National Emergency Helpline',
+      phone: '112',
+      isHelpline: true,
     },
     {
-      id: '2',
-      name: 'Emergency Guardian (Pooja)',
-      relationship: 'Sister / Family',
+      id: 'ambulance-108',
+      name: 'Ambulance & Medical Emergency',
+      relationship: 'National Medical Dispatch',
+      phone: '108',
+      isHelpline: true,
+    },
+    {
+      id: 'women-helpline',
+      name: 'Women Safety Helpline',
+      relationship: '24/7 Citizen Women Helpline',
+      phone: '1090',
+      isHelpline: true,
+    },
+    {
+      id: 'family-1',
+      name: 'Emergency Guardian (Family)',
+      relationship: 'Primary Family Guardian',
       phone: '+91 98765 43210',
+      isHelpline: false,
     },
   ]);
 
   const testAlert = (contact: Contact) => {
+    if (contact.isHelpline) {
+      Alert.alert(
+        `Direct Call: ${contact.name}`,
+        `Emergency helpline: ${contact.phone}\nWould you like to dial this number now?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Call Now',
+            onPress: () => Linking.openURL(`tel:${contact.phone}`),
+          },
+        ],
+      );
+      return;
+    }
+
     Alert.alert(
-      '🚨 Test Alert Broadcast',
-      `Simulating SMS alert to ${contact.name} (${contact.phone}):\n\n"EMERGENCY: Safora user triggered SOS. Live coordinates: 30.3165°N, 78.0322°E (DBUU Campus)."`,
+      '🚨 Test Alert Dispatched',
+      `Simulated live SOS SMS alert to ${contact.name} (${contact.phone}):\n\n"EMERGENCY ALERT: Safora user triggered SOS. Live coordinates: 30.3165°N, 78.0322°E."`,
     );
   };
 
   const addContactPrompt = () => {
     Alert.alert(
-      'Add Trusted Contact',
-      'Enter name and phone number of your family member, friend, or local campus guardian.',
+      'Add Family Guardian',
+      'Add a trusted family member or close friend to your emergency network.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -62,15 +93,30 @@ export const ProfileScreen: React.FC = () => {
           onPress: () => {
             const newC: Contact = {
               id: Date.now().toString(),
-              name: 'Dr. R. Sharma (Warden)',
-              relationship: 'Campus Hostel Warden',
-              phone: '+91 98123 45678',
+              name: 'Dr. A. Verma',
+              relationship: 'Trusted Family Contact',
+              phone: '+91 98112 34567',
+              isHelpline: false,
             };
             setContacts([...contacts, newC]);
           },
         },
       ],
     );
+  };
+
+  const handleLogout = () => {
+    Alert.alert('Sign Out', 'Are you sure you want to sign out of SAFORA?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Sign Out',
+        style: 'destructive',
+        onPress: async () => {
+          await logout();
+          navigation.navigate('AccountSelect');
+        },
+      },
+    ]);
   };
 
   return (
@@ -80,7 +126,7 @@ export const ProfileScreen: React.FC = () => {
         backgroundColor={colors.backgroundCard}
       />
 
-      {/* Header */}
+      {/* Top Header with Dedicated Settings Button */}
       <View
         style={[
           styles.header,
@@ -90,12 +136,31 @@ export const ProfileScreen: React.FC = () => {
           },
         ]}
       >
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
-          User Profile & Safety
-        </Text>
-        <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
-          Account & emergency responder settings
-        </Text>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
+            Profile & Safety
+          </Text>
+          <Text
+            style={[styles.headerSubtitle, { color: colors.textSecondary }]}
+          >
+            Citizen credentials & emergency dispatch
+          </Text>
+        </View>
+
+        {/* Dedicated Settings Button */}
+        <TouchableOpacity
+          style={[
+            styles.settingsIconBtn,
+            {
+              backgroundColor: colors.backgroundInput,
+              borderColor: colors.border,
+            },
+          ]}
+          onPress={() => navigation.navigate('Settings')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.settingsIconEmoji}>⚙️</Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -113,7 +178,10 @@ export const ProfileScreen: React.FC = () => {
           ]}
         >
           <View
-            style={[styles.avatarCircle, { backgroundColor: colors.primary }]}
+            style={[
+              styles.avatarCircle,
+              { backgroundColor: isGuest ? '#F59E0B' : colors.primary },
+            ]}
           >
             <Text style={styles.avatarText}>
               {isGuest ? '👤' : user?.name?.charAt(0) || 'U'}
@@ -140,7 +208,7 @@ export const ProfileScreen: React.FC = () => {
               ]}
             >
               <Text style={styles.badgeText}>
-                {isGuest ? 'GUEST DEMO MODE' : 'VERIFIED SAFORA MEMBER'}
+                {isGuest ? 'GUEST CITIZEN' : 'VERIFIED SAFORA CITIZEN'}
               </Text>
             </View>
           </View>
@@ -154,7 +222,6 @@ export const ProfileScreen: React.FC = () => {
               },
             ]}
             onPress={() => setShowEditModal(true)}
-            accessibilityLabel="Edit Profile"
           >
             <Text style={[styles.editBtnText, { color: colors.textPrimary }]}>
               ✏️ Edit
@@ -166,7 +233,10 @@ export const ProfileScreen: React.FC = () => {
         <TouchableOpacity
           style={[
             styles.medicalCard,
-            { backgroundColor: colors.backgroundCard },
+            {
+              backgroundColor: colors.backgroundCard,
+              borderColor: colors.border,
+            },
           ]}
           onPress={() => setShowEditModal(true)}
           activeOpacity={0.8}
@@ -182,7 +252,7 @@ export const ProfileScreen: React.FC = () => {
               <Text style={styles.bloodChipText}>
                 {user?.bloodGroup
                   ? `Blood: ${user.bloodGroup}`
-                  : 'Blood: Not Set'}
+                  : 'Blood Group: Not Set'}
               </Text>
             </View>
             <Text
@@ -195,30 +265,44 @@ export const ProfileScreen: React.FC = () => {
           </View>
         </TouchableOpacity>
 
-        {/* Guest Upgrade Banner */}
+        {/* Guest Mode Banner */}
         {isGuest && (
-          <View style={styles.guestWarningCard}>
+          <View
+            style={[
+              styles.guestWarningCard,
+              {
+                backgroundColor: 'rgba(245, 158, 11, 0.08)',
+                borderColor: 'rgba(245, 158, 11, 0.25)',
+              },
+            ]}
+          >
             <Text style={styles.guestWarningTitle}>
-              ⚠️ You are in Guest Mode
+              👤 You are currently in Guest Mode
             </Text>
             <Text
               style={[styles.guestWarningDesc, { color: colors.textSecondary }]}
             >
-              In guest mode, custom emergency contacts & verified report
-              submissions are simulated.
+              Guest mode allows viewing community safety heatmaps. To save
+              emergency contacts, enable family push loops, and report hazards,
+              create a verified account.
             </Text>
-            <TouchableOpacity style={styles.guestSwitchBtn} onPress={logout}>
+            <TouchableOpacity
+              style={styles.guestSwitchBtn}
+              onPress={() =>
+                navigation.navigate('Auth', { initialTab: 'register' })
+              }
+            >
               <Text style={[styles.guestSwitchText, { color: colors.primary }]}>
-                Sign Up / Switch to Real Account →
+                Create Verified Account / Sign In →
               </Text>
             </TouchableOpacity>
           </View>
         )}
 
-        {/* Emergency Contacts Management */}
+        {/* Universal Emergency Contacts & Helplines */}
         <View style={styles.sectionHeader}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-            Emergency SOS Contacts
+            Emergency Responders & Guardians
           </Text>
           <TouchableOpacity
             onPress={addContactPrompt}
@@ -243,10 +327,16 @@ export const ProfileScreen: React.FC = () => {
               <View
                 style={[
                   styles.contactIconCircle,
-                  { backgroundColor: colors.backgroundInput },
+                  {
+                    backgroundColor: contact.isHelpline
+                      ? 'rgba(239, 68, 68, 0.12)'
+                      : colors.backgroundInput,
+                  },
                 ]}
               >
-                <Text style={styles.contactIcon}>📞</Text>
+                <Text style={styles.contactIcon}>
+                  {contact.isHelpline ? '🚨' : '👥'}
+                </Text>
               </View>
 
               <View style={styles.contactDetails}>
@@ -264,154 +354,80 @@ export const ProfileScreen: React.FC = () => {
               </View>
 
               <TouchableOpacity
-                style={styles.testBtn}
+                style={[
+                  styles.testBtn,
+                  contact.isHelpline && styles.testBtnCall,
+                ]}
                 onPress={() => testAlert(contact)}
               >
-                <Text style={styles.testBtnText}>Test</Text>
+                <Text
+                  style={[
+                    styles.testBtnText,
+                    contact.isHelpline && { color: '#EF4444' },
+                  ]}
+                >
+                  {contact.isHelpline ? 'Call' : 'Test'}
+                </Text>
               </TouchableOpacity>
             </View>
           ))}
         </View>
 
-        {/* Safety Preferences */}
-        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-          Safety Preferences
-        </Text>
-        <View
+        {/* Quick Settings Shortcut */}
+        <TouchableOpacity
           style={[
-            styles.settingsCard,
+            styles.settingsShortcutCard,
             {
               backgroundColor: colors.backgroundCard,
               borderColor: colors.border,
             },
           ]}
+          onPress={() => navigation.navigate('Settings')}
+          activeOpacity={0.8}
         >
-          <View
-            style={[styles.settingRow, { borderBottomColor: colors.border }]}
+          <Text style={styles.settingsShortcutEmoji}>⚙️</Text>
+          <View style={{ flex: 1 }}>
+            <Text
+              style={[
+                styles.settingsShortcutTitle,
+                { color: colors.textPrimary },
+              ]}
+            >
+              App Preferences & Security Settings
+            </Text>
+            <Text
+              style={[
+                styles.settingsShortcutDesc,
+                { color: colors.textSecondary },
+              ]}
+            >
+              Vibration, Siren SOS, Push notifications, Theme switcher & Cache
+            </Text>
+          </View>
+          <Text
+            style={[styles.settingsShortcutArrow, { color: colors.textMuted }]}
           >
-            <View style={styles.settingInfo}>
-              <Text
-                style={[styles.settingLabel, { color: colors.textPrimary }]}
-              >
-                High-Accuracy GPS Radar
-              </Text>
-              <Text
-                style={[styles.settingDesc, { color: colors.textSecondary }]}
-              >
-                Continuous sub-meter PostGIS location buffer
-              </Text>
-            </View>
-            <Switch
-              value={highAccuracyGps}
-              onValueChange={setHighAccuracyGps}
-              trackColor={{ false: colors.border, true: colors.primary }}
-            />
-          </View>
-
-          <View
-            style={[styles.settingRow, { borderBottomColor: colors.border }]}
-          >
-            <View style={styles.settingInfo}>
-              <Text
-                style={[styles.settingLabel, { color: colors.textPrimary }]}
-              >
-                Night Patrol Hazard Alerts
-              </Text>
-              <Text
-                style={[styles.settingDesc, { color: colors.textSecondary }]}
-              >
-                Push warning when approaching unlit streets after 8 PM
-              </Text>
-            </View>
-            <Switch
-              value={nightAlerts}
-              onValueChange={setNightAlerts}
-              trackColor={{ false: colors.border, true: colors.primary }}
-            />
-          </View>
-
-          <View style={[styles.settingRow, { borderBottomWidth: 0 }]}>
-            <View style={styles.settingInfo}>
-              <Text
-                style={[styles.settingLabel, { color: colors.textPrimary }]}
-              >
-                Haptic SOS Pulse
-              </Text>
-              <Text
-                style={[styles.settingDesc, { color: colors.textSecondary }]}
-              >
-                Strong vibration confirmation upon SOS trigger
-              </Text>
-            </View>
-            <Switch
-              value={vibrateSos}
-              onValueChange={setVibrateSos}
-              trackColor={{ false: colors.border, true: colors.primary }}
-            />
-          </View>
-        </View>
-
-        {/* Appearance & Theme Selector */}
-        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-          App Theme
-        </Text>
-        <View
-          style={[
-            styles.settingsCard,
-            {
-              backgroundColor: colors.backgroundCard,
-              borderColor: colors.border,
-            },
-          ]}
-        >
-          <View style={styles.themeSelectorRow}>
-            {[
-              { id: 'light', label: '☀️ Light' },
-              { id: 'dark', label: '🌙 Dark' },
-              { id: 'system', label: '⚙️ Auto' },
-            ].map(opt => {
-              const isSelected = themeMode === opt.id;
-              return (
-                <TouchableOpacity
-                  key={opt.id}
-                  style={[
-                    styles.themeBtn,
-                    {
-                      backgroundColor: isSelected
-                        ? colors.primary
-                        : colors.backgroundInput,
-                      borderColor: isSelected
-                        ? colors.primaryLight
-                        : colors.border,
-                    },
-                  ]}
-                  onPress={() => setThemeMode(opt.id as any)}
-                  activeOpacity={0.8}
-                >
-                  <Text
-                    style={[
-                      styles.themeBtnText,
-                      { color: isSelected ? '#FFFFFF' : colors.textSecondary },
-                      isSelected && { fontWeight: '800' },
-                    ]}
-                  >
-                    {opt.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-
-        {/* Logout Button */}
-        <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
-          <Text style={styles.logoutText}>
-            {isGuest ? 'Exit Guest Mode' : 'Sign Out of SAFORA'}
+            ›
           </Text>
+        </TouchableOpacity>
+
+        {/* Sign Out Button */}
+        <TouchableOpacity
+          style={[
+            styles.logoutBtn,
+            {
+              borderColor: colors.border,
+              backgroundColor: colors.backgroundCard,
+            },
+          ]}
+          onPress={handleLogout}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.logoutBtnText}>🚪 Sign Out</Text>
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Edit Profile Bottom Sheet Modal */}
+      {/* Edit Profile Modal */}
       <EditProfileModal
         visible={showEditModal}
         onClose={() => setShowEditModal(false)}
@@ -423,163 +439,160 @@ export const ProfileScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 48,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-  },
-  headerTitle: { fontSize: 22, fontWeight: '900' },
-  headerSubtitle: { fontSize: 12, marginTop: 2 },
-  content: { padding: 20, gap: 16, paddingBottom: 50 },
-  profileCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 18,
-    padding: 16,
-    borderWidth: 1,
-    gap: 16,
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 48,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
   },
-  avatarCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+  headerTitle: { fontSize: 20, fontWeight: '900' },
+  headerSubtitle: { fontSize: 11, marginTop: 2 },
+  settingsIconBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: { fontSize: 26, color: '#FFFFFF', fontWeight: '800' },
-  profileInfo: { flex: 1, gap: 4 },
-  userName: { fontSize: 18, fontWeight: '800' },
-  userEmail: { fontSize: 12 },
-  userPhoneText: { fontSize: 11, fontWeight: '600' },
+  settingsIconEmoji: { fontSize: 20 },
+  content: { padding: 20, paddingBottom: 40, gap: 16 },
+  profileCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 14,
+  },
+  avatarCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: { fontSize: 24, fontWeight: '800', color: '#FFFFFF' },
+  profileInfo: { flex: 1 },
+  userName: { fontSize: 16, fontWeight: '800', marginBottom: 2 },
+  userEmail: { fontSize: 12, marginBottom: 4 },
+  userPhoneText: { fontSize: 11, fontWeight: '600', marginBottom: 6 },
+  badge: {
+    alignSelf: 'flex-start',
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+  },
+  guestBadge: {
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+  },
+  memberBadge: {
+    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+  },
+  badgeText: { fontSize: 9, fontWeight: '800', color: '#F8FAFC' },
   editBtn: {
+    borderWidth: 1,
     paddingVertical: 6,
     paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 1,
+    borderRadius: 10,
   },
   editBtnText: { fontSize: 11, fontWeight: '700' },
   medicalCard: {
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.3)',
-    borderRadius: 14,
-    padding: 12,
-    gap: 8,
+    padding: 14,
+    gap: 10,
   },
   medicalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  medicalTitle: { fontSize: 13, fontWeight: '800', color: colors.danger },
-  medicalActionText: { fontSize: 11, fontWeight: '700' },
+  medicalTitle: { fontSize: 14, fontWeight: '800', color: '#EF4444' },
+  medicalActionText: { fontSize: 12, fontWeight: '700' },
   medicalContent: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   bloodChip: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
     paddingVertical: 4,
     paddingHorizontal: 8,
-    borderRadius: 6,
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
-    borderWidth: 1,
-    borderColor: colors.danger,
-  },
-  bloodChipText: { fontSize: 10, fontWeight: '800', color: colors.danger },
-  medicalNotes: { flex: 1, fontSize: 11 },
-  badge: {
-    alignSelf: 'flex-start',
-    paddingVertical: 3,
-    paddingHorizontal: 8,
     borderRadius: 8,
-    marginTop: 2,
   },
-  guestBadge: {
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-    borderWidth: 1,
-    borderColor: colors.warning,
-  },
-  memberBadge: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    borderWidth: 1,
-    borderColor: colors.success,
-  },
-  badgeText: { fontSize: 9, fontWeight: '800', color: colors.textPrimary },
+  bloodChipText: { color: '#EF4444', fontSize: 11, fontWeight: '800' },
+  medicalNotes: { flex: 1, fontSize: 11 },
   guestWarningCard: {
-    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: colors.warning,
-    borderRadius: 14,
     padding: 14,
-    gap: 6,
+    gap: 8,
   },
-  guestWarningTitle: { color: colors.warning, fontSize: 13, fontWeight: '800' },
-  guestWarningDesc: { fontSize: 12, lineHeight: 18 },
-  guestSwitchBtn: { marginTop: 6 },
+  guestWarningTitle: { color: '#F59E0B', fontSize: 13, fontWeight: '800' },
+  guestWarningDesc: { fontSize: 11, lineHeight: 16 },
+  guestSwitchBtn: { marginTop: 4 },
   guestSwitchText: { fontSize: 12, fontWeight: '700' },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 4,
   },
-  sectionTitle: { fontSize: 15, fontWeight: '800' },
-  addBtn: { paddingVertical: 4, paddingHorizontal: 10, borderRadius: 8 },
+  sectionTitle: { fontSize: 14, fontWeight: '800', letterSpacing: 0.5 },
+  addBtn: {
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+  },
   addBtnText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
-  contactsList: { gap: 8 },
+  contactsList: { gap: 10 },
   contactItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
     padding: 12,
     borderRadius: 14,
+    borderWidth: 1,
+    gap: 12,
   },
   contactIconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
   },
-  contactIcon: { fontSize: 16 },
+  contactIcon: { fontSize: 18 },
   contactDetails: { flex: 1 },
-  contactName: { fontSize: 13, fontWeight: '700' },
-  contactRel: { fontSize: 11 },
+  contactName: { fontSize: 13, fontWeight: '700', marginBottom: 1 },
+  contactRel: { fontSize: 10, marginBottom: 2 },
   contactPhone: { fontSize: 11, fontWeight: '600' },
   testBtn: {
-    paddingVertical: 5,
+    paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 8,
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
-    borderWidth: 1,
-    borderColor: colors.danger,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
   },
-  testBtnText: { color: colors.danger, fontSize: 11, fontWeight: '700' },
-  settingsCard: { borderRadius: 16, borderWidth: 1, paddingHorizontal: 16 },
-  settingRow: {
+  testBtnCall: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+  },
+  testBtnText: { color: '#94A3B8', fontSize: 11, fontWeight: '700' },
+  settingsShortcutCard: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-  },
-  settingInfo: { flex: 1, marginRight: 12 },
-  settingLabel: { fontSize: 13, fontWeight: '700', marginBottom: 2 },
-  settingDesc: { fontSize: 11 },
-  themeSelectorRow: { flexDirection: 'row', gap: 10, paddingVertical: 12 },
-  themeBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
+    padding: 14,
+    borderRadius: 16,
     borderWidth: 1,
-    alignItems: 'center',
+    gap: 12,
   },
-  themeBtnText: { fontSize: 12, fontWeight: '700' },
+  settingsShortcutEmoji: { fontSize: 22 },
+  settingsShortcutTitle: { fontSize: 13, fontWeight: '800' },
+  settingsShortcutDesc: { fontSize: 10, marginTop: 2 },
+  settingsShortcutArrow: { fontSize: 18, fontWeight: '800' },
   logoutBtn: {
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
-    borderWidth: 1,
-    borderColor: colors.danger,
     paddingVertical: 14,
     borderRadius: 14,
+    borderWidth: 1,
     alignItems: 'center',
-    marginTop: 10,
+    marginTop: 8,
   },
-  logoutText: { color: colors.danger, fontSize: 14, fontWeight: '800' },
+  logoutBtnText: { color: '#EF4444', fontWeight: '800', fontSize: 13 },
 });
