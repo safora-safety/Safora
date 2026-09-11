@@ -21,6 +21,7 @@ erDiagram
     USERS ||--o{ TRUSTED_CONTACTS : manages
     USERS ||--o{ JOURNEYS : initiates
     USERS ||--o{ SOS_ALERTS : triggers
+    USERS ||--o{ NOTIFICATIONS : receives
     JOURNEYS ||--o{ SOS_ALERTS : "may associate"
 
     USERS {
@@ -30,6 +31,7 @@ erDiagram
         varchar phone
         varchar password
         varchar role
+        text fcm_token
         timestamptz created_at
     }
 
@@ -54,6 +56,7 @@ erDiagram
         int user_id FK
         varchar name
         varchar phone
+        varchar email
         varchar relationship
         timestamptz created_at
     }
@@ -76,7 +79,26 @@ erDiagram
         int user_id FK
         int journey_id FK
         geography location
+        text audio_url
         varchar status
+        timestamptz created_at
+    }
+
+    NOTIFICATIONS {
+        serial id PK
+        int user_id FK
+        int sender_id FK
+        varchar sender_name
+        varchar sender_phone
+        varchar type
+        varchar title
+        text body
+        double_precision latitude
+        double_precision longitude
+        int battery_percentage
+        text audio_url
+        boolean is_test
+        boolean is_read
         timestamptz created_at
     }
 ```
@@ -167,12 +189,40 @@ CREATE TABLE IF NOT EXISTS sos_alerts (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     journey_id INTEGER REFERENCES journeys(id) ON DELETE SET NULL,
-    location GEOGRAPHY(Point, 4326) NOT NULL,
+    latitude DOUBLE PRECISION NOT NULL,
+    longitude DOUBLE PRECISION NOT NULL,
+    location GEOGRAPHY(Point, 4326),
+    accuracy DOUBLE PRECISION,
+    battery_percentage INTEGER,
+    audio_url TEXT,
     status VARCHAR(50) DEFAULT 'dispatched', -- dispatched, acknowledged, resolved
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_sos_alerts_location ON sos_alerts USING GIST (location);
+```
+
+### 3.7 Safety Notifications Table (Guardian Inbox & Drills)
+```sql
+CREATE TABLE IF NOT EXISTS notifications (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    sender_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    sender_name VARCHAR(150) NOT NULL,
+    sender_phone VARCHAR(50),
+    type VARCHAR(50) DEFAULT 'sos_alert', -- sos_alert, test_drill
+    title VARCHAR(200) NOT NULL,
+    body TEXT NOT NULL,
+    latitude DOUBLE PRECISION,
+    longitude DOUBLE PRECISION,
+    battery_percentage INTEGER,
+    audio_url TEXT,
+    is_test BOOLEAN DEFAULT FALSE,
+    is_read BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id, created_at DESC);
 ```
 
 ---

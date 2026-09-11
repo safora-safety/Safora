@@ -32,6 +32,8 @@ export interface TrustedContact {
     userId: string | number;
     name: string;
     phone: string;
+    email?: string;
+    hasSaforaAccount?: boolean;
     relationship?: string;
     createdAt?: string;
 }
@@ -62,7 +64,25 @@ export interface SosAlert {
     accuracy?: number;
     batteryPercentage?: number;
     status: SosAlertStatus;
+    audioUrl?: string;
     createdAt?: string;
+}
+export interface SosNotification {
+    id: string | number;
+    userId: string | number;
+    senderId?: string | number;
+    senderName: string;
+    senderPhone?: string;
+    type: 'sos_alert' | 'test_drill';
+    title: string;
+    body: string;
+    latitude: number;
+    longitude: number;
+    batteryPercentage?: number;
+    audioUrl?: string;
+    isTest: boolean;
+    isRead: boolean;
+    createdAt: string;
 }
 export interface SafetyScoreResponse {
     latitude: number;

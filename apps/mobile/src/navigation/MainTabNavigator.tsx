@@ -1,5 +1,13 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  BackHandler,
+  ToastAndroid,
+  Platform,
+} from 'react-native';
 import { colors } from '../theme/colors';
 import { HomeScreen } from '../screens/HomeScreen';
 import { MapScreen } from '../screens/MapScreen';
@@ -31,13 +39,65 @@ export const MainTabNavigator: React.FC = () => {
       }
     | undefined
   >(undefined);
+  const [tabHistory, setTabHistory] = useState<TabKey[]>(['Home']);
+  const lastBackPressRef = useRef<number>(0);
 
   const handleNavigateTab = (tab: TabKey, params?: any) => {
     if (params?.destination) {
       setSafeWalkDestination(params.destination);
     }
+    if (tab === activeTab) return;
+
+    if (tab === 'Home') {
+      setTabHistory(['Home']);
+    } else {
+      setTabHistory(prev => [...prev.filter(t => t !== tab), tab]);
+    }
     setActiveTab(tab);
   };
+
+  // Hardware Android Back Button Handler
+  useEffect(() => {
+    const onBackPress = () => {
+      // 1. If we have a tab history stack, pop one step back
+      if (tabHistory.length > 1) {
+        const nextHistory = tabHistory.slice(0, tabHistory.length - 1);
+        const previousTab = nextHistory[nextHistory.length - 1];
+        setTabHistory(nextHistory);
+        setActiveTab(previousTab);
+        return true;
+      }
+
+      // 2. If activeTab is not Home, navigate back to Home
+      if (activeTab !== 'Home') {
+        setActiveTab('Home');
+        setTabHistory(['Home']);
+        return true;
+      }
+
+      // 3. User is on Home tab with no prior stack: require double-tap back within 2s to exit
+      const now = Date.now();
+      if (now - lastBackPressRef.current < 2000) {
+        return false; // Let OS exit app
+      }
+
+      lastBackPressRef.current = now;
+      if (Platform.OS === 'android') {
+        ToastAndroid.show(
+          'Press back again to exit Safora',
+          ToastAndroid.SHORT,
+        );
+      }
+      return true; // Consume event, prevent accidental exit
+    };
+
+    const backSubscription = BackHandler.addEventListener(
+      'hardwareBackPress',
+      onBackPress,
+    );
+
+    return () => backSubscription.remove();
+  }, [tabHistory, activeTab]);
 
   const renderActiveScreen = () => {
     switch (activeTab) {
@@ -66,7 +126,7 @@ export const MainTabNavigator: React.FC = () => {
               key={tab.key}
               style={[styles.tabButton, isActive && styles.tabButtonActive]}
               activeOpacity={0.7}
-              onPress={() => setActiveTab(tab.key)}
+              onPress={() => handleNavigateTab(tab.key)}
             >
               {isActive && <View style={styles.activeGlowLine} />}
               <Text style={styles.tabIcon}>{tab.icon}</Text>

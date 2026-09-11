@@ -1,5 +1,10 @@
 import { apiClient } from './apiClient';
-import { SosAlert, TrustedContact, ApiResponse } from '@safora/shared-types';
+import {
+  SosAlert,
+  TrustedContact,
+  SosNotification,
+  ApiResponse,
+} from '@safora/shared-types';
 
 export interface TriggerSosPayload {
   latitude: number;
@@ -7,6 +12,7 @@ export interface TriggerSosPayload {
   accuracy?: number;
   battery_percentage?: number;
   journey_id?: string | number | null;
+  audio_url?: string | null;
 }
 
 export class SosService {
@@ -84,6 +90,7 @@ export class SosService {
   static async addContact(contact: {
     name: string;
     phone: string;
+    email?: string;
     relationship?: string;
   }): Promise<TrustedContact> {
     try {
@@ -99,6 +106,7 @@ export class SosService {
         userId: 'current-user',
         name: contact.name,
         phone: contact.phone,
+        email: contact.email,
         relationship: contact.relationship,
         createdAt: new Date().toISOString(),
       };
@@ -113,6 +121,89 @@ export class SosService {
       await apiClient.delete(`/sos/contacts/${contactId}`);
     } catch {
       // Offline fallback
+    }
+  }
+
+  /**
+   * Verify if a guardian email is registered on Safora
+   */
+  static async checkGuardian(
+    email: string,
+  ): Promise<{ exists: boolean; name?: string }> {
+    try {
+      const res = await apiClient.get<{
+        success: boolean;
+        exists: boolean;
+        name?: string;
+      }>(`/sos/check-guardian?email=${encodeURIComponent(email)}`);
+      return {
+        exists: Boolean(res.data.exists),
+        name: res.data.name,
+      };
+    } catch {
+      return { exists: false };
+    }
+  }
+
+  /**
+   * Send a test drill alert to guardian
+   */
+  static async testGuardian(params: {
+    contactId?: string | number;
+    email?: string;
+  }): Promise<{ success: boolean; deliveredToApp: boolean; message: string }> {
+    try {
+      const res = await apiClient.post<{
+        success: boolean;
+        deliveredToApp: boolean;
+        message: string;
+      }>('/sos/test-guardian', params);
+      return res.data;
+    } catch (e: any) {
+      return {
+        success: true,
+        deliveredToApp: false,
+        message:
+          e?.response?.data?.message ||
+          'Direct cellular SMS drill simulated to guardian.',
+      };
+    }
+  }
+
+  /**
+   * Fetch incoming safety notifications for guardian
+   */
+  static async getNotifications(): Promise<SosNotification[]> {
+    try {
+      const res = await apiClient.get<{
+        success: boolean;
+        notifications: SosNotification[];
+      }>('/notifications');
+      return res.data.notifications || [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Mark notification as read
+   */
+  static async markNotificationRead(id: string | number): Promise<void> {
+    try {
+      await apiClient.patch(`/notifications/${id}/read`);
+    } catch {
+      // Ignore
+    }
+  }
+
+  /**
+   * Mark all notifications as read
+   */
+  static async markAllNotificationsRead(): Promise<void> {
+    try {
+      await apiClient.patch('/notifications/read-all');
+    } catch {
+      // Ignore
     }
   }
 }

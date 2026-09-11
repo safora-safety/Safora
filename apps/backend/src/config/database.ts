@@ -1,20 +1,112 @@
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { Pool } = require("pg");
+import { execSync } from "child_process";
 import dotenv from "dotenv";
 dotenv.config();
 
 const connectionString =
   process.env.DATABASE_URL_DIRECT || process.env.DATABASE_URL || "";
 
-export const db = new Pool({
-  connectionString,
-  ssl: { rejectUnauthorized: false },
-  connectionTimeoutMillis: 25000,
-  idleTimeoutMillis: 30000,
-});
+function parseConnectionString(connStr: string) {
+  try {
+    const url = new URL(connStr);
+    return {
+      host: url.hostname,
+      port: url.port ? parseInt(url.port, 10) : 5432,
+      user: decodeURIComponent(url.username),
+      password: decodeURIComponent(url.password),
+      database: url.pathname ? url.pathname.replace(/^\//, "") : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function resolveHost(host: string): string {
+  if (
+    !host ||
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    /^\d+\.\d+\.\d+\.\d+$/.test(host)
+  ) {
+    return host;
+  }
+
+  // Attempt resolving via public DNS (Google 8.8.8.8) to bypass ISP DNS restrictions
+  try {
+    const output = execSync(`nslookup ${host} 8.8.8.8`, {
+      timeout: 3000,
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "ignore"],
+    });
+
+    const matches = output.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g);
+    if (matches && matches.length > 0) {
+      const resolved = matches.filter((ip) => ip !== "8.8.8.8");
+      if (resolved.length > 0) {
+        console.log(
+          `[INFO] Resolved ${host} -> ${resolved[0]} via Google DNS fallback`,
+        );
+        return resolved[0];
+      }
+    }
+  } catch {
+    // If nslookup is restricted or fails, fall through to known regional fallbacks
+  }
+
+  // Known fallback IPs for Neon AWS us-east-2 region
+  if (host.includes("c-5.us-east-2.aws.neon.tech")) {
+    console.log(
+      `[INFO] Using regional fallback IP for ${host} (18.226.144.228)`,
+    );
+    return "18.226.144.228";
+  }
+
+  return host;
+}
+
+function createDatabasePool(): InstanceType<typeof Pool> {
+  const parsed = parseConnectionString(connectionString);
+
+  if (parsed && parsed.host) {
+    const originalHost = parsed.host;
+    const targetHost = resolveHost(originalHost);
+
+    return new Pool({
+      host: targetHost,
+      port: parsed.port,
+      user: parsed.user,
+      password: parsed.password,
+      database: parsed.database,
+      ssl: {
+        rejectUnauthorized: false,
+        servername: originalHost,
+      },
+      connectionTimeoutMillis: 25000,
+      idleTimeoutMillis: 30000,
+    });
+  }
+
+  return new Pool({
+    connectionString,
+    ssl: { rejectUnauthorized: false },
+    connectionTimeoutMillis: 25000,
+    idleTimeoutMillis: 30000,
+  });
+}
+
+export const db = createDatabasePool();
 
 export async function initDatabase(): Promise<void> {
-  const client = await db.connect();
+  let client;
+  try {
+    client = await db.connect();
+  } catch (connErr: unknown) {
+    const errMsg = connErr instanceof Error ? connErr.message : String(connErr);
+    console.warn(`[WARN] Database initial connection deferred: ${errMsg}`);
+    return;
+  }
+
   try {
     // 1. PostGIS Extension
     try {
@@ -96,6 +188,7 @@ export async function initDatabase(): Promise<void> {
         relationship VARCHAR(50),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
+      ALTER TABLE trusted_contacts ADD COLUMN IF NOT EXISTS email VARCHAR(255);
       CREATE INDEX IF NOT EXISTS idx_trusted_contacts_user_id ON trusted_contacts(user_id);
     `);
 
@@ -134,6 +227,29 @@ export async function initDatabase(): Promise<void> {
         status VARCHAR(50) DEFAULT 'dispatched',
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
+      ALTER TABLE sos_alerts ADD COLUMN IF NOT EXISTS audio_url TEXT;
+    `);
+
+    // 7. Safety Notifications Table (for Guardians & First Responders)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS notifications (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        sender_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        sender_name VARCHAR(150) NOT NULL,
+        sender_phone VARCHAR(50),
+        type VARCHAR(50) DEFAULT 'sos_alert',
+        title VARCHAR(200) NOT NULL,
+        body TEXT NOT NULL,
+        latitude DOUBLE PRECISION,
+        longitude DOUBLE PRECISION,
+        battery_percentage INTEGER,
+        audio_url TEXT,
+        is_test BOOLEAN DEFAULT FALSE,
+        is_read BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id, created_at DESC);
     `);
 
     // Check if we need to seed initial campus hazards
@@ -163,6 +279,8 @@ export async function initDatabase(): Promise<void> {
     const errorMsg = err instanceof Error ? err.message : String(err);
     console.error(`[ERROR] Database initialization failed: ${errorMsg}`);
   } finally {
-    client.release();
+    if (client) {
+      client.release();
+    }
   }
 }

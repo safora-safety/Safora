@@ -8,6 +8,7 @@ export interface SosAlertRow {
   longitude: number;
   accuracy?: number | null;
   battery_percentage?: number | null;
+  audio_url?: string | null;
   status: SosAlertStatus;
   created_at: Date | string;
 }
@@ -20,6 +21,7 @@ export interface SosAlertEntity {
   longitude: number;
   accuracy?: number;
   batteryPercentage?: number;
+  audioUrl?: string;
   status: SosAlertStatus;
   createdAt: string;
 }
@@ -37,6 +39,7 @@ export class SosAlertModel {
         row.battery_percentage != null
           ? Number(row.battery_percentage)
           : undefined,
+      audioUrl: row.audio_url || undefined,
       status: row.status || "dispatched",
       createdAt:
         row.created_at instanceof Date

@@ -39,6 +39,7 @@ graph TD
     MainTabs --> SafeWalk[SafeWalkScreen: Live Route Tracker & Deviation HUD]
     MainTabs --> Profile[ProfileScreen: Emergency Contacts CRUD & Medical ID]
     MainTabs --> Settings[SettingsScreen: Dark/Light Mode & Safety Settings]
+    Profile --> Notifications[NotificationScreen: Safety Alerts & 30s Audio Player]
 ```
 
 ### Screen Directory Structure (`apps/mobile/src/screens/`)
@@ -48,20 +49,33 @@ graph TD
 - **`HomeScreen.tsx`**: Main safety dashboard with live score indicator, quick-trigger SOS (with 5-second cancel window), recent verified hazards feed, and active Safe Walk status card.
 - **`MapScreen.tsx`**: Full-screen interactive radar canvas with category filtering, PostGIS hazard clusters, multi-modal routing (Car, 2-Wheeler, Walk), local place search, and map layer controls.
 - **`SafeWalkScreen.tsx`**: Real-time walking journey engine with dual GPS tracking, continuous path rendering, calibrated walk times, 150m corridor monitoring, and deviation grace timers.
-- **`ProfileScreen.tsx`**: Emergency contacts management (Add, Edit, Delete, Test SOS Alert), Blood Group, medical notes, and theme toggle.
+- **`ProfileScreen.tsx`**: Emergency contacts management (with email verification, Safora member detection, Test SOS Drills), Blood Group, medical notes, header Settings `⚙️`, and Notification Bell `🔔` with unread counter badge.
+- **`NotificationScreen.tsx`**: Dedicated Safety Alerts Center displaying incoming family emergency alerts and test drills, live GPS pin links, battery percentages, and an embedded **30-second live audio evidence player** with animated waveforms.
 - **`SettingsScreen.tsx`**: Granular safety preferences (silent vs siren SOS, corridor buffer, emergency hotlines).
 
 ---
 
-## 3. Core Geospatial & Routing Architecture
+## 3. Navigation Stack & Android Hardware Back Handling
+To provide native Android UX and prevent abrupt app closure:
+- **Hierarchical Step-Back Handling**:
+  1. **Overlays First**: In `MapScreen` and `SafeWalkScreen`, pressing the Android hardware/gesture back button first closes any open place search dropdowns, selected hazard cards, or route previews.
+  2. **Tab History Stack**: In `MainTabNavigator`, a `tabHistory` stack tracks visited tabs. Pressing Back pops the history (e.g., `Profile` $\rightarrow$ `Map` $\rightarrow$ `Home`) one step at a time instead of exiting.
+  3. **Exit Protection**: On the `Home` tab, pressing back triggers an Android Toast (`"Press back again to exit Safora"`), requiring a double-tap within 2 seconds to close the app.
 
-### 3.1 Open Geospatial Canvas Engine (`OpenMapView.tsx`)
+---
+
+## 4. Core Geospatial & Routing Architecture
+
+### 4.1 Open Geospatial Canvas Engine (`OpenMapView.tsx`)
 Rather than relying on proprietary Google Maps SDKs that require active billing accounts and can crash without API keys, SAFORA features an open-source, resilient geospatial canvas powered by Leaflet inside a hardware-accelerated `WebView`:
-- **Dynamic Layer Switcher**:
-  - **Clean / Default**: Vector raster tiles via MapTiler.
-  - **Street View**: OpenStreetMap cartography (`https://tile.openstreetmap.org/{z}/{x}/{y}.png`).
-  - **Satellite View**: High-resolution satellite imagery via Esri World Imagery (`https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}`).
+- **100% Watermark-Free & Keyless Basemap Switcher**:
+  - **Default Dark Mode**: High-contrast, dark slate cartography via **Esri World Dark Gray Base** (`https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}`) with `maxNativeZoom: 16, maxZoom: 19`.
+  - **Street View / Light Mode**: Crisp street geometry via **OpenStreetMap** (`https://tile.openstreetmap.org/{z}/{x}/{y}.png`).
+  - **Satellite View**: Ultra-high-resolution satellite imagery via **Esri World Imagery** (`https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}`).
 - **10km Offline Map Caching**:
+  - The map injects `window.cacheSurrounding10km(lat, lon, radiusKm)` upon coordinate load.
+  - Automatically fetches and stores the 10km bounding box matrix of tiles into the device's HTML5 `CacheStorage`.
+  - When the phone enters offline or no-signal zones, cached map tiles load instantly from internal storage.
   - The map injects `window.cacheSurrounding10km(lat, lon, radiusKm)` upon coordinate load.
   - Automatically fetches and stores the 10km bounding box matrix of tiles into the device's HTML5 `CacheStorage`.
   - When the phone enters offline or no-signal zones, cached map tiles load instantly from internal storage.

@@ -4,6 +4,8 @@ import {
   getContacts,
   addContact,
   deleteContact,
+  checkGuardian,
+  testGuardian,
 } from "../controllers/sosController";
 import { authMiddleware } from "../middleware/auth";
 import { validateBody } from "../middleware/validate";
@@ -15,6 +17,10 @@ router.use(authMiddleware as any);
 
 // SOS
 router.post("/", validateBody(sosAlertSchema), triggerSOS);
+
+// Guardian verification and test alert
+router.get("/check-guardian", checkGuardian);
+router.post("/test-guardian", testGuardian);
 
 // Trusted Contacts
 router.get("/contacts", getContacts);

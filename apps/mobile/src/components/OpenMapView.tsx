@@ -186,10 +186,10 @@ const generateHtml = (
       if (layerType === 'street') {
         return 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
       }
-      // default themed streets via high-speed CartoDB CDN (no API key required)
+      // Default themed basemaps (100% keyless, crisp, zero watermark)
       return isDark
-        ? 'https://a.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png'
-        : 'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png';
+        ? 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'
+        : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
     }
 
     function initMap() {
@@ -208,8 +208,10 @@ const generateHtml = (
       });
 
       var initialUrl = getTileUrlForLayer(currentLayer, currentIsDark);
+      var isDarkCanvas = (currentLayer === 'default' && currentIsDark);
       tileLayer = L.tileLayer(initialUrl, {
         maxZoom: 19,
+        maxNativeZoom: isDarkCanvas ? 16 : 19,
         subdomains: ['a', 'b', 'c', 'd'],
         crossOrigin: true
       }).addTo(map);
@@ -274,8 +276,10 @@ const generateHtml = (
       if (tileLayer) {
         map.removeLayer(tileLayer);
       }
+      var isDarkCanvas = (layerType === 'default' && currentIsDark);
       tileLayer = L.tileLayer(newUrl, {
         maxZoom: 19,
+        maxNativeZoom: isDarkCanvas ? 16 : 19,
         subdomains: ['a', 'b', 'c', 'd'],
         crossOrigin: true
       }).addTo(map);

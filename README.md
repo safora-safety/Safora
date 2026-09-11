@@ -95,17 +95,21 @@ Based on Section 4.2 of the [Project Synopsis](file:///D:/Safora/docs/SAFORA_Syn
      - **2-Wheeler (Bike/Scooter)**: $8.88\text{ m/s}$ ($32\text{ km/h}$) $+ 20\text{s}$ buffer $\rightarrow$ **~2.2 mins per 1 km**.
      - **Car**: $7.22\text{ m/s}$ ($26\text{ km/h}$) $+ 45\text{s}$ signal buffer $\rightarrow$ **~3.0 mins per 1 km**.
    - Proximity-biased local search powered by Photon OpenStreetMap engine + MapTiler fallback.
-4. **Module 4: Safe Walk Mode, Dual GPS & 10km Offline Map Caching**
+4. **Module 4: Safe Walk Mode, Dual GPS & Watermark-Free Offline Geospatial Canvas**
    - Live route compliance monitoring along a configured 150-meter corridor.
    - **Dual-Strategy Geolocation**: High-accuracy GPS with automatic fallback to cellular triangulation, plus continuous live watcher (`watchUserLocation`).
    - **10km Offline Map Caching**: HTML5 `CacheStorage` pre-caches surrounding 10km radius tiles for complete offline exploration.
-   - **Dynamic Layer Switcher**: Toggle between Clean Vector (MapTiler), Street View (OpenStreetMap), and Satellite Imagery (Esri World Imagery).
+   - **Watermark-Free & Keyless Layer Switcher**: Sleek dark slate basemap via **Esri World Dark Gray Base** (`maxNativeZoom: 16, maxZoom: 19`), Street View via **OpenStreetMap**, and high-resolution **Esri World Imagery**.
+   - **Hierarchical Android Hardware Back Navigation**: Smooth step-back navigation (dismissing search dropdowns $\rightarrow$ hazard cards $\rightarrow$ tab history stack $\rightarrow$ double-tap exit protection on Home).
    - **Confirm-Before-Escalate**: If a deviation occurs, the walker receives a 60-second grace prompt before alerting contacts, eliminating false alarms.
-5. **Module 5: One-Tap SOS Alert System & Emergency Contacts CRUD**
-   - Immediate distress signal capturing high-accuracy coordinates, accuracy radius, and battery level.
-   - Instant dispatch to assigned emergency contacts with a live tracking URL.
-   - **Full Emergency Contacts CRUD** (`ContactModal.tsx` + `ProfileScreen.tsx`): Add, Edit, Delete, and Test SOS alert dispatch to individual guardians.
-   - One-tap native telephone dialer fallback (`tel:112`, `tel:108`).
+5. **Module 5: Two-Way Guardian SOS, Safety Alerts Center & 30s Audio Player**
+   - **Hybrid Dispatch Engine**:
+     - *Method A (Online Primary)*: Captures GPS coordinates, battery level, and 30-second recorded audio evidence; looks up guardians by email and dispatches instant high-priority Firebase push notifications.
+     - *Method B (Offline Fallback)*: Instant automated failover to direct cellular SMS with live Google Maps pin link (`https://maps.google.com/?q=...`) to contacts or 112 without requiring internet.
+   - **Smart Contact Email Verification**: Input fields for Name, Phone, and Email with real-time verification against the database to show 🟢 *Safora Member (In-App Alerts & 30s Audio Enabled)* vs 📱 *Direct SMS Only*.
+   - **Dedicated Safety Alerts Center (`NotificationScreen.tsx`)**: Accessible via the `🔔` Bell icon in the Profile header (with live unread counter badge), featuring card views, live GPS map buttons, and an embedded **30-second live audio evidence player** with animated waveforms.
+   - **Interactive Safety Drills**: Upgraded "Test SOS" allowing walkers and guardians to test in-app alerts beforehand with zero panic.
+   - One-tap native telephone dialer fallback (`tel:112`, `tel:108`, `tel:1090`).
 6. **Module 6: Administrative Moderation & Diagnostics**
    - Moderation workflows to mark reports as active, resolved, duplicate, or fake.
    - Live system health checks and database latency diagnostics (`/api/diagnostics`).
