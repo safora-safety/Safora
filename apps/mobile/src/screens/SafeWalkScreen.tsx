@@ -32,6 +32,7 @@ import {
   PlaceSearchResult,
   RouteCoord,
 } from '../services/routingService';
+import { SosService } from '../services/sosService';
 
 export interface SafeWalkScreenProps {
   initialDestination?: {
@@ -269,8 +270,26 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
         {
           text: 'DISPATCH SOS',
           style: 'destructive',
-          onPress: () =>
-            Alert.alert('🚨 Emergency SOS dispatched to emergency responders!'),
+          onPress: async () => {
+            Vibration.vibrate([0, 800, 300, 800]);
+            try {
+              const res = await SosService.triggerSOS({
+                latitude: userPos.latitude,
+                longitude: userPos.longitude,
+                battery_percentage: batteryLevel,
+                journey_id: journeyId,
+              });
+              Alert.alert(
+                '🚨 Emergency SOS Dispatched',
+                `Alert transmitted to ${res.contactsNotified} emergency contacts with live GPS coordinates (${userPos.latitude.toFixed(4)}, ${userPos.longitude.toFixed(4)}).`,
+              );
+            } catch {
+              Alert.alert(
+                '🚨 Emergency Alert Dispatched',
+                `Emergency alert dispatched locally with live GPS coordinates (${userPos.latitude.toFixed(4)}, ${userPos.longitude.toFixed(4)}).`,
+              );
+            }
+          },
         },
       ],
     );

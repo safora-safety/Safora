@@ -58,7 +58,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     if (activeTab === 'login') {
       const ok = await login(email.trim(), password);
       if (ok) {
-        navigation.navigate('MainTabs');
+        try {
+          navigation.navigate('MainTabs');
+        } catch {}
       }
     } else {
       if (!name.trim()) {
@@ -80,7 +82,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         password,
       );
       if (ok) {
-        navigation.navigate('MainTabs');
+        try {
+          navigation.navigate('MainTabs');
+        } catch {}
       }
     }
   };

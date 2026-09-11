@@ -36,8 +36,8 @@ export class ReportService {
         timeout: 4500, // Fast 4.5s timeout for low-bandwidth connections
       });
 
-      const reports = res.data.reports || (res.data as any).data?.reports || [];
-      if (Array.isArray(reports) && reports.length > 0) {
+      const reports = res.data.reports || (res.data as any).data?.reports;
+      if (Array.isArray(reports)) {
         // Cache to local system storage for offline usage
         await AsyncStorage.setItem(HAZARDS_CACHE_KEY, JSON.stringify(reports));
         return reports;

@@ -157,5 +157,6 @@ export class ReportService {
     if (!updated) {
       throw new AppError("Hazard report not found", 404);
     }
+    MemoryCache.invalidatePattern("reports_");
   }
 }
