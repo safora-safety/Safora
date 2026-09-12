@@ -25,21 +25,22 @@ graph TD
     Hydrate -->|Yes| CheckAuth{Authenticated?}
     
     CheckAuth -->|No| CheckOnboard{First Install?}
-    CheckOnboard -->|Yes (hasSeenOnboarding=false)| Onboard[OnboardingScreen (4 Slides)]
-    Onboard -->|Skip / Get Started| AccountSelect[AccountSelectScreen]
+    CheckOnboard -->|"Yes (First Launch)"| Onboard["OnboardingScreen (4 Slides)"]
+    Onboard -->|"Skip / Get Started"| AccountSelect[AccountSelectScreen]
     CheckOnboard -->|No| AccountSelect
-    AccountSelect --> Auth[AuthScreen: Login & Register Tabs]
-    Auth -->|Guest Mode| MainTabs[MainTabNavigator]
-    Auth -->|Auth Success| MainTabs
+    AccountSelect --> Auth["AuthScreen (Login & Register)"]
+    AccountSelect -->|"Direct Guest Mode"| MainTabs[MainTabNavigator]
+    Auth -->|"Guest Mode"| MainTabs
+    Auth -->|"Auth Success"| MainTabs
     
     CheckAuth -->|Yes| MainTabs
     
-    MainTabs --> Home[HomeScreen: Safety Status & Quick SOS]
-    MainTabs --> Map[MapScreen: Radar Canvas, Hazards & Multi-Modal Route]
-    MainTabs --> SafeWalk[SafeWalkScreen: Live Route Tracker & Deviation HUD]
-    MainTabs --> Profile[ProfileScreen: Emergency Contacts CRUD & Medical ID]
-    MainTabs --> Settings[SettingsScreen: Dark/Light Mode & Safety Settings]
-    Profile --> Notifications[NotificationScreen: Safety Alerts & 30s Audio Player]
+    MainTabs --> Home["HomeScreen (Safety Status & Quick SOS)"]
+    MainTabs --> Map["MapScreen (Radar Canvas & Multi-Modal Route)"]
+    MainTabs --> SafeWalk["SafeWalkScreen (Live Route Tracker & Corridor)"]
+    MainTabs --> Profile["ProfileScreen (Contacts, Medical ID & Helplines)"]
+    MainTabs --> Settings["SettingsScreen (Safety Preferences & Silent Mode)"]
+    Profile --> Notifications["NotificationScreen (Alerts & 30s Audio Player)"]
 ```
 
 ### Screen Directory Structure (`apps/mobile/src/screens/`)
@@ -76,11 +77,8 @@ Rather than relying on proprietary Google Maps SDKs that require active billing 
   - The map injects `window.cacheSurrounding10km(lat, lon, radiusKm)` upon coordinate load.
   - Automatically fetches and stores the 10km bounding box matrix of tiles into the device's HTML5 `CacheStorage`.
   - When the phone enters offline or no-signal zones, cached map tiles load instantly from internal storage.
-  - The map injects `window.cacheSurrounding10km(lat, lon, radiusKm)` upon coordinate load.
-  - Automatically fetches and stores the 10km bounding box matrix of tiles into the device's HTML5 `CacheStorage`.
-  - When the phone enters offline or no-signal zones, cached map tiles load instantly from internal storage.
 
-### 3.2 Calibrated Multi-Modal Routing Engine (`routingService.ts`)
+### 4.2 Calibrated Multi-Modal Routing Engine (`routingService.ts`)
 Standard routing services often fail to represent real-world pedestrian speeds. SAFORA implements calibrated travel-time mathematics:
 - **Walking Pace**: Calibrated to $1.60\text{ m/s}$ ($5.8\text{ km/h}$), accurately yielding **~10.4 minutes per 1 km**.
 - **2-Wheeler (Bike/Scooter)**: Calibrated to $8.88\text{ m/s}$ ($32\text{ km/h}$) $+ 20\text{s}$ agile traffic buffer $\rightarrow$ **~2.2 minutes per 1 km**.
@@ -166,18 +164,21 @@ cd D:\Safora\apps\mobile\android
 # Clean previous build artifacts
 .\gradlew clean
 
-# Build the debug APK
+# Build standalone Release APK (Production APK for physical devices)
+.\gradlew assembleRelease
+
+# Build Debug APK (for development testing)
 .\gradlew assembleDebug
 ```
 
-The compiled APK will be output at:
+The compiled release APK will be output at:
 ```
-apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk
+apps/mobile/android/app/build/outputs/apk/release/app-release.apk
 ```
 
 ### 4.4 Installing to a Device via ADB
 ```powershell
-adb install -r apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk
+adb install -r apps/mobile/android/app/build/outputs/apk/release/app-release.apk
 ```
 
 ---
