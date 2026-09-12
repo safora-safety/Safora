@@ -20,6 +20,14 @@ export const AccountSelectScreen: React.FC<AccountSelectScreenProps> = ({
 }) => {
   const { savedProfiles, enterAsGuest, removeSavedProfile } = useAuthStore();
 
+  const handleEnterGuest = async () => {
+    await enterAsGuest();
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'MainTabs' }],
+    });
+  };
+
   const handleSelectProfile = (profile: SavedProfile) => {
     navigation.navigate('Auth', {
       prefillEmail: profile.email,
@@ -99,7 +107,7 @@ export const AccountSelectScreen: React.FC<AccountSelectScreenProps> = ({
             <TouchableOpacity
               style={styles.avatarCircleGuest}
               activeOpacity={0.8}
-              onPress={enterAsGuest}
+              onPress={handleEnterGuest}
             >
               <Text style={styles.guestIcon}>👤</Text>
             </TouchableOpacity>

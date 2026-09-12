@@ -17,6 +17,14 @@ interface WelcomeScreenProps {
 export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ navigation }) => {
   const enterAsGuest = useAuthStore(state => state.enterAsGuest);
 
+  const handleEnterGuest = async () => {
+    await enterAsGuest();
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'MainTabs' }],
+    });
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
@@ -80,7 +88,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ navigation }) => {
         <TouchableOpacity
           style={styles.guestButton}
           activeOpacity={0.7}
-          onPress={enterAsGuest}
+          onPress={handleEnterGuest}
         >
           <Text style={styles.guestButtonText}>Continue as Guest →</Text>
         </TouchableOpacity>
