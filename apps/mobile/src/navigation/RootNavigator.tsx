@@ -1,6 +1,9 @@
 import React, { useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import {
+  NavigationContainer,
+  createNavigationContainerRef,
+} from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuthStore } from '../store/authStore';
 import { AccountSelectScreen } from '../screens/AccountSelectScreen';
@@ -26,6 +29,8 @@ export type RootStackParamList = {
   Notifications: undefined;
 };
 
+export const navigationRef = createNavigationContainerRef<RootStackParamList>();
+
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const RootNavigator: React.FC = () => {
@@ -35,6 +40,19 @@ export const RootNavigator: React.FC = () => {
   useEffect(() => {
     hydrateAuth();
   }, [hydrateAuth]);
+
+  // When authentication state changes dynamically (e.g. Guest mode tapped), switch immediately
+  useEffect(() => {
+    if (!isHydrated) return;
+    if (navigationRef.isReady()) {
+      if (isAuthenticated) {
+        navigationRef.reset({
+          index: 0,
+          routes: [{ name: 'MainTabs' }],
+        });
+      }
+    }
+  }, [isAuthenticated, isHydrated]);
 
   // Show dark splash loader while rehydrating stored login session
   if (!isHydrated) {
@@ -53,7 +71,7 @@ export const RootNavigator: React.FC = () => {
       : 'AccountSelect';
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <Stack.Navigator
         id="root"
         initialRouteName={initialRoute}

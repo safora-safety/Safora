@@ -45,7 +45,21 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
       return;
     }
 
-    await login(email.trim(), password);
+    const success = await login(email.trim(), password);
+    if (success) {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'MainTabs' }],
+      });
+    }
+  };
+
+  const handleGuest = async () => {
+    await enterAsGuest();
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'MainTabs' }],
+    });
   };
 
   const displayError = formError || error;
@@ -221,7 +235,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
               borderColor: colors.border,
             },
           ]}
-          onPress={enterAsGuest}
+          onPress={handleGuest}
           activeOpacity={0.8}
         >
           <Text style={[styles.guestButtonText, { color: colors.textPrimary }]}>
