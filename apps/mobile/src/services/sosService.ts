@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+import { getBatteryLevel } from 'react-native-device-info';
 import { apiClient } from './apiClient';
 import {
   SosAlert,
@@ -17,19 +19,34 @@ export interface TriggerSosPayload {
 
 export class SosService {
   /**
-   * Broadcast emergency SOS alert
+   * Broadcast emergency SOS alert with real GPS and battery telemetry
    */
   static async triggerSOS(payload: TriggerSosPayload): Promise<{
     alert: SosAlert;
     contactsNotified: number;
     isOffline?: boolean;
   }> {
+    let batteryPercentage = payload.battery_percentage;
+    if (batteryPercentage === undefined) {
+      try {
+        const level = await getBatteryLevel();
+        if (typeof level === 'number' && !isNaN(level) && level >= 0) {
+          batteryPercentage = Math.round(level * 100);
+        }
+      } catch {
+        // Device doesn't support battery reading (e.g. simulator)
+      }
+    }
+
     const res = await apiClient.post<
       ApiResponse<{ alert: SosAlert; contactsNotified: number }> & {
         alert: SosAlert;
         contactsNotified: number;
       }
-    >('/sos', payload);
+    >('/sos', {
+      ...payload,
+      battery_percentage: batteryPercentage,
+    });
 
     return {
       alert: res.data.alert || (res.data as any).data?.alert,
@@ -162,5 +179,43 @@ export class SosService {
     } catch {
       // Ignore
     }
+  }
+
+  /**
+   * Upload real ambient audio evidence to backend Cloudinary service
+   */
+  static async uploadAudio(audioUri: string): Promise<{ audioUrl: string }> {
+    const formData = new FormData();
+    const cleanUri =
+      Platform.OS === 'android' ? audioUri : audioUri.replace('file://', '');
+    formData.append('audio', {
+      uri: cleanUri,
+      type: 'audio/m4a',
+      name: `sos_recording_${Date.now()}.m4a`,
+    } as any);
+
+    const res = await apiClient.post<{
+      success: boolean;
+      audioUrl: string;
+      publicId: string;
+    }>('/sos/upload-audio', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    return { audioUrl: res.data.audioUrl };
+  }
+
+  /**
+   * Attach uploaded audio evidence URL to existing SOS alert record
+   */
+  static async attachAudioToAlert(
+    alertId: string | number,
+    audioUrl: string,
+  ): Promise<void> {
+    await apiClient.patch(`/sos/${alertId}/audio`, {
+      audio_url: audioUrl,
+    });
   }
 }

@@ -8,10 +8,10 @@
 
 ## 1. Executive Summary & Progress Scorecard
 
-Overall Minor Project-I Completion: **~99% (Production & Viva Ready)**
+Overall Minor Project-I Completion: **~95% (Production & Viva Ready)**
 
 ```
-[████████████████████] 99% Completed
+[███████████████████░] 95% Completed
 ```
 
 | Area | Progress | Status Summary |
@@ -183,3 +183,18 @@ As documented in **Section 1.3 & 10 of the Synopsis**, the following are **not**
 2. ❌ **AI Safe-Route Routing**: Machine learning models predicting lighting and crowd densities.
 3. ❌ **AI Image Classification**: Computer vision models detecting hazards automatically from photos.
 4. ❌ **Hardware Wearables**: External panic buttons or smart jewelry integration.
+
+---
+
+## 6. Known Limitations & Security Considerations
+
+1. **Unverified Guardian Account Linking**:
+   - *Current Mechanism*: When an SOS alert triggers, the backend looks up registered users whose email or phone matches a victim's `trusted_contacts`.
+   - *Limitation*: Because guardian linking in Phase 1 is single-sided without phone/email verification handshakes, any user who registers with an email/phone listed as someone's emergency contact receives their emergency alerts.
+   - *Phase 2 Remediation*: 2-way mutual OTP verification / invitation link handshake before guardian activation (`status = 'verified'`).
+
+2. **Carrier SMS Intent Fallback**:
+   - Cellular SMS failover uses the native operating system `sms:` URI intent. While guaranteed to work with zero internet, it requires the user to confirm the send action within their native SMS application.
+
+3. **Platform Support**:
+   - Production focus is on Android (`react-native-nitro-sound`, Hermes, ProGuard/R8 minified APK). iOS deployment requires CocoaPods configuration and Apple Developer signing certificates during Phase 2.

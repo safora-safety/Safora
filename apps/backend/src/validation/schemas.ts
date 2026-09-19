@@ -92,6 +92,15 @@ export const sosAlertSchema = z.object({
   journey_id: z.number().or(z.string()).optional().nullable(),
   audio_url: cloudinaryAudioUrl,
   audioUrl: cloudinaryAudioUrl,
+  is_test: z.boolean().optional(),
+  isTest: z.boolean().optional(),
+});
+
+export const attachAudioSchema = z.object({
+  audio_url: cloudinaryAudioUrl.refine(
+    (url) => typeof url === "string" && url.length > 0,
+    "Valid Cloudinary audio URL is required",
+  ),
 });
 
 export const trustedContactSchema = z.object({

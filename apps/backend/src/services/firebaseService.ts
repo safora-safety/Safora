@@ -70,7 +70,10 @@ export class FirebaseService {
           alertId: String(data.alertId),
           latitude: String(data.latitude),
           longitude: String(data.longitude),
-          battery: String(data.batteryPercentage || 100),
+          battery:
+            data.batteryPercentage != null
+              ? String(data.batteryPercentage)
+              : "unknown",
           timestamp: new Date().toISOString(),
         },
         android: {

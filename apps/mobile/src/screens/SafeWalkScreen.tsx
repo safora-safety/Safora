@@ -34,6 +34,7 @@ import {
   RouteCoord,
 } from '../services/routingService';
 import { SosService } from '../services/sosService';
+import { AudioRecorderService } from '../services/audioRecorderService';
 
 export interface SafeWalkScreenProps {
   initialDestination?: {
@@ -41,6 +42,27 @@ export interface SafeWalkScreenProps {
     longitude: number;
     name: string;
   };
+}
+
+function downsampleRouteCoords(
+  coords: RouteCoord[],
+  maxPoints = 200,
+): [number, number][] {
+  if (!coords || coords.length === 0) return [];
+  if (coords.length <= maxPoints) {
+    return coords.map(c => [c.latitude, c.longitude]);
+  }
+  const step = (coords.length - 1) / (maxPoints - 1);
+  const sampled: [number, number][] = [];
+  for (let i = 0; i < maxPoints - 1; i++) {
+    const idx = Math.round(i * step);
+    sampled.push([coords[idx].latitude, coords[idx].longitude]);
+  }
+  sampled.push([
+    coords[coords.length - 1].latitude,
+    coords[coords.length - 1].longitude,
+  ]);
+  return sampled;
 }
 
 export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
@@ -237,6 +259,10 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
       setDeviationCountdown(null);
       setIsDeviated(false);
       Vibration.vibrate([0, 1000, 500, 1000]);
+
+      // Start real 30s ambient audio evidence recording
+      AudioRecorderService.startRecording().catch(() => {});
+
       SosService.triggerSOS({
         latitude: userPos.latitude,
         longitude: userPos.longitude,
@@ -245,8 +271,14 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
         .then(res => {
           Alert.alert(
             '🚨 Auto-Escalation: Emergency SOS Dispatched',
-            `No response received within 60 seconds of route deviation. Emergency alerts transmitted to ${res.contactsNotified} emergency contacts with live GPS coordinates (${userPos.latitude.toFixed(4)}, ${userPos.longitude.toFixed(4)}).`,
+            `No response received within 60 seconds of route deviation. Emergency alerts transmitted to ${res.contactsNotified} emergency contacts with live GPS coordinates (${userPos.latitude.toFixed(4)}, ${userPos.longitude.toFixed(4)}).\n\n🎙️ 30s ambient audio evidence is recording.`,
           );
+
+          if (res?.alert?.id) {
+            setTimeout(() => {
+              AudioRecorderService.stopAndUpload(res.alert.id).catch(() => {});
+            }, 30000);
+          }
         })
         .catch(() => {
           Alert.alert(
@@ -274,12 +306,14 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
   const handleStartWalk = async () => {
     const etaMins = Math.ceil(routeDurationSeconds / 60) || 10;
     try {
+      const plannedRoute = downsampleRouteCoords(routeCoords);
       const journey = await JourneyService.startJourney({
         origin: { latitude: userPos.latitude, longitude: userPos.longitude },
         destination: {
           latitude: destPos.latitude,
           longitude: destPos.longitude,
         },
+        planned_route: plannedRoute.length >= 2 ? plannedRoute : undefined,
         expected_duration_minutes: etaMins,
       });
       setJourneyId(journey.id);
@@ -292,9 +326,11 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
         `Virtual guardian active along road route to ${destPos.name}.\nEstimated walk: ${formatDistance(routeDistanceMeters)} (${etaMins} mins).`,
       );
     } catch {
-      Alert.alert('Notice', 'Safe Walk route initialized locally.');
-      setIsActive(true);
-      setSecondsRemaining(routeDurationSeconds || 600);
+      setIsActive(false);
+      Alert.alert(
+        'Safe Walk Failed',
+        "Couldn't start Safe Walk — no guardian monitoring. Check your connection and try again.",
+      );
     }
   };
 
@@ -341,6 +377,10 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
           onPress: async () => {
             setDeviationCountdown(null);
             Vibration.vibrate([0, 800, 300, 800]);
+
+            // Start real 30s ambient audio evidence recording
+            AudioRecorderService.startRecording().catch(() => {});
+
             try {
               const res = await SosService.triggerSOS({
                 latitude: userPos.latitude,
@@ -349,8 +389,16 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
               });
               Alert.alert(
                 '🚨 Emergency SOS Dispatched',
-                `Alert transmitted to ${res.contactsNotified} emergency contacts with live GPS coordinates (${userPos.latitude.toFixed(4)}, ${userPos.longitude.toFixed(4)}).`,
+                `Alert transmitted to ${res.contactsNotified} emergency contacts with live GPS coordinates (${userPos.latitude.toFixed(4)}, ${userPos.longitude.toFixed(4)}).\n\n🎙️ 30s ambient audio evidence is recording.`,
               );
+
+              if (res?.alert?.id) {
+                setTimeout(() => {
+                  AudioRecorderService.stopAndUpload(res.alert.id).catch(
+                    () => {},
+                  );
+                }, 30000);
+              }
             } catch {
               Alert.alert(
                 '🚨 Emergency Dispatch Failed',

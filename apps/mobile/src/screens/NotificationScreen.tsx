@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
 import { SosService } from '../services/sosService';
 import { SosNotification } from '@safora/shared-types';
+import { Sound } from 'react-native-nitro-sound';
 
 export const NotificationScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -92,22 +93,42 @@ export const NotificationScreen: React.FC = () => {
   };
 
   // Toggle 30s audio evidence playback
-  const togglePlayAudio = (id: string | number) => {
+  const togglePlayAudio = async (id: string | number, audioUrl?: string) => {
     if (playingId === id) {
       clearInterval(playbackTimerRef.current);
+      try {
+        await Sound.stopPlayer();
+      } catch {}
       setPlayingId(null);
       setPlaybackSeconds(0);
       return;
     }
 
     clearInterval(playbackTimerRef.current);
+    try {
+      await Sound.stopPlayer();
+    } catch {}
+
     setPlayingId(id);
     setPlaybackSeconds(0);
+
+    if (audioUrl) {
+      try {
+        await Sound.startPlayer(audioUrl);
+      } catch (err) {
+        console.warn(
+          '[NotificationScreen] Native player failed, opening URL:',
+          err,
+        );
+        Linking.openURL(audioUrl).catch(() => {});
+      }
+    }
 
     playbackTimerRef.current = setInterval(() => {
       setPlaybackSeconds(prev => {
         if (prev >= 30) {
           clearInterval(playbackTimerRef.current);
+          Sound.stopPlayer().catch(() => {});
           setPlayingId(null);
           return 0;
         }
@@ -119,6 +140,7 @@ export const NotificationScreen: React.FC = () => {
   useEffect(() => {
     return () => {
       if (playbackTimerRef.current) clearInterval(playbackTimerRef.current);
+      Sound.stopPlayer().catch(() => {});
     };
   }, []);
 
@@ -283,7 +305,7 @@ export const NotificationScreen: React.FC = () => {
                   styles.playBtn,
                   { backgroundColor: isPlaying ? '#EF4444' : '#38BDF8' },
                 ]}
-                onPress={() => togglePlayAudio(item.id)}
+                onPress={() => togglePlayAudio(item.id, item.audioUrl)}
                 activeOpacity={0.8}
               >
                 <Text style={styles.playBtnIcon}>{isPlaying ? '⏸' : '▶'}</Text>

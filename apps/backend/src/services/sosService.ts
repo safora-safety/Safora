@@ -23,8 +23,10 @@ export class SosService {
     batteryPercentage?: number;
     journeyId?: string | number | null;
     audioUrl?: string | null;
+    isTest?: boolean;
   }): Promise<{ alert: SosAlert; contactsNotified: number }> {
     const finalAudioUrl = data.audioUrl || null;
+    const isTest = Boolean(data.isTest);
 
     const row = await SosRepository.createAlert({
       userId: data.userId,
@@ -34,15 +36,35 @@ export class SosService {
       accuracy: data.accuracy,
       batteryPercentage: data.batteryPercentage,
       audioUrl: finalAudioUrl,
+      isTest,
     });
-
-    const contacts = await this.getContacts(data.userId);
 
     // Fetch user details for notification message
     const userRow = await UserRepository.findById(data.userId);
     const userName = userRow?.name || "SAFORA Citizen";
     const userPhone = userRow?.phone || undefined;
 
+    // If this is an administrative or testing drill, isolate completely:
+    // Do NOT notify personal emergency contacts, do NOT send real FCM push.
+    if (isTest) {
+      broadcastSosAlert({
+        alertId: row.id,
+        userId: data.userId,
+        userName: `[DRILL TEST] ${userName}`,
+        latitude: data.latitude,
+        longitude: data.longitude,
+        batteryPercentage: data.batteryPercentage,
+        audioUrl: finalAudioUrl,
+        isTest: true,
+      });
+
+      return {
+        alert: SosAlertModel.fromRow(row),
+        contactsNotified: 0,
+      };
+    }
+
+    const contacts = await this.getContacts(data.userId);
     const guardianUserIds: (string | number)[] = [];
     let fcmTokens: string[] = [];
 
@@ -63,11 +85,12 @@ export class SosService {
               senderPhone: userPhone,
               type: "sos_alert",
               title: `🚨 EMERGENCY SOS from ${userName}`,
-              body: `Immediate distress signal at ${data.latitude.toFixed(4)}°N, ${data.longitude.toFixed(4)}°E. Battery: ${data.batteryPercentage ?? 85}%.`,
+              body: `Immediate distress signal at ${data.latitude.toFixed(4)}°N, ${data.longitude.toFixed(4)}°E.${data.batteryPercentage != null ? ` Battery: ${data.batteryPercentage}%.` : ""}`,
               latitude: data.latitude,
               longitude: data.longitude,
               batteryPercentage: data.batteryPercentage,
               audioUrl: finalAudioUrl,
+              sosAlertId: row.id,
               isTest: false,
             });
 
@@ -125,6 +148,7 @@ export class SosService {
       longitude: data.longitude,
       batteryPercentage: data.batteryPercentage,
       audioUrl: finalAudioUrl,
+      isTest: false,
       guardianUserIds,
     });
 
@@ -213,7 +237,8 @@ export class SosService {
       return {
         success: true,
         deliveredToApp: false,
-        message: "Simulated direct SMS test alert to guardian's phone number.",
+        message:
+          "Direct cellular SMS fallback required for unverified phone number.",
       };
     }
 
@@ -244,7 +269,7 @@ export class SosService {
         userName: `[TEST] ${senderName}`,
         latitude: 30.3165,
         longitude: 78.0322,
-        batteryPercentage: 90,
+        batteryPercentage: undefined,
       }).catch((e) => console.log("[WARN] Test FCM error:", e));
     }
 
@@ -273,5 +298,30 @@ export class SosService {
     userId: string | number,
   ): Promise<number> {
     return SosRepository.markAllNotificationsAsRead(userId);
+  }
+
+  static async attachAudio(
+    alertId: string | number,
+    userId: string | number,
+    audioUrl: string,
+  ): Promise<SosAlert> {
+    const row = await SosRepository.updateAudioUrl(alertId, userId, audioUrl);
+    if (!row) {
+      throw new AppError("SOS alert not found or unauthorized", 404);
+    }
+    const alert = SosAlertModel.fromRow(row);
+
+    // Broadcast audio attachment to staff and guardians
+    broadcastSosAlert({
+      alertId: alert.id,
+      userId: alert.userId,
+      latitude: alert.latitude,
+      longitude: alert.longitude,
+      batteryPercentage: alert.batteryPercentage,
+      audioUrl: alert.audioUrl,
+      isTest: alert.isTest,
+    });
+
+    return alert;
   }
 }
