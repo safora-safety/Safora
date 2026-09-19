@@ -88,6 +88,14 @@ export async function updateUserRole(
       return;
     }
 
+    if (String(req.user?.id) === String(id) && role !== "admin") {
+      res.status(400).json({
+        success: false,
+        message: "Administrators cannot demote their own account.",
+      });
+      return;
+    }
+
     const updated = await UserRepository.updateRole(id, role);
     if (!updated) {
       res.status(404).json({ success: false, message: "User not found" });
@@ -100,11 +108,10 @@ export async function updateUserRole(
       user: UserModel.fromRow(updated),
     });
   } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.error("[UserController.updateUserRole]:", err);
     res.status(500).json({
       success: false,
-      message: "Failed to update user role",
-      error: errorMsg,
+      message: "An internal server error occurred while updating user role",
     });
   }
 }
@@ -124,6 +131,14 @@ export async function updateUserStatus(
       return;
     }
 
+    if (String(req.user?.id) === String(id) && !isActive) {
+      res.status(400).json({
+        success: false,
+        message: "Administrators cannot suspend their own account.",
+      });
+      return;
+    }
+
     const updated = await UserRepository.updateStatus(id, isActive);
     if (!updated) {
       res.status(404).json({ success: false, message: "User not found" });
@@ -136,11 +151,10 @@ export async function updateUserStatus(
       user: UserModel.fromRow(updated),
     });
   } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.error("[UserController.updateUserStatus]:", err);
     res.status(500).json({
       success: false,
-      message: "Failed to update user status",
-      error: errorMsg,
+      message: "An internal server error occurred while updating user status",
     });
   }
 }
@@ -170,11 +184,10 @@ export async function updateFcmToken(
       message: "Push notification token updated successfully",
     });
   } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.error("[UserController.updateFcmToken]:", err);
     res.status(500).json({
       success: false,
-      message: "Failed to update push token",
-      error: errorMsg,
+      message: "An internal server error occurred while updating push token",
     });
   }
 }

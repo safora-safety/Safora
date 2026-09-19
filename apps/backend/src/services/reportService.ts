@@ -4,6 +4,38 @@ import { ReportRepository } from "../repositories/reportRepository";
 import { ReportModel } from "../models/Report";
 import { MemoryCache } from "../utils/cache";
 
+export function computeRecencyDecay(
+  ageHours: number,
+  halfLifeHours = 24,
+): number {
+  const lambda = Math.log(2) / halfLifeHours;
+  return Math.exp(-lambda * Math.max(0, ageHours));
+}
+
+export function computeDistanceFalloff(
+  distMeters: number,
+  radiusMeters: number,
+): number {
+  return Math.max(0, 1 - distMeters / radiusMeters);
+}
+
+export function computeConfirmMultiplier(confirms: number): number {
+  return 1.0 + 0.15 * Math.min(Math.max(0, confirms), 5);
+}
+
+export function computeScoreFromPenalty(totalPenalty: number): {
+  safetyScore: number;
+  riskLevel: "safe" | "moderate" | "high";
+} {
+  const safetyScore = Math.max(
+    0,
+    Math.min(100, Math.round(100 - totalPenalty)),
+  );
+  const riskLevel: "safe" | "moderate" | "high" =
+    safetyScore >= 80 ? "safe" : safetyScore >= 50 ? "moderate" : "high";
+  return { safetyScore, riskLevel };
+}
+
 export class ReportService {
   static async createReport(data: {
     userId?: string | number | null;
@@ -93,9 +125,6 @@ export class ReportService {
     let highSeverityCount = 0;
     let nearestMeters = Infinity;
 
-    const HALF_LIFE_HOURS = 24;
-    const DECAY_LAMBDA = Math.log(2) / HALF_LIFE_HOURS;
-
     for (const report of reports) {
       if (report.severity >= 4) highSeverityCount++;
       if (
@@ -117,27 +146,22 @@ export class ReportService {
 
       // Distance Falloff D(d)
       const dist = report.distanceMeters || 0;
-      const D = Math.max(0, 1 - dist / radiusMeters);
+      const D = computeDistanceFalloff(dist, radiusMeters);
 
       // Recency Decay T(t)
       const ageHours = report.createdAt
         ? (Date.now() - new Date(report.createdAt).getTime()) / (1000 * 60 * 60)
         : 1;
-      const T = Math.exp(-DECAY_LAMBDA * Math.max(0, ageHours));
+      const T = computeRecencyDecay(ageHours);
 
       // Community Confirmation Multiplier C(c)
       const confirms = report.confirmationsCount || 0;
-      const C = 1.0 + 0.15 * Math.min(confirms, 5);
+      const C = computeConfirmMultiplier(confirms);
 
       totalPenalty += S * D * T * C * 5; // Scale penalty
     }
 
-    const safetyScore = Math.max(
-      0,
-      Math.min(100, Math.round(100 - totalPenalty)),
-    );
-    const riskLevel: "safe" | "moderate" | "high" =
-      safetyScore >= 80 ? "safe" : safetyScore >= 50 ? "moderate" : "high";
+    const { safetyScore, riskLevel } = computeScoreFromPenalty(totalPenalty);
 
     return {
       latitude: lat,

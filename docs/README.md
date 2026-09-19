@@ -21,7 +21,7 @@ This is the **minor project scope**. Offline (Bluetooth/Wi-Fi Direct) SOS commun
 | [Safety Algorithms & Core Logic](safety-algorithms.md) | Mathematical safety score decay formulation, DBSCAN 50m clustering, and Safe Walk state machine. |
 | [Developer Setup & Run Guide](setup.md) | Prerequisites, environment variables, database initialization, and running mobile & backend servers. |
 | [Engineering Standards & Best Practices](standards-and-best-practices.md) | Codebase standards, feature-first folder structures, clean backend architecture, and PostGIS idioms. |
-| [Project Status & Roadmap](project-status-and-roadmap.md) | Completion progress scorecard (~98%), what is done, and remaining tasks for final submission. |
+| [Project Status & Roadmap](project-status-and-roadmap.md) | Completion progress scorecard (~99%), what is done, and remaining tasks for final submission. |
 | [Project Synopsis (PDF)](SAFORA_Synopsis_Formatted.pdf) | Academic Minor Project-I synopsis submitted to DBUU. |
 
 ---

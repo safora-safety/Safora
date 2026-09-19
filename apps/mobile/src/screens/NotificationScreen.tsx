@@ -247,8 +247,8 @@ export const NotificationScreen: React.FC = () => {
           )}
         </View>
 
-        {/* 30-Second Ambient Audio Evidence Player (for Real SOS) */}
-        {isEmergency && (
+        {/* Ambient Audio Evidence Player (Only if audioUrl provided) */}
+        {Boolean(isEmergency && item.audioUrl) && (
           <View
             style={[
               styles.audioPlayerBox,
@@ -444,7 +444,7 @@ export const NotificationScreen: React.FC = () => {
               >
                 No emergency SOS alerts or test drills received. When someone in
                 your trusted circle triggers SOS, high-priority alerts with live
-                GPS and 30s recorded audio will appear right here.
+                GPS and dispatch coordinates will appear right here.
               </Text>
             </View>
           }

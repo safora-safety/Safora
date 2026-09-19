@@ -131,7 +131,7 @@ stateDiagram-v2
 
 ## 4. Anti-Abuse & Moderation
 
-1. **Submission Rate Limiting**: Max 5 hazard reports per user per hour.
+1. **Submission Rate Limiting**: Max 20 hazard reports per 15 minutes per IP.
 2. **Text Sanitization & Name Filter**: Free-text descriptions are automatically scanned against a blocklist of personal identifiers to prevent harassment, defamation, or false accusations against individuals.
 3. **Admin Moderation Flagging**: Reports flagged by multiple users are temporarily hidden from the global heatmap until an administrator verifies them in the Admin Dashboard.
 

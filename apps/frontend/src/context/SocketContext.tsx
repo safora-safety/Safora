@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Socket } from 'socket.io-client';
 import { socketService } from '../services/socketService';
+import { sosService } from '../services/sosService';
+import { useAuth } from './AuthContext';
 
 export interface InboundSosAlert {
   alertId: string | number;
@@ -18,22 +20,29 @@ interface SocketContextType {
   isConnected: boolean;
   activeEmergency: InboundSosAlert | null;
   dismissEmergency: () => void;
-  broadcastTestSos: (lat: number, lng: number) => void;
+  broadcastTestSos: (lat: number, lng: number) => Promise<void>;
 }
 
 const SocketContext = createContext<SocketContextType | undefined>(undefined);
 
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { token } = useAuth();
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [activeEmergency, setActiveEmergency] = useState<InboundSosAlert | null>(null);
 
   useEffect(() => {
-    const s = socketService.connect();
+    const s = socketService.connect(token);
+    if (!s) {
+      return;
+    }
     setSocket(s);
 
-    s.on('connect', () => setIsConnected(true));
-    s.on('disconnect', () => setIsConnected(false));
+    const onConnect = () => setIsConnected(true);
+    const onDisconnect = () => setIsConnected(false);
+
+    s.on('connect', onConnect);
+    s.on('disconnect', onDisconnect);
 
     // Listen to real-time incoming emergency alerts
     s.on('sos:alert', (data: InboundSosAlert) => {
@@ -60,22 +69,23 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
 
     return () => {
+      s.off('connect', onConnect);
+      s.off('disconnect', onDisconnect);
       s.off('sos:alert');
+      socketService.disconnect();
     };
-  }, []);
+  }, [token]);
 
   const dismissEmergency = () => {
     setActiveEmergency(null);
   };
 
-  const broadcastTestSos = (lat: number, lng: number) => {
-    if (socket) {
-      socket.emit('sos:trigger', {
-        alertId: `drill-${Date.now()}`,
-        userId: 'admin-dispatch',
-        latitude: lat,
-        longitude: lng,
-      });
+  const broadcastTestSos = async (lat: number, lng: number) => {
+    try {
+      await sosService.triggerDispatcherSOS(lat, lng);
+      console.log('[SocketContext] Verified test SOS triggered via REST dispatch API');
+    } catch (err) {
+      console.error('[SocketContext] Failed to trigger dispatcher drill SOS:', err);
     }
   };
 

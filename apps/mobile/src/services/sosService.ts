@@ -19,44 +19,26 @@ export class SosService {
   /**
    * Broadcast emergency SOS alert
    */
-  static async triggerSOS(
-    payload: TriggerSosPayload,
-  ): Promise<{
+  static async triggerSOS(payload: TriggerSosPayload): Promise<{
     alert: SosAlert;
     contactsNotified: number;
     isOffline?: boolean;
   }> {
-    try {
-      const res = await apiClient.post<
-        ApiResponse<{ alert: SosAlert; contactsNotified: number }> & {
-          alert: SosAlert;
-          contactsNotified: number;
-        }
-      >('/sos', payload);
+    const res = await apiClient.post<
+      ApiResponse<{ alert: SosAlert; contactsNotified: number }> & {
+        alert: SosAlert;
+        contactsNotified: number;
+      }
+    >('/sos', payload);
 
-      return {
-        alert: res.data.alert || (res.data as any).data?.alert,
-        contactsNotified:
-          res.data.contactsNotified ??
-          (res.data as any).data?.contactsNotified ??
-          0,
-        isOffline: false,
-      };
-    } catch {
-      return {
-        alert: {
-          id: 'sos-' + Date.now(),
-          userId: 'current-user',
-          latitude: payload.latitude,
-          longitude: payload.longitude,
-          status: 'dispatched',
-          batteryPercentage: payload.battery_percentage,
-          createdAt: new Date().toISOString(),
-        },
-        contactsNotified: 2,
-        isOffline: true,
-      };
-    }
+    return {
+      alert: res.data.alert || (res.data as any).data?.alert,
+      contactsNotified:
+        res.data.contactsNotified ??
+        (res.data as any).data?.contactsNotified ??
+        0,
+      isOffline: false,
+    };
   }
 
   /**
@@ -71,22 +53,7 @@ export class SosService {
       >('/sos/contacts');
       return res.data.contacts || (res.data as any).data?.contacts || [];
     } catch {
-      return [
-        {
-          id: 'police-112',
-          userId: 'u1',
-          name: 'Police Emergency Response',
-          relationship: 'National Emergency Helpline',
-          phone: '112',
-        },
-        {
-          id: 'ambulance-108',
-          userId: 'u1',
-          name: 'National Ambulance Helpline',
-          relationship: 'Medical Emergency Dispatch',
-          phone: '108',
-        },
-      ];
+      return [];
     }
   }
 
@@ -99,35 +66,19 @@ export class SosService {
     email?: string;
     relationship?: string;
   }): Promise<TrustedContact> {
-    try {
-      const res = await apiClient.post<
-        ApiResponse<{ contact: TrustedContact }> & {
-          contact: TrustedContact;
-        }
-      >('/sos/contacts', contact);
-      return res.data.contact || (res.data as any).data?.contact;
-    } catch {
-      return {
-        id: 'contact-' + Date.now(),
-        userId: 'current-user',
-        name: contact.name,
-        phone: contact.phone,
-        email: contact.email,
-        relationship: contact.relationship,
-        createdAt: new Date().toISOString(),
-      };
-    }
+    const res = await apiClient.post<
+      ApiResponse<{ contact: TrustedContact }> & {
+        contact: TrustedContact;
+      }
+    >('/sos/contacts', contact);
+    return res.data.contact || (res.data as any).data?.contact;
   }
 
   /**
    * Delete an emergency trusted contact
    */
   static async deleteContact(contactId: string | number): Promise<void> {
-    try {
-      await apiClient.delete(`/sos/contacts/${contactId}`);
-    } catch {
-      // Offline fallback
-    }
+    await apiClient.delete(`/sos/contacts/${contactId}`);
   }
 
   /**
@@ -167,11 +118,11 @@ export class SosService {
       return res.data;
     } catch (e: any) {
       return {
-        success: true,
+        success: false,
         deliveredToApp: false,
         message:
           e?.response?.data?.message ||
-          'Direct cellular SMS drill simulated to guardian.',
+          'Failed to send drill alert. Please check your internet connection.',
       };
     }
   }

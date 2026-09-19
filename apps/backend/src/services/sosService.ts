@@ -43,6 +43,7 @@ export class SosService {
     const userName = userRow?.name || "SAFORA Citizen";
     const userPhone = userRow?.phone || undefined;
 
+    const guardianUserIds: (string | number)[] = [];
     let fcmTokens: string[] = [];
 
     // Deliver in-app notification to all trusted guardians registered on Safora
@@ -51,6 +52,9 @@ export class SosService {
         try {
           const guardianUser = await SosRepository.findUserByEmail(c.email);
           if (guardianUser) {
+            if (!guardianUserIds.includes(guardianUser.id)) {
+              guardianUserIds.push(guardianUser.id);
+            }
             // Save in-app notification in guardian's notification inbox
             await SosRepository.createNotification({
               userId: guardianUser.id,
@@ -85,10 +89,13 @@ export class SosService {
 
       if (contactPhones.length > 0) {
         const queryRes = await db.query(
-          "SELECT fcm_token FROM users WHERE phone = ANY($1) AND fcm_token IS NOT NULL;",
+          "SELECT id, fcm_token FROM users WHERE phone = ANY($1);",
           [contactPhones],
         );
         for (const r of queryRes.rows) {
+          if (!guardianUserIds.includes(r.id)) {
+            guardianUserIds.push(r.id);
+          }
           if (r.fcm_token && !fcmTokens.includes(r.fcm_token)) {
             fcmTokens.push(r.fcm_token);
           }
@@ -109,7 +116,7 @@ export class SosService {
       }).catch((err) => console.log("[WARN] FCM broadcast error:", err));
     }
 
-    // Broadcast emergency SOS to verified connected sockets (Admin & Staff web dashboards)
+    // Broadcast emergency SOS strictly to authorized staff and confirmed guardians
     broadcastSosAlert({
       alertId: row.id,
       userId: data.userId,
@@ -118,6 +125,7 @@ export class SosService {
       longitude: data.longitude,
       batteryPercentage: data.batteryPercentage,
       audioUrl: finalAudioUrl,
+      guardianUserIds,
     });
 
     return {

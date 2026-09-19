@@ -68,7 +68,6 @@ export const CalculatorDecoyModal: React.FC<CalculatorDecoyModalProps> = ({
         await SosService.triggerSOS({
           latitude: coords.latitude,
           longitude: coords.longitude,
-          battery_percentage: 90,
         });
       } catch {
         // Silently fails without suspicious error dialogs

@@ -183,8 +183,7 @@ export const ContactModal: React.FC<ContactModalProps> = ({
                   : 'Add Emergency Contact'}
               </Text>
               <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-                Will receive priority SOS notifications, live GPS, and audio
-                evidence
+                Will receive priority SOS notifications and live GPS tracking
               </Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
@@ -247,14 +246,12 @@ export const ContactModal: React.FC<ContactModalProps> = ({
               />
             </View>
 
-            {/* Email Address Input (for In-App Alerts & 30s Audio) */}
+            {/* Email Address Input (for In-App Push Alerts) */}
             <View style={styles.group}>
               <View style={styles.labelWithBadge}>
                 <Text style={[styles.label, { color: colors.textPrimary }]}>
                   Email Address{' '}
-                  <Text style={styles.optional}>
-                    (for in-app alerts & 30s audio)
-                  </Text>
+                  <Text style={styles.optional}>(for in-app push alerts)</Text>
                 </Text>
                 {isCheckingEmail && (
                   <ActivityIndicator size="small" color="#38BDF8" />
@@ -286,7 +283,7 @@ export const ContactModal: React.FC<ContactModalProps> = ({
                 <View style={styles.badgeSuccess}>
                   <Text style={styles.badgeSuccessText}>
                     🟢 Registered on Safora ({guardianName || 'Active Account'})
-                    • In-app push alerts & 30s live audio enabled!
+                    • In-app push notifications enabled!
                   </Text>
                 </View>
               )}

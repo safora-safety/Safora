@@ -7,13 +7,26 @@ class SocketService {
   private socket: Socket | null = null;
   private isConnected = false;
 
-  connect(): Socket {
+  connect(explicitToken?: string | null): Socket | null {
+    const token = explicitToken || localStorage.getItem('safora_admin_token');
+    if (!token) {
+      console.log('[Socket.IO] No admin JWT token available. Skipping connection.');
+      return null;
+    }
+
     if (this.socket) {
-      return this.socket;
+      if (this.socket.connected) {
+        return this.socket;
+      }
+      this.socket.disconnect();
+      this.socket = null;
     }
 
     this.socket = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
+      auth: {
+        token,
+      },
       reconnectionAttempts: 5,
       reconnectionDelay: 2000,
       autoConnect: true,
