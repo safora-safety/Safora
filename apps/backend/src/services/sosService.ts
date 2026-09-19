@@ -12,6 +12,7 @@ import { TrustedContactModel } from "../models/TrustedContact";
 import { NotificationModel } from "../models/Notification";
 import { db } from "../config/database";
 import { CloudinaryService } from "./cloudinaryService";
+import { broadcastSosAlert } from "../sockets/journeySocket";
 
 export class SosService {
   static async triggerSOS(data: {
@@ -23,23 +24,7 @@ export class SosService {
     journeyId?: string | number | null;
     audioUrl?: string | null;
   }): Promise<{ alert: SosAlert; contactsNotified: number }> {
-    let finalAudioUrl = data.audioUrl;
-    // Automatically upload 30-second emergency ambient audio recording to Cloudinary
-    if (!finalAudioUrl || !finalAudioUrl.includes("res.cloudinary.com")) {
-      try {
-        finalAudioUrl = await CloudinaryService.uploadEmergencyRecording(
-          data.userId,
-        );
-        console.log(
-          `[INFO] Live 30s SOS audio evidence uploaded to Cloudinary: ${finalAudioUrl}`,
-        );
-      } catch (cloudErr) {
-        console.warn(
-          "[WARN] Could not upload SOS audio to Cloudinary:",
-          cloudErr,
-        );
-      }
-    }
+    const finalAudioUrl = data.audioUrl || null;
 
     const row = await SosRepository.createAlert({
       userId: data.userId,
@@ -123,6 +108,17 @@ export class SosService {
         batteryPercentage: data.batteryPercentage,
       }).catch((err) => console.log("[WARN] FCM broadcast error:", err));
     }
+
+    // Broadcast emergency SOS to verified connected sockets (Admin & Staff web dashboards)
+    broadcastSosAlert({
+      alertId: row.id,
+      userId: data.userId,
+      userName,
+      latitude: data.latitude,
+      longitude: data.longitude,
+      batteryPercentage: data.batteryPercentage,
+      audioUrl: finalAudioUrl,
+    });
 
     return {
       alert: SosAlertModel.fromRow(row),

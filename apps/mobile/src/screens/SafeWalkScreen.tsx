@@ -87,6 +87,9 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
   const [journeyId, setJourneyId] = useState<string | number | null>(null);
   const [secondsRemaining, setSecondsRemaining] = useState(600);
   const [isDeviated, setIsDeviated] = useState(false);
+  const [deviationCountdown, setDeviationCountdown] = useState<number | null>(
+    null,
+  );
   const [batteryLevel, setBatteryLevel] = useState(82); // Simulated battery check
   const [showArrivalModal, setShowArrivalModal] = useState(false);
 
@@ -111,9 +114,26 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
         accuracy: updatedCoords.accuracy,
         isLive: true,
       }));
+
+      // Stream live coordinates to backend during active walk
+      if (journeyId) {
+        JourneyService.updateLocation(journeyId, {
+          latitude: updatedCoords.latitude,
+          longitude: updatedCoords.longitude,
+        })
+          .then(res => {
+            if (res && res.isDeviated && !isDeviated) {
+              triggerDeviationPrompt(
+                'Corridor Deviation Detected',
+                'You have moved away from the planned safe pedestrian route.',
+              );
+            }
+          })
+          .catch(() => {});
+      }
     });
     return () => unsub();
-  }, [isActive]);
+  }, [isActive, journeyId, isDeviated]);
 
   // Handle hardware back press inside SafeWalkScreen
   useEffect(() => {
@@ -206,6 +226,40 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
     return () => clearInterval(timer);
   }, [isActive, secondsRemaining]);
 
+  // 60-second Auto-Escalation Timer on Corridor Deviation
+  useEffect(() => {
+    let interval: any;
+    if (isDeviated && deviationCountdown !== null && deviationCountdown > 0) {
+      interval = setInterval(() => {
+        setDeviationCountdown(prev => (prev !== null ? prev - 1 : null));
+      }, 1000);
+    } else if (isDeviated && deviationCountdown === 0) {
+      // 60s expired without confirmation: Automatically escalate to Emergency SOS
+      setDeviationCountdown(null);
+      setIsDeviated(false);
+      Vibration.vibrate([0, 1000, 500, 1000]);
+      SosService.triggerSOS({
+        latitude: userPos.latitude,
+        longitude: userPos.longitude,
+        battery_percentage: batteryLevel,
+        journey_id: journeyId,
+      })
+        .then(res => {
+          Alert.alert(
+            '🚨 Auto-Escalation: Emergency SOS Dispatched',
+            `No response received within 60 seconds of route deviation. Emergency alerts transmitted to ${res.contactsNotified} emergency contacts with live GPS coordinates (${userPos.latitude.toFixed(4)}, ${userPos.longitude.toFixed(4)}).`,
+          );
+        })
+        .catch(() => {
+          Alert.alert(
+            '🚨 Auto-Escalation Alert',
+            '60-second deviation window expired. Emergency distress broadcast triggered.',
+          );
+        });
+    }
+    return () => clearInterval(interval);
+  }, [isDeviated, deviationCountdown, userPos, batteryLevel, journeyId]);
+
   const handleSelectPlace = (place: PlaceSearchResult) => {
     setDestPos({
       latitude: place.latitude,
@@ -260,6 +314,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
     }
     setIsActive(false);
     setIsDeviated(false);
+    setDeviationCountdown(null);
     setShowArrivalModal(true);
   };
 
@@ -277,19 +332,24 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
 
   const triggerDeviationPrompt = (title: string, msg: string) => {
     setIsDeviated(true);
+    setDeviationCountdown(60);
     Vibration.vibrate([0, 500, 200, 500]);
     Alert.alert(
       `⚠️ ${title}`,
-      `${msg}\n\nEmergency contacts will be dispatched in 60s if not confirmed.`,
+      `${msg}\n\nEmergency contacts will be auto-dispatched in 60s if not confirmed.`,
       [
         {
           text: 'I AM SAFE',
-          onPress: () => setIsDeviated(false),
+          onPress: () => {
+            setIsDeviated(false);
+            setDeviationCountdown(null);
+          },
         },
         {
           text: 'DISPATCH SOS',
           style: 'destructive',
           onPress: async () => {
+            setDeviationCountdown(null);
             Vibration.vibrate([0, 800, 300, 800]);
             try {
               const res = await SosService.triggerSOS({

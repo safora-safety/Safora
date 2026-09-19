@@ -69,6 +69,11 @@ jobs:
       - name: Build Backend Gateway
         run: npm run build --workspace=apps/backend
 
+      - name: Run Backend Unit Tests
+        run: npm run test --workspace=apps/backend -- --passWithNoTests
+        env:
+          JWT_SECRET: "ci-test-secret-citizens-as-sensors-2026"
+
   # ── 3. Validate Web Operations Command Frontend ───────────────────────────
   frontend:
     name: Validate Web Admin (Vite + React)

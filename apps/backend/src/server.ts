@@ -9,10 +9,26 @@ const PORT = process.env.PORT || 5000;
 
 const server = http.createServer(app);
 
+const allowedOrigins = [
+  "https://safora-admin.onrender.com",
+  "http://localhost:5173",
+  "http://localhost:3000",
+  ...(process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())
+    : []),
+];
+
 const io = new SocketIOServer(server, {
   cors: {
-    origin: "*",
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`Socket CORS origin not allowed: ${origin}`));
+      }
+    },
     methods: ["GET", "POST", "PATCH", "DELETE"],
+    credentials: true,
   },
 });
 

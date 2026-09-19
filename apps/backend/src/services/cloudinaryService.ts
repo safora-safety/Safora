@@ -3,12 +3,11 @@ import { v2 as cloudinary } from "cloudinary";
 import multer from "multer";
 import { AppError } from "../errors/AppError";
 
-// Configure Cloudinary from environment variables
+// Configure Cloudinary strictly from environment variables
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || "cnlogqrt",
-  api_key: process.env.CLOUDINARY_API_KEY || "336196636144166",
-  api_secret:
-    process.env.CLOUDINARY_API_SECRET || "4wMyhhZO2VYAREASDkskHf-K6Xg",
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
   secure: true,
 });
 
@@ -128,63 +127,5 @@ export class CloudinaryService {
 
       uploadStream.end(buffer);
     });
-  }
-
-  /**
-   * Synthesizes an authentic 30-second emergency ambient audio recording (WAV format)
-   * with alternating pulse distress tones (880Hz / 440Hz).
-   */
-  static generateEmergencyAudioBuffer(durationSeconds = 30): Buffer {
-    const sampleRate = 8000;
-    const numSamples = sampleRate * durationSeconds;
-    const headerSize = 44;
-    const dataSize = numSamples * 2; // 16-bit mono = 2 bytes/sample
-    const totalSize = headerSize + dataSize;
-    const buffer = Buffer.alloc(totalSize);
-
-    // RIFF chunk descriptor
-    buffer.write("RIFF", 0);
-    buffer.writeUInt32LE(36 + dataSize, 4);
-    buffer.write("WAVE", 8);
-
-    // fmt sub-chunk
-    buffer.write("fmt ", 12);
-    buffer.writeUInt32LE(16, 16); // subchunk size (16 for PCM)
-    buffer.writeUInt16LE(1, 20); // audio format (1 = PCM)
-    buffer.writeUInt16LE(1, 22); // num channels (1 = mono)
-    buffer.writeUInt32LE(sampleRate, 24); // sample rate
-    buffer.writeUInt32LE(sampleRate * 2, 28); // byte rate (sampleRate * numChannels * bitsPerSample/8)
-    buffer.writeUInt16LE(2, 32); // block align
-    buffer.writeUInt16LE(16, 34); // bits per sample
-
-    // data sub-chunk
-    buffer.write("data", 36);
-    buffer.writeUInt32LE(dataSize, 40);
-
-    // Synthesize 30s ambient distress pulse
-    for (let i = 0; i < numSamples; i++) {
-      const t = i / sampleRate;
-      // Siren alternate every 0.5s between 660Hz and 880Hz
-      const freq = Math.floor(t * 2) % 2 === 0 ? 660 : 880;
-      const sample = Math.sin(2 * Math.PI * freq * t) * 0.25;
-      buffer.writeInt16LE(Math.floor(sample * 32767), headerSize + i * 2);
-    }
-
-    return buffer;
-  }
-
-  /**
-   * Uploads a 30s emergency distress audio recording directly to Cloudinary
-   * and returns the live secure URL.
-   */
-  static async uploadEmergencyRecording(
-    userId: string | number,
-  ): Promise<string> {
-    const audioBuffer = this.generateEmergencyAudioBuffer(30);
-    const result = await this.uploadAudioEvidence(
-      audioBuffer,
-      `user-${userId}-sos-30s`,
-    );
-    return result.url;
   }
 }

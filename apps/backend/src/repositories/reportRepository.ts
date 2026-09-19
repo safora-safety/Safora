@@ -142,6 +142,58 @@ export class ReportRepository {
     }));
   }
 
+  /**
+   * PostGIS density-based spatial clustering of active hazards
+   * @param epsDistanceDegrees Epsilon neighborhood (~0.003 is ~330 meters)
+   * @param minPoints Minimum points to form a cluster core
+   */
+  static async findDbscanClusters(
+    epsDistanceDegrees = 0.003,
+    minPoints = 2,
+  ): Promise<
+    Array<{
+      clusterId: number;
+      pointCount: number;
+      avgSeverity: number;
+      centerLatitude: number;
+      centerLongitude: number;
+      reportIds: number[];
+    }>
+  > {
+    const result = await db.query(
+      `SELECT
+         cid as cluster_id,
+         COUNT(*)::int as point_count,
+         ROUND(AVG(severity)::numeric, 1)::float as avg_severity,
+         ST_Y(ST_Centroid(ST_Collect(location::geometry))) as center_lat,
+         ST_X(ST_Centroid(ST_Collect(location::geometry))) as center_lng,
+         ARRAY_AGG(id) as report_ids
+       FROM (
+         SELECT
+           id,
+           severity,
+           location,
+           ST_ClusterDBSCAN(location::geometry, eps := $1, minpoints := $2) OVER () as cid
+         FROM reports
+         WHERE status = 'active'
+       ) sub
+       WHERE cid IS NOT NULL
+       GROUP BY cid
+       HAVING COUNT(*) >= $2
+       ORDER BY point_count DESC;`,
+      [epsDistanceDegrees, minPoints],
+    );
+
+    return result.rows.map((r: any) => ({
+      clusterId: Number(r.cluster_id),
+      pointCount: Number(r.point_count),
+      avgSeverity: Number(r.avg_severity),
+      centerLatitude: Number(r.center_lat),
+      centerLongitude: Number(r.center_lng),
+      reportIds: r.report_ids || [],
+    }));
+  }
+
   static async getCategoryCounts(): Promise<
     Array<{ category: string; count: number }>
   > {

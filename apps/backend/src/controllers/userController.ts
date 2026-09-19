@@ -33,13 +33,11 @@ export async function listUsers(
     });
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Failed to fetch users",
-        error: errorMsg,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch users",
+      error: errorMsg,
+    });
   }
 }
 
@@ -66,13 +64,11 @@ export async function getUserStats(
     });
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Failed to fetch user stats",
-        error: errorMsg,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch user stats",
+      error: errorMsg,
+    });
   }
 }
 
@@ -85,12 +81,10 @@ export async function updateUserRole(
     const { role } = req.body;
 
     if (!role || !["user", "moderator", "admin"].includes(role)) {
-      res
-        .status(400)
-        .json({
-          success: false,
-          message: "Invalid role. Must be 'user', 'moderator', or 'admin'.",
-        });
+      res.status(400).json({
+        success: false,
+        message: "Invalid role. Must be 'user', 'moderator', or 'admin'.",
+      });
       return;
     }
 
@@ -107,13 +101,11 @@ export async function updateUserRole(
     });
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Failed to update user role",
-        error: errorMsg,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Failed to update user role",
+      error: errorMsg,
+    });
   }
 }
 
@@ -145,12 +137,44 @@ export async function updateUserStatus(
     });
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Failed to update user status",
-        error: errorMsg,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Failed to update user status",
+      error: errorMsg,
+    });
+  }
+}
+
+export async function updateFcmToken(
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: "Unauthorized" });
+      return;
+    }
+    const { token } = req.body;
+    if (token !== null && typeof token !== "string") {
+      res
+        .status(400)
+        .json({ success: false, message: "token must be a string or null" });
+      return;
+    }
+
+    await UserRepository.updateUser(req.user.id, {
+      fcm_token: token ? token.trim() : null,
+    });
+    res.status(200).json({
+      success: true,
+      message: "Push notification token updated successfully",
+    });
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update push token",
+      error: errorMsg,
+    });
   }
 }

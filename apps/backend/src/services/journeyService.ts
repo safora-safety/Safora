@@ -27,10 +27,21 @@ export class JourneyService {
   static async updateLocation(
     journeyId: string | number,
     coords: { latitude: number; longitude: number },
+    userId?: string | number,
+    userRole?: string,
   ): Promise<{ onRoute: boolean; distanceToDestinationMeters: number }> {
     const row = await JourneyRepository.findById(journeyId);
     if (!row || row.status !== "active") {
       throw new AppError("Active journey not found", 404);
+    }
+
+    if (
+      userId !== undefined &&
+      String(row.user_id) !== String(userId) &&
+      userRole !== "admin" &&
+      userRole !== "moderator"
+    ) {
+      throw new AppError("Forbidden: You do not own this journey", 403);
     }
 
     // Haversine distance to destination
@@ -55,17 +66,57 @@ export class JourneyService {
     };
   }
 
-  static async completeJourney(journeyId: string | number): Promise<void> {
-    const updated = await JourneyRepository.setStatus(journeyId, "completed");
-    if (!updated) {
+  static async completeJourney(
+    journeyId: string | number,
+    userId?: string | number,
+    userRole?: string,
+  ): Promise<void> {
+    const row = await JourneyRepository.findById(journeyId);
+    if (!row) {
       throw new AppError("Journey not found", 404);
     }
+
+    if (
+      userId !== undefined &&
+      String(row.user_id) !== String(userId) &&
+      userRole !== "admin" &&
+      userRole !== "moderator"
+    ) {
+      throw new AppError("Forbidden: You do not own this journey", 403);
+    }
+
+    await JourneyRepository.updateStatus(
+      journeyId,
+      row.user_id,
+      "completed",
+      true,
+    );
   }
 
-  static async cancelJourney(journeyId: string | number): Promise<void> {
-    const updated = await JourneyRepository.setStatus(journeyId, "cancelled");
-    if (!updated) {
+  static async cancelJourney(
+    journeyId: string | number,
+    userId?: string | number,
+    userRole?: string,
+  ): Promise<void> {
+    const row = await JourneyRepository.findById(journeyId);
+    if (!row) {
       throw new AppError("Journey not found", 404);
     }
+
+    if (
+      userId !== undefined &&
+      String(row.user_id) !== String(userId) &&
+      userRole !== "admin" &&
+      userRole !== "moderator"
+    ) {
+      throw new AppError("Forbidden: You do not own this journey", 403);
+    }
+
+    await JourneyRepository.updateStatus(
+      journeyId,
+      row.user_id,
+      "cancelled",
+      true,
+    );
   }
 }

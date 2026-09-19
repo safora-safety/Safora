@@ -249,3 +249,22 @@ export async function getAnalyticsSummary(
     next(err);
   }
 }
+
+export async function getDbscanClusters(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const eps = parseFloat(String(req.query.eps || "0.003")) || 0.003;
+    const minPoints = parseInt(String(req.query.min_points || "2"), 10) || 2;
+    const clusters = await ReportService.getDbscanClusters(eps, minPoints);
+    res.status(200).json({
+      success: true,
+      count: clusters.length,
+      clusters,
+    });
+  } catch (err) {
+    next(err);
+  }
+}

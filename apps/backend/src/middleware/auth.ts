@@ -1,7 +1,13 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+import { UserRepository } from "../repositories/userRepository";
 
-const JWT_SECRET = process.env.JWT_SECRET || "safora_jwt_secret_fallback_key";
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error(
+    "FATAL: JWT_SECRET environment variable is not defined. Refusing to start with insecure fallbacks.",
+  );
+}
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -11,11 +17,11 @@ export interface AuthenticatedRequest extends Request {
   };
 }
 
-export function authMiddleware(
+export async function authMiddleware(
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction,
-): void {
+): Promise<void> {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -28,12 +34,28 @@ export function authMiddleware(
   const token = authHeader.split(" ")[1];
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as {
+    const decoded = jwt.verify(token, JWT_SECRET!) as {
       id: number;
       email: string;
       role?: string;
     };
-    req.user = decoded;
+
+    const user = await UserRepository.findById(decoded.id);
+    if (!user || user.is_active === false) {
+      res
+        .status(401)
+        .json({
+          success: false,
+          message: "User account is inactive or suspended",
+        });
+      return;
+    }
+
+    req.user = {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+    };
     next();
   } catch {
     res
@@ -48,12 +70,10 @@ export function requireAdmin(
   next: NextFunction,
 ): void {
   if (!req.user || req.user.role !== "admin") {
-    res
-      .status(403)
-      .json({
-        success: false,
-        message: "Forbidden: Admin privileges required",
-      });
+    res.status(403).json({
+      success: false,
+      message: "Forbidden: Admin privileges required",
+    });
     return;
   }
   next();
@@ -68,12 +88,10 @@ export function requireStaff(
     !req.user ||
     (req.user.role !== "admin" && req.user.role !== "moderator")
   ) {
-    res
-      .status(403)
-      .json({
-        success: false,
-        message: "Forbidden: Staff privileges required",
-      });
+    res.status(403).json({
+      success: false,
+      message: "Forbidden: Staff privileges required",
+    });
     return;
   }
   next();

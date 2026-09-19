@@ -3,14 +3,12 @@ import { getMessaging } from "firebase-admin/messaging";
 
 let isFirebaseInitialized = false;
 
-// Initialize Firebase Admin SDK using service account credentials
+// Initialize Firebase Admin SDK strictly using service account credentials from environment
 try {
-  const projectId = process.env.FIREBASE_PROJECT_ID || "safora-4dd69";
-  const clientEmail =
-    process.env.FIREBASE_CLIENT_EMAIL ||
-    "firebase-adminsdk-fbsvc@safora-4dd69.iam.gserviceaccount.com";
+  const projectId = (process.env.FIREBASE_PROJECT_ID || "").trim();
+  const clientEmail = (process.env.FIREBASE_CLIENT_EMAIL || "").trim();
   const rawKey = process.env.FIREBASE_PRIVATE_KEY || "";
-  const privateKey = rawKey.replace(/\\n/g, "\n");
+  const privateKey = rawKey.replace(/\\n/g, "\n").trim();
 
   if (projectId && clientEmail && privateKey) {
     if (!getApps().length) {
@@ -28,7 +26,7 @@ try {
     }
   } else {
     console.log(
-      "[WARN] Firebase credentials incomplete; push notifications disabled",
+      "[WARN] Firebase credentials incomplete in environment; push notifications disabled",
     );
   }
 } catch (err: unknown) {
@@ -50,11 +48,14 @@ export class FirebaseService {
       batteryPercentage?: number;
     },
   ): Promise<{ successCount: number; failureCount: number }> {
-    if (!isFirebaseInitialized || fcmTokens.length === 0) {
-      console.log(
-        `[PUSH SIMULATION] SOS Alert from ${data.userName} at (${data.latitude}, ${data.longitude}) to ${fcmTokens.length} tokens`,
+    if (!isFirebaseInitialized) {
+      console.warn(
+        `[WARN] Firebase not initialized; cannot dispatch SOS push notification for ${data.userName}`,
       );
-      return { successCount: fcmTokens.length, failureCount: 0 };
+      return { successCount: 0, failureCount: fcmTokens.length };
+    }
+    if (fcmTokens.length === 0) {
+      return { successCount: 0, failureCount: 0 };
     }
 
     try {
@@ -105,12 +106,13 @@ export class FirebaseService {
       longitude: number;
     },
   ): Promise<void> {
-    if (!isFirebaseInitialized || fcmTokens.length === 0) {
-      console.log(
-        `[PUSH SIMULATION] Safe Walk Deviation: ${data.userName} is ${data.deviationMeters}m off-route`,
+    if (!isFirebaseInitialized) {
+      console.warn(
+        `[WARN] Firebase not initialized; cannot dispatch Safe Walk deviation push alert for ${data.userName}`,
       );
       return;
     }
+    if (fcmTokens.length === 0) return;
 
     try {
       await getMessaging().sendEachForMulticast({

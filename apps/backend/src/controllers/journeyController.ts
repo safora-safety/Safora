@@ -127,6 +127,8 @@ export async function updateLocation(
         latitude: req.body.latitude,
         longitude: req.body.longitude,
       },
+      req.user?.id,
+      req.user?.role,
     );
 
     res.status(200).json({
@@ -144,7 +146,11 @@ export async function completeJourney(
   next: NextFunction,
 ): Promise<void> {
   try {
-    await JourneyService.completeJourney(req.params.id as string);
+    await JourneyService.completeJourney(
+      req.params.id as string,
+      req.user?.id,
+      req.user?.role,
+    );
     res.status(200).json({
       success: true,
       message: "Journey completed safely",
@@ -160,7 +166,11 @@ export async function cancelJourney(
   next: NextFunction,
 ): Promise<void> {
   try {
-    await JourneyService.cancelJourney(req.params.id as string);
+    await JourneyService.cancelJourney(
+      req.params.id as string,
+      req.user?.id,
+      req.user?.role,
+    );
     res.status(200).json({
       success: true,
       message: "Journey cancelled",

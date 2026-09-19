@@ -7,7 +7,7 @@ import {
   getActiveJourneys,
   getAllJourneys,
 } from "../controllers/journeyController";
-import { authMiddleware } from "../middleware/auth";
+import { authMiddleware, requireStaff } from "../middleware/auth";
 import { validateBody } from "../middleware/validate";
 import {
   startJourneySchema,
@@ -18,8 +18,8 @@ const router = Router();
 
 router.use(authMiddleware as any);
 
-router.get("/active", getActiveJourneys);
-router.get("/", getAllJourneys);
+router.get("/active", requireStaff as any, getActiveJourneys);
+router.get("/", requireStaff as any, getAllJourneys);
 router.post("/start", validateBody(startJourneySchema), startJourney);
 router.patch(
   "/:id/location",

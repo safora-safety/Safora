@@ -29,6 +29,9 @@ const DiagnosticsPage = React.lazy(() =>
 const UsersPage = React.lazy(() =>
   import('./pages/UsersPage').then((m) => ({ default: m.UsersPage }))
 );
+const SettingsPage = React.lazy(() =>
+  import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage }))
+);
 
 // High-visibility Error Boundary
 interface ErrorBoundaryState {
@@ -133,6 +136,7 @@ const AppRoutes: React.FC = () => {
         <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="users" element={<UsersPage />} />
         <Route path="diagnostics" element={<DiagnosticsPage />} />
+        <Route path="settings" element={<SettingsPage />} />
       </Route>
 
       {/* Fallback route */}

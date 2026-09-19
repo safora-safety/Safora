@@ -12,7 +12,7 @@ export class UserRepository {
 
   static async findById(id: string | number): Promise<UserRow | null> {
     const result = await db.query(
-      "SELECT id, name, email, phone, blood_group, emergency_notes, role, created_at FROM users WHERE id = $1 LIMIT 1;",
+      "SELECT id, name, email, phone, blood_group, emergency_notes, role, is_active, created_at FROM users WHERE id = $1 LIMIT 1;",
       [id],
     );
     return result.rows[0] || null;

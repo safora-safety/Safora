@@ -66,6 +66,22 @@ export class ReportService {
     return result;
   }
 
+  static async getDbscanClusters(
+    epsDegrees = 0.003,
+    minPoints = 2,
+  ): Promise<any[]> {
+    const cacheKey = `reports_dbscan_${epsDegrees}_${minPoints}`;
+    const cached = MemoryCache.get<any[]>(cacheKey);
+    if (cached) return cached;
+
+    const clusters = await ReportRepository.findDbscanClusters(
+      epsDegrees,
+      minPoints,
+    );
+    MemoryCache.set(cacheKey, clusters, 30);
+    return clusters;
+  }
+
   static async calculateSafetyScore(
     lat: number,
     lng: number,
