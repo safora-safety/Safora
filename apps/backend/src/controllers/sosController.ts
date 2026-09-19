@@ -19,6 +19,7 @@ export async function triggerSOS(
       batteryPercentage: req.body.battery_percentage,
       journeyId: req.body.journey_id,
       audioUrl: req.body.audio_url || req.body.audioUrl,
+      isTest: req.body.is_test ?? req.body.isTest,
     });
 
     res.status(201).json({
@@ -171,6 +172,35 @@ export async function markAllNotificationsRead(
     res.status(200).json({
       success: true,
       message: `${count} notifications marked as read`,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function attachAudio(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (!req.user) throw new AppError("Unauthorized", 401);
+
+    const audioUrl = req.body.audio_url || req.body.audioUrl;
+    if (!audioUrl) {
+      throw new AppError("Audio URL is required", 400);
+    }
+
+    const alert = await SosService.attachAudio(
+      req.params.id as string,
+      req.user.id,
+      audioUrl,
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Audio evidence attached to SOS alert",
+      alert,
     });
   } catch (err) {
     next(err);

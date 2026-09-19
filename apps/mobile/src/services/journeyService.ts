@@ -14,23 +14,16 @@ export class JourneyService {
    * Start a new Safe Walk journey session
    */
   static async startJourney(payload: StartJourneyPayload): Promise<Journey> {
-    try {
-      const res = await apiClient.post<
-        ApiResponse<{ journey: Journey }> & { journey: Journey }
-      >('/journeys/start', payload);
-      return res.data.journey || (res.data as any).data?.journey;
-    } catch {
-      return {
-        id: 'journey-' + Date.now(),
-        userId: 'user-current',
-        origin: payload.origin,
-        destination: payload.destination,
-        plannedRoute: payload.planned_route,
-        trustedContactIds: payload.trusted_contact_ids || [],
-        status: 'active',
-        startedAt: new Date().toISOString(),
-      };
+    const res = await apiClient.post<
+      ApiResponse<{ journey: Journey }> & { journey: Journey }
+    >('/journeys/start', payload);
+    const journey = res.data.journey || (res.data as any).data?.journey;
+    if (!journey) {
+      throw new Error(
+        'Failed to start Safe Walk journey: invalid server response',
+      );
     }
+    return journey;
   }
 
   /**

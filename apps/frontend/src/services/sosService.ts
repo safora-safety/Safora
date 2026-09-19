@@ -48,13 +48,14 @@ export const sosService = {
     await apiClient.patch('/notifications/read-all');
   },
 
-  // Direct trigger for testing dispatcher workflow
+  // Direct trigger for testing dispatcher workflow (Administrative Drill)
   async triggerDispatcherSOS(latitude: number, longitude: number, battery: number = 85): Promise<SosResponse> {
     const response = await apiClient.post<SosResponse>('/sos', {
       latitude,
       longitude,
       accuracy: 5.0,
       battery_percentage: battery,
+      is_test: true,
     });
     return response.data;
   },

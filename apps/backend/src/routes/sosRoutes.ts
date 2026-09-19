@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   triggerSOS,
+  attachAudio,
   getContacts,
   addContact,
   deleteContact,
@@ -10,7 +11,11 @@ import {
 import { authMiddleware } from "../middleware/auth";
 import { validateBody } from "../middleware/validate";
 import { sosRateLimiter } from "../middleware/rateLimiter";
-import { sosAlertSchema, trustedContactSchema } from "../validation/schemas";
+import {
+  sosAlertSchema,
+  trustedContactSchema,
+  attachAudioSchema,
+} from "../validation/schemas";
 import {
   audioUploadMiddleware,
   CloudinaryService,
@@ -23,6 +28,9 @@ router.use(authMiddleware as any);
 
 // SOS
 router.post("/", sosRateLimiter, validateBody(sosAlertSchema), triggerSOS);
+
+// Attach audio evidence to SOS alert
+router.patch("/:id/audio", validateBody(attachAudioSchema), attachAudio);
 
 // Upload real SOS audio evidence
 router.post(

@@ -23,6 +23,7 @@ import { SafetyScoreResponse } from '@safora/shared-types';
 import { FakeCallModal } from '../components/FakeCallModal';
 import { CalculatorDecoyModal } from '../components/CalculatorDecoyModal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AudioRecorderService } from '../services/audioRecorderService';
 
 interface HomeScreenProps {
   onNavigateTab?: (tab: 'Home' | 'Map' | 'SafeWalk' | 'Profile') => void;
@@ -83,14 +84,19 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
   const cancelSos = () => {
     setSosCountdown(null);
     Vibration.cancel();
+    AudioRecorderService.stopSilent().catch(() => {});
     Alert.alert('SOS Cancelled', 'Emergency broadcast was safely aborted.');
   };
 
   const dispatchRealSos = async () => {
     Vibration.vibrate([0, 800, 300, 800]);
 
+    // Start real 30-second ambient audio evidence recording
+    AudioRecorderService.startRecording().catch(() => {});
+
     let onlineSuccess = false;
     let contactsCount = 0;
+    let alertId: string | number | undefined;
 
     try {
       const res = await SosService.triggerSOS({
@@ -101,9 +107,17 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
       if (res && res.alert) {
         onlineSuccess = !res.isOffline;
         contactsCount = res.contactsNotified || 0;
+        alertId = res.alert.id;
       }
     } catch {
       onlineSuccess = false;
+    }
+
+    // After 30 seconds, stop recording and upload audio evidence to Cloudinary
+    if (alertId) {
+      setTimeout(() => {
+        AudioRecorderService.stopAndUpload(alertId).catch(() => {});
+      }, 30000);
     }
 
     // Determine target primary contact for carrier SMS
@@ -136,7 +150,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
     Alert.alert(
       '🚨 EMERGENCY SOS BROADCAST',
       onlineSuccess
-        ? `Emergency broadcast transmitted!\n\n• 📍 GPS: ${coords.latitude.toFixed(4)}°N, ${coords.longitude.toFixed(4)}°E (${coords.areaName})\n• 🔔 ${contactsCount} guardian(s) alerted via push notification.\n\nOpen SMS now to send direct carrier text to ${contactName} (${targetPhone})?`
+        ? `Emergency broadcast transmitted!\n\n• 📍 GPS: ${coords.latitude.toFixed(4)}°N, ${coords.longitude.toFixed(4)}°E (${coords.areaName})\n• 🔔 ${contactsCount} guardian(s) alerted via push notification.\n• 🎙️ 30s ambient audio evidence is recording.\n\nOpen SMS now to send direct carrier text to ${contactName} (${targetPhone})?`
         : `Network offline or server unreachable.\n\nImmediate cellular failover: Send emergency SMS to ${contactName} (${targetPhone}) now with live GPS coordinates?`,
       [
         { text: 'Dismiss', style: 'cancel' },

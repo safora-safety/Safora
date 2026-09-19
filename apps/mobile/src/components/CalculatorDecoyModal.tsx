@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { SosService } from '../services/sosService';
 import { getCurrentCoordinates } from '../services/locationService';
+import { AudioRecorderService } from '../services/audioRecorderService';
 
 interface CalculatorDecoyModalProps {
   visible: boolean;
@@ -53,6 +54,31 @@ export const CalculatorDecoyModal: React.FC<CalculatorDecoyModalProps> = ({
     setClearOnNext(false);
   };
 
+  const dispatchSilentSosWithRetry = async (
+    coords: { latitude: number; longitude: number },
+    attemptsLeft = 3,
+  ): Promise<string | number | undefined> => {
+    const delays = [5000, 15000, 30000];
+    for (let attempt = 0; attempt < attemptsLeft; attempt++) {
+      try {
+        const res = await SosService.triggerSOS({
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+        });
+        if (res?.alert?.id) {
+          return res.alert.id;
+        }
+      } catch {
+        if (attempt < attemptsLeft - 1) {
+          await new Promise(resolve =>
+            setTimeout(resolve, delays[attempt] || 10000),
+          );
+        }
+      }
+    }
+    return undefined;
+  };
+
   const handleEqual = async () => {
     // Secret Duress Check!
     if (display === duressPin) {
@@ -62,16 +88,23 @@ export const CalculatorDecoyModal: React.FC<CalculatorDecoyModalProps> = ({
       setPrevVal(null);
       setOperator(null);
 
-      // Trigger silent background SOS with live coordinates
-      try {
-        const coords = await getCurrentCoordinates();
-        await SosService.triggerSOS({
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-        });
-      } catch {
-        // Silently fails without suspicious error dialogs
-      }
+      // Start silent ambient audio recording
+      AudioRecorderService.startRecording().catch(() => {});
+
+      // Trigger silent background SOS with retry queue
+      (async () => {
+        try {
+          const coords = await getCurrentCoordinates();
+          const alertId = await dispatchSilentSosWithRetry(coords, 3);
+
+          // Schedule silent stop & upload after 30s
+          setTimeout(() => {
+            AudioRecorderService.stopAndUpload(alertId).catch(() => {});
+          }, 30000);
+        } catch {
+          // Silently fails without suspicious error dialogs
+        }
+      })();
       return;
     }
 

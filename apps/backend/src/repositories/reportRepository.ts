@@ -246,7 +246,9 @@ export class ReportRepository {
           COUNT(CASE WHEN status = 'resolved' THEN 1 END)::int as resolved
         FROM reports;
       `),
-      db.query(`SELECT COUNT(*)::int as total FROM sos_alerts;`),
+      db.query(
+        `SELECT COUNT(*)::int as total FROM sos_alerts WHERE is_test IS NOT TRUE;`,
+      ),
       db.query(
         `SELECT COUNT(*)::int as active FROM journeys WHERE status = 'active' OR status = 'deviated';`,
       ),

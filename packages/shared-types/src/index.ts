@@ -98,6 +98,7 @@ export interface SosAlert {
   batteryPercentage?: number;
   status: SosAlertStatus;
   audioUrl?: string;
+  isTest?: boolean;
   createdAt?: string;
 }
 

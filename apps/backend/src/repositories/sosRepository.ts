@@ -11,6 +11,7 @@ export interface CreateAlertData {
   accuracy?: number | null;
   batteryPercentage?: number | null;
   audioUrl?: string | null;
+  isTest?: boolean;
 }
 
 export class SosRepository {
@@ -18,12 +19,12 @@ export class SosRepository {
     const result = await db.query(
       `INSERT INTO sos_alerts (
          user_id, journey_id, latitude, longitude,
-         location, accuracy, battery_percentage, audio_url, status
+         location, accuracy, battery_percentage, audio_url, is_test, status
        )
        VALUES (
          $1, $2, $3, $4,
          ST_SetSRID(ST_MakePoint($4, $3), 4326)::geography,
-         $5, $6, $7, 'dispatched'
+         $5, $6, $7, $8, 'dispatched'
        )
        RETURNING *;`,
       [
@@ -34,6 +35,7 @@ export class SosRepository {
         data.accuracy || null,
         data.batteryPercentage || null,
         data.audioUrl || null,
+        Boolean(data.isTest),
       ],
     );
     return result.rows[0];
@@ -104,15 +106,16 @@ export class SosRepository {
     longitude?: number | null;
     batteryPercentage?: number | null;
     audioUrl?: string | null;
+    sosAlertId?: string | number | null;
     isTest?: boolean;
   }): Promise<NotificationRow> {
     const result = await db.query(
       `INSERT INTO notifications (
          user_id, sender_id, sender_name, sender_phone,
          type, title, body, latitude, longitude,
-         battery_percentage, audio_url, is_test, is_read
+         battery_percentage, audio_url, is_test, sos_alert_id, is_read
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, FALSE)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, FALSE)
        RETURNING *;`,
       [
         data.userId,
@@ -127,6 +130,7 @@ export class SosRepository {
         data.batteryPercentage || null,
         data.audioUrl || null,
         Boolean(data.isTest),
+        data.sosAlertId || null,
       ],
     );
     return result.rows[0];
@@ -161,5 +165,30 @@ export class SosRepository {
       [userId],
     );
     return result.rowCount || 0;
+  }
+
+  static async updateAudioUrl(
+    alertId: string | number,
+    userId: string | number,
+    audioUrl: string,
+  ): Promise<SosAlertRow | null> {
+    const result = await db.query(
+      `UPDATE sos_alerts
+       SET audio_url = $1
+       WHERE id = $2 AND user_id = $3
+       RETURNING *;`,
+      [audioUrl, alertId, userId],
+    );
+
+    if (result.rows.length > 0) {
+      await db.query(
+        `UPDATE notifications
+         SET audio_url = $1
+         WHERE sos_alert_id = $2;`,
+        [audioUrl, alertId],
+      );
+    }
+
+    return result.rows[0] || null;
   }
 }

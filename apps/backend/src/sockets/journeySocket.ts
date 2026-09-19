@@ -15,30 +15,36 @@ export function broadcastSosAlert(data: {
   longitude: number;
   batteryPercentage?: number;
   audioUrl?: string | null;
+  isTest?: boolean;
   timestamp?: string;
   guardianUserIds?: (string | number)[];
 }): void {
   if (socketServerInstance) {
     const payload = {
       ...data,
+      isTest: Boolean(data.isTest),
       timestamp: data.timestamp || new Date().toISOString(),
     };
 
     // 1. Emit to operations staff command center
     socketServerInstance.to("staff").emit("sos:alert", payload);
 
-    // 2. Emit to the victim's own personal channel
+    // 2. Emit to the user's own personal channel
     socketServerInstance.to(`user:${data.userId}`).emit("sos:alert", payload);
 
-    // 3. Emit specifically to confirmed guardian user channels
-    if (data.guardianUserIds && data.guardianUserIds.length > 0) {
+    // 3. Emit specifically to confirmed guardian user channels (SKIP if it's a test drill)
+    if (
+      !data.isTest &&
+      data.guardianUserIds &&
+      data.guardianUserIds.length > 0
+    ) {
       for (const gid of data.guardianUserIds) {
         socketServerInstance.to(`user:${gid}`).emit("sos:alert", payload);
       }
     }
 
     console.log(
-      `[Socket.IO] Verified SOS broadcast scoped to 'staff' and ${data.guardianUserIds?.length || 0} guardians for user ${data.userId}`,
+      `[Socket.IO] Verified SOS broadcast (isTest=${Boolean(data.isTest)}) scoped to 'staff' and ${data.isTest ? 0 : data.guardianUserIds?.length || 0} guardians for user ${data.userId}`,
     );
   }
 }

@@ -206,3 +206,20 @@ To achieve sub-2ms response times on hazard feeds and avoid overwhelming the man
   - When a user submits a new hazard report (`POST /api/reports`), calls `cache.clearPattern('reports:*')`.
   - When an admin moderates a report or users upvote confirmations (`PATCH /api/reports/:id/confirm`), related spatial cache keys are instantly invalidated.
 - **Performance Impact**: Average response time reduced from **180ms down to 1.8ms** for 95% of read queries.
+
+---
+
+## 8. Known Security Considerations & Guardian Matching Model
+
+### 8.1 Current Implementation (Single-Sided Contact Linking)
+During Phase 1, SAFORA matches incoming emergency SOS distress signals to registered accounts by checking if a registered user's email or normalized phone number matches any of the victim's configured `trusted_contacts`.
+
+### 8.2 Security Limitation & Abuse Surface
+- **Unverified Linking**: Any user who signs up with an email or phone matching a victim's trusted contact record will automatically begin receiving that victim's real-time in-app emergency SOS notifications and location broadcasts.
+- **Risk Scenario**: If a rogue party knows a victim's trusted contact email and creates an account before the real guardian does, they could intercept emergency alerts.
+
+### 8.3 Phase 2 Cryptographic Mutual Handshake Roadmap
+In Phase 2, this mechanism will be upgraded to an authenticated **Mutual Consent Handshake**:
+1. When User A adds User B as a guardian, a 6-digit SMS OTP invitation or signed deep link is transmitted to User B.
+2. User B must explicitly accept the guardian escort relationship from within their authenticated session.
+3. Only mutually verified guardian pairs (`status = 'verified'`) will be routed emergency socket channels and push notifications.
