@@ -7,7 +7,8 @@
   ],
   "devDependencies": {
     "husky": "^9.1.7",
-    "lint-staged": "^16.4.0"
+    "lint-staged": "^16.4.0",
+    "typescript": "5.7.2"
   },
   "overrides": {
     "react-dom": "19.2.3"
@@ -15,8 +16,14 @@
   "scripts": {
     "prepare": "npx husky"
   },
-   "lint-staged": {
-    "apps/backend/**/*.ts": ["eslint --fix", "prettier --write"],
-    "apps/mobile/**/*.{ts,tsx}": ["eslint --fix", "prettier --write"]
+  "lint-staged": {
+    "apps/backend/**/*.ts": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "apps/mobile/**/*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ]
   }
 }

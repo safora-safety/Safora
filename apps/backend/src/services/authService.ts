@@ -7,7 +7,7 @@ import { UserModel } from "../models/User";
 
 import { db } from "../config/database";
 
-const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_SECRET: string = process.env.JWT_SECRET || "";
 if (!JWT_SECRET) {
   throw new Error("FATAL: JWT_SECRET environment variable is missing.");
 }

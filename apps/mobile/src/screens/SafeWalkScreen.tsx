@@ -122,7 +122,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
           longitude: updatedCoords.longitude,
         })
           .then(res => {
-            if (res && res.onRoute === false && !isDeviated) {
+            if (res && res.isDeviated && !isDeviated) {
               triggerDeviationPrompt(
                 'Corridor Deviation Detected',
                 'You have moved away from the planned safe pedestrian route.',

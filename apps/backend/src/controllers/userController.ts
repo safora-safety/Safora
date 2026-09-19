@@ -162,7 +162,7 @@ export async function updateFcmToken(
       return;
     }
 
-    await UserRepository.update(req.user.id, {
+    await UserRepository.updateUser(req.user.id, {
       fcm_token: token ? token.trim() : null,
     });
     res.status(200).json({

@@ -1,9 +1,16 @@
-import messaging from '@react-native-firebase/messaging';
+import {
+  getMessaging,
+  AuthorizationStatus,
+} from '@react-native-firebase/messaging';
 import { Platform, PermissionsAndroid, Alert } from 'react-native';
 import { apiClient } from './apiClient';
 
 class NotificationService {
   private isInitialized = false;
+
+  private get messaging() {
+    return getMessaging();
+  }
 
   public async initialize(): Promise<void> {
     if (this.isInitialized) return;
@@ -34,10 +41,10 @@ class NotificationService {
         }
       }
 
-      const authStatus = await messaging().requestPermission();
+      const authStatus = await this.messaging.requestPermission();
       const enabled =
-        authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-        authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+        authStatus === AuthorizationStatus.AUTHORIZED ||
+        authStatus === AuthorizationStatus.PROVISIONAL;
 
       return enabled;
     } catch (err) {
@@ -48,7 +55,7 @@ class NotificationService {
 
   public async registerTokenWithBackend(): Promise<string | null> {
     try {
-      const token = await messaging().getToken();
+      const token = await this.messaging.getToken();
       if (token) {
         console.log(
           '[NotificationService] FCM Token obtained:',
@@ -72,7 +79,7 @@ class NotificationService {
 
   private setupListeners(): void {
     // Handle foreground notifications
-    messaging().onMessage(async remoteMessage => {
+    this.messaging.onMessage(async remoteMessage => {
       console.log(
         '[NotificationService] Foreground notification received:',
         remoteMessage,
@@ -90,7 +97,7 @@ class NotificationService {
     });
 
     // Handle token refresh
-    messaging().onTokenRefresh(async newToken => {
+    this.messaging.onTokenRefresh(async newToken => {
       console.log('[NotificationService] FCM token refreshed');
       try {
         await apiClient.post('/users/fcm-token', { token: newToken });
@@ -103,7 +110,7 @@ class NotificationService {
     });
 
     // Handle background notification clicks when app is opened
-    messaging().onNotificationOpenedApp(remoteMessage => {
+    this.messaging.onNotificationOpenedApp(remoteMessage => {
       console.log(
         '[NotificationService] Notification opened app from background:',
         remoteMessage,
@@ -111,16 +118,14 @@ class NotificationService {
     });
 
     // Check if app was opened from a quit state via a notification
-    messaging()
-      .getInitialNotification()
-      .then(remoteMessage => {
-        if (remoteMessage) {
-          console.log(
-            '[NotificationService] App opened from quit state by notification:',
-            remoteMessage,
-          );
-        }
-      });
+    this.messaging.getInitialNotification().then(remoteMessage => {
+      if (remoteMessage) {
+        console.log(
+          '[NotificationService] App opened from quit state by notification:',
+          remoteMessage,
+        );
+      }
+    });
   }
 }
 
