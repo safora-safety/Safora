@@ -89,36 +89,59 @@ Open your browser or run:
 
 ---
 
-## 5. Running & Building the Mobile App
+## 5. Running the Web Admin Command Center
 
-### 5.1 Starting the Metro Bundler
-In a separate terminal:
+SAFORA includes a real-time web command center for dispatchers and incident moderators:
+
 ```bash
-cd apps/mobile
-npm start -- --reset-cache
+cd apps/frontend
+npm run dev
 ```
 
-### 5.2 Launching on an Android Emulator or Connected Device
-In a third terminal:
-```bash
-cd apps/mobile
-npm run android
-```
+Open your browser at [http://localhost:5173](http://localhost:5173). The dashboard connects live to the backend on `http://localhost:5000` via Socket.IO and REST APIs, featuring the Dark Matrix Geospatial Command Map, incident dispatch feed, and system telemetry.
 
-### 5.3 Compiling Standalone Debug APK
-If you want to install the APK directly to your phone without Metro running:
+---
+
+## 6. Running & Building the Mobile App
+
+### 6.1 Direct USB Running on a Physical Android Phone
+1. Enable **Developer Options** (tap *Build Number* 7 times in *About Phone*) and toggle **USB Debugging** (plus *Install via USB* on Xiaomi/Realme/Oppo).
+2. Connect your phone via USB cable (select *File Transfer/MTP* mode) and accept the debugging prompt.
+3. Forward workstation backend and Metro ports over USB:
+   ```bash
+   adb reverse tcp:8081 tcp:8081
+   adb reverse tcp:5000 tcp:5000
+   ```
+4. Start Metro bundler:
+   ```bash
+   cd apps/mobile
+   npm start
+   ```
+5. Deploy and run directly onto the connected phone:
+   ```bash
+   cd apps/mobile
+   npm run android
+   ```
+
+### 6.2 Compiling Standalone Production Release APK
+To compile a standalone APK ready for distribution or installation without PC tethering:
 ```powershell
 cd apps/mobile/android
-.\gradlew assembleDebug
+.\gradlew assembleRelease
 ```
-The APK will be generated at:
+The compiled APK will be created at:
 ```
-apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk
+apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+```
+
+To install directly to a connected phone via ADB:
+```powershell
+adb install -r apps/mobile/android/app/build/outputs/apk/release/app-release.apk
 ```
 
 ---
 
-## 6. Troubleshooting Common Issues
+## 7. Troubleshooting Common Issues
 
 ### Issue 1: "Cannot find module react-native" or Invariant Violation with ViewConfigs
 - **Cause**: Duplicate hoisted versions of `react-native` inside monorepo workspaces.
@@ -128,5 +151,7 @@ apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk
 - **Solution**: Set `JAVA_HOME` environment variable to JDK 17 (e.g. `C:\Program Files\Eclipse Adoptium\jdk-17.0.12.7-hotspot`).
 
 ### Issue 3: "Network request failed" inside the mobile app
-- **Cause**: Mobile phone cannot reach `localhost`.
-- **Solution**: Replace `localhost` with your workstation's Wi-Fi IPv4 address (e.g. `http://192.168.1.100:5000/api`) in `apps/mobile/.env`, and verify your PC firewall permits inbound connections on port 5000.
+- **Cause**: Mobile phone cannot reach host `localhost`.
+- **Solution**:
+  - Over USB: Run `adb reverse tcp:5000 tcp:5000` so phone `localhost:5000` forwards to workstation port 5000.
+  - Over Wi-Fi: Replace `localhost` with your workstation's Wi-Fi IPv4 address (e.g. `http://192.168.1.100:5000/api`) in `apps/mobile/.env`. Ensure your PC firewall permits inbound traffic on port 5000.

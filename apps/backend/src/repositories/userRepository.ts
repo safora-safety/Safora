@@ -93,4 +93,109 @@ export class UserRepository {
     const result = await db.query(query, values);
     return result.rows[0] || null;
   }
+
+  static async findAll(
+    options: {
+      search?: string;
+      role?: string;
+      limit?: number;
+      offset?: number;
+    } = {},
+  ): Promise<UserRow[]> {
+    const { search, role, limit = 50, offset = 0 } = options;
+    const conditions: string[] = [];
+    const values: any[] = [];
+    let idx = 1;
+
+    if (search && search.trim()) {
+      conditions.push(
+        `(name ILIKE $${idx} OR email ILIKE $${idx} OR phone ILIKE $${idx})`,
+      );
+      values.push(`%${search.trim()}%`);
+      idx++;
+    }
+
+    if (role && role !== "all") {
+      conditions.push(`role = $${idx}`);
+      values.push(role);
+      idx++;
+    }
+
+    const whereClause =
+      conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    values.push(limit);
+    const limitParam = `$${idx++}`;
+    values.push(offset);
+    const offsetParam = `$${idx++}`;
+
+    const query = `
+      SELECT id, name, email, phone, blood_group, emergency_notes, role, is_active, created_at
+      FROM users
+      ${whereClause}
+      ORDER BY created_at DESC
+      LIMIT ${limitParam} OFFSET ${offsetParam};
+    `;
+
+    const result = await db.query(query, values);
+    return result.rows;
+  }
+
+  static async countAll(
+    options: { search?: string; role?: string } = {},
+  ): Promise<number> {
+    const { search, role } = options;
+    const conditions: string[] = [];
+    const values: any[] = [];
+    let idx = 1;
+
+    if (search && search.trim()) {
+      conditions.push(
+        `(name ILIKE $${idx} OR email ILIKE $${idx} OR phone ILIKE $${idx})`,
+      );
+      values.push(`%${search.trim()}%`);
+      idx++;
+    }
+
+    if (role && role !== "all") {
+      conditions.push(`role = $${idx}`);
+      values.push(role);
+      idx++;
+    }
+
+    const whereClause =
+      conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const result = await db.query(
+      `SELECT COUNT(*)::int as count FROM users ${whereClause};`,
+      values,
+    );
+    return result.rows[0]?.count || 0;
+  }
+
+  static async updateRole(
+    id: string | number,
+    role: string,
+  ): Promise<UserRow | null> {
+    const result = await db.query(
+      `UPDATE users
+       SET role = $1
+       WHERE id = $2
+       RETURNING id, name, email, phone, blood_group, emergency_notes, role, is_active, created_at;`,
+      [role, id],
+    );
+    return result.rows[0] || null;
+  }
+
+  static async updateStatus(
+    id: string | number,
+    isActive: boolean,
+  ): Promise<UserRow | null> {
+    const result = await db.query(
+      `UPDATE users
+       SET is_active = $1
+       WHERE id = $2
+       RETURNING id, name, email, phone, blood_group, emergency_notes, role, is_active, created_at;`,
+      [isActive, id],
+    );
+    return result.rows[0] || null;
+  }
 }

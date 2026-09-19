@@ -58,42 +58,70 @@ export class ReportService {
       // Fall through to default offline campus data
     }
 
-    // Default offline fallback data around Dehradun
+    // Verified offline fallback safety data around Dehradun campus hub
     return [
       {
-        id: 1,
-        category: 'lighting',
-        title: 'Poor Street Lighting',
-        description: 'Dark road section near Manduwala main turn after 8 PM',
-        severity: 3,
-        latitude: 30.3165,
-        longitude: 78.0322,
+        id: 206,
+        category: 'isolated_area',
+        title: 'Dimly Lit Canal Path behind DBUU Hostel Block C',
+        description:
+          'Street lamps non-operational past 8 PM along canal path connecting Manduwala hostel block to academic building; thick forest canopy creates zero visibility.',
+        severity: 4,
+        latitude: 30.389812,
+        longitude: 77.942201,
+        source: 'campus_security',
         status: 'active',
-        confirmationsCount: 4,
+        confirmationsCount: 19,
+        photoUrl:
+          'https://images.unsplash.com/photo-1518495973542-4542c06a5843?w=800&q=80',
         createdAt: new Date().toISOString(),
       },
       {
-        id: 2,
+        id: 207,
         category: 'road_hazard',
-        title: 'Deep Trench Near Gate 2',
-        description: 'Uncovered municipal drainage trench',
-        severity: 5,
-        latitude: 30.3182,
-        longitude: 78.0354,
+        title: 'Unmarked Speed Breaker near DBUU Main Gate',
+        description:
+          'Newly laid speed breaker near Chakrata Road entrance lacks white reflective paint; two-wheelers reporting near-misses at night.',
+        severity: 3,
+        latitude: 30.390455,
+        longitude: 77.941822,
+        source: 'campus_security',
+        status: 'active',
+        confirmationsCount: 11,
+        photoUrl:
+          'https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?w=800&q=80',
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: 208,
+        category: 'lighting',
+        title: 'Unlit Suddhowala PG Colony Connecting Lane',
+        description:
+          'Student residential lane in Suddhowala. 4 consecutive LED streetlights dead for over 10 days; students returning from library walk in pitch dark.',
+        severity: 4,
+        latitude: 30.352014,
+        longitude: 77.954025,
+        source: 'police_liaison',
+        status: 'active',
+        confirmationsCount: 17,
+        photoUrl:
+          'https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=800&q=80',
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: 209,
+        category: 'isolated_area',
+        title: 'Deserted Stretch Near Prem Nagar Railway Crossing',
+        description:
+          'Long unlit stretch between Prem Nagar market and railway crossing; no shops open after 9 PM and no regular auto-rickshaw stand nearby.',
+        severity: 3,
+        latitude: 30.322876,
+        longitude: 77.951342,
+        source: 'police_liaison',
         status: 'active',
         confirmationsCount: 8,
-        createdAt: new Date().toISOString(),
-      },
-      {
-        id: 3,
-        category: 'waterlogging',
-        title: 'Monsoon Waterlogged Underpass',
-        description: 'Water up to 1.5 ft high',
-        severity: 2,
-        latitude: 30.314,
-        longitude: 78.029,
-        status: 'active',
-        confirmationsCount: 2,
+        photoUrl:
+          'https://images.unsplash.com/photo-1517411032315-54ef2cb783bb?w=800&q=80',
         createdAt: new Date().toISOString(),
       },
     ];

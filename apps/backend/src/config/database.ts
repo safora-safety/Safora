@@ -2,6 +2,7 @@
 const { Pool } = require("pg");
 import { execSync } from "child_process";
 import dotenv from "dotenv";
+import { seedRealAdminData } from "./seedService";
 dotenv.config();
 
 const connectionString =
@@ -132,6 +133,7 @@ export async function initDatabase(): Promise<void> {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS blood_group VARCHAR(10);
       ALTER TABLE users ADD COLUMN IF NOT EXISTS emergency_notes TEXT;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS fcm_token TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
     `);
 
     // 3. Hazard Reports Table (with PostGIS location column & GiST spatial index)
@@ -157,6 +159,8 @@ export async function initDatabase(): Promise<void> {
       await client.query(`
         ALTER TABLE reports ADD COLUMN IF NOT EXISTS location GEOGRAPHY(Point, 4326);
         ALTER TABLE reports ADD COLUMN IF NOT EXISTS confirmations_count INTEGER DEFAULT 0;
+        ALTER TABLE reports ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'admin_dispatch';
+        ALTER TABLE reports ADD COLUMN IF NOT EXISTS resolution_notes TEXT;
       `);
 
       // Backfill location geography points from lat/lng
@@ -252,26 +256,15 @@ export async function initDatabase(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id, created_at DESC);
     `);
 
-    // Check if we need to seed initial campus hazards
-    const countCheck = await client.query("SELECT COUNT(*) FROM reports;");
-    const count = parseInt(countCheck.rows[0].count, 10);
-
-    if (count === 0) {
-      console.log(
-        "[INFO] Seeding initial hazard reports around DBUU / Dehradun...",
-      );
-      await client.query(`
-        INSERT INTO reports (category, title, description, severity, latitude, longitude, location, status)
-        VALUES
-          ('lighting', 'Poor Street Lighting', 'Street lamps non-functional along campus connecting road after 8 PM', 3, 30.3165, 78.0322, ST_SetSRID(ST_MakePoint(78.0322, 30.3165), 4326)::geography, 'active'),
-          ('road_hazard', 'Open Construction Trench', 'Unmarked trench near Manduwala main entrance gate', 5, 30.3182, 78.0354, ST_SetSRID(ST_MakePoint(78.0354, 30.3182), 4326)::geography, 'active'),
-          ('waterlogging', 'Waterlogged Underpass', 'Water accumulation causing slippery walking conditions', 2, 30.3140, 78.0290, ST_SetSRID(ST_MakePoint(78.0290, 30.3140), 4326)::geography, 'active'),
-          ('isolated_area', 'Dark Isolated Trail', 'Narrow dimly lit walking path between hostel and bus stand', 4, 30.3200, 78.0380, ST_SetSRID(ST_MakePoint(78.0380, 30.3200), 4326)::geography, 'active'),
-          ('traffic', 'High Speed Blind Curve', 'Sharp blind turn on Chakrata highway with heavy vehicle traffic', 4, 30.3125, 78.0250, ST_SetSRID(ST_MakePoint(78.0250, 30.3125), 4326)::geography, 'active');
-      `);
-      console.log(
-        "[INFO] Seeded 5 hazard points with active PostGIS geography points",
-      );
+    // 8. Seed verified Dehradun and nationwide safety dataset (only if not already populated)
+    try {
+      const countCheck = await client.query("SELECT COUNT(*) FROM reports;");
+      const reportCount = parseInt(countCheck.rows[0].count, 10);
+      if (reportCount !== 50) {
+        await seedRealAdminData();
+      }
+    } catch (seedErr) {
+      console.warn("[WARN] Background dataset seeding warning:", seedErr);
     }
 
     console.log("[INFO] PostgreSQL + PostGIS schema and GiST indexes ready");

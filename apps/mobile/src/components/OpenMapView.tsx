@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import WebView from 'react-native-webview';
 
-export type MapLayerType = 'default' | 'satellite' | 'street';
+export type MapLayerType = 'default' | 'tactical' | 'satellite' | 'street';
 
 export interface MapMarkerItem {
   id: string | number;
@@ -59,7 +59,13 @@ const generateHtml = (
   initialLayer: MapLayerType = 'default',
 ) => {
   const bgColor =
-    initialLayer === 'satellite' ? '#000000' : isDark ? '#0B1120' : '#F8FAFC';
+    initialLayer === 'satellite'
+      ? '#000000'
+      : initialLayer === 'street'
+        ? '#F8FAFC'
+        : initialLayer === 'tactical'
+          ? '#111827'
+          : '#070A11';
 
   return `<!DOCTYPE html>
 <html>
@@ -73,6 +79,14 @@ const generateHtml = (
     .leaflet-control-attribution { display: none !important; }
     .leaflet-control-zoom { display: none !important; }
     
+    /* Watermark-free High-Tech Dark Matrix Leaflet Tiles */
+    .dark-matrix-tiles .leaflet-tile,
+    .leaflet-tile.dark-matrix-tiles,
+    .leaflet-layer.dark-matrix-tiles .leaflet-tile,
+    .dark-matrix-layer .leaflet-tile {
+      filter: invert(100%) hue-rotate(180deg) brightness(88%) contrast(95%) !important;
+    }
+
     /* User pulse marker */
     .user-pulse {
       position: relative;
@@ -179,17 +193,38 @@ const generateHtml = (
     var currentIsDark = ${isDark};
     var currentLayer = '${initialLayer}';
 
-    function getTileUrlForLayer(layerType, isDark) {
+    function getTileConfig(layerType, isDark) {
       if (layerType === 'satellite') {
-        return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+        return {
+          url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+          className: '',
+          maxNativeZoom: 18,
+          bg: '#000000'
+        };
+      }
+      if (layerType === 'tactical') {
+        return {
+          url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+          className: '',
+          maxNativeZoom: 16,
+          bg: '#111827'
+        };
       }
       if (layerType === 'street') {
-        return 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+        return {
+          url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+          className: '',
+          maxNativeZoom: 19,
+          bg: '#F8FAFC'
+        };
       }
-      // Default themed basemaps (100% keyless, crisp, zero watermark)
-      return isDark
-        ? 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'
-        : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+      // 'default' is Dark Matrix if isDark or crisp OSM if light mode
+      return {
+        url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+        className: isDark ? 'dark-matrix-tiles' : '',
+        maxNativeZoom: 19,
+        bg: isDark ? '#070A11' : '#F8FAFC'
+      };
     }
 
     function initMap() {
@@ -204,14 +239,21 @@ const generateHtml = (
         attributionControl: false,
         center: [${initialCenter.latitude}, ${initialCenter.longitude}],
         zoom: ${initialZoom},
+        minZoom: 3,
+        maxBounds: [[-85, -180], [85, 180]],
+        maxBoundsViscosity: 1.0,
+        worldCopyJump: false,
         fadeAnimation: false
       });
 
-      var initialUrl = getTileUrlForLayer(currentLayer, currentIsDark);
-      var isDarkCanvas = (currentLayer === 'default' && currentIsDark);
-      tileLayer = L.tileLayer(initialUrl, {
+      var cfg = getTileConfig(currentLayer, currentIsDark);
+      tileLayer = L.tileLayer(cfg.url, {
         maxZoom: 19,
-        maxNativeZoom: isDarkCanvas ? 16 : 19,
+        minZoom: 3,
+        maxNativeZoom: cfg.maxNativeZoom,
+        className: cfg.className,
+        noWrap: true,
+        bounds: [[-85, -180], [85, 180]],
         subdomains: ['a', 'b', 'c', 'd'],
         crossOrigin: true
       }).addTo(map);
@@ -247,10 +289,11 @@ const generateHtml = (
         var minY = Math.floor((1 - Math.log(Math.tan((lat + deltaLat) * Math.PI / 180) + 1 / Math.cos((lat + deltaLat) * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, z));
         var maxY = Math.floor((1 - Math.log(Math.tan((lat - deltaLat) * Math.PI / 180) + 1 / Math.cos((lat - deltaLat) * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, z));
         
+        var cfg = getTileConfig(currentLayer, currentIsDark);
         var count = 0;
         for (var x = minX; x <= maxX && count < 25; x++) {
           for (var y = minY; y <= maxY && count < 25; y++) {
-            var tileUrl = getTileUrlForLayer(currentLayer, currentIsDark)
+            var tileUrl = cfg.url
               .replace('{z}', z)
               .replace('{x}', x)
               .replace('{y}', y)
@@ -272,25 +315,24 @@ const generateHtml = (
     window.setMapLayer = function(layerType) {
       if (!map) return;
       currentLayer = layerType;
-      var newUrl = getTileUrlForLayer(layerType, currentIsDark);
+      var cfg = getTileConfig(layerType, currentIsDark);
       if (tileLayer) {
         map.removeLayer(tileLayer);
       }
-      var isDarkCanvas = (layerType === 'default' && currentIsDark);
-      tileLayer = L.tileLayer(newUrl, {
+      tileLayer = L.tileLayer(cfg.url, {
         maxZoom: 19,
-        maxNativeZoom: isDarkCanvas ? 16 : 19,
+        minZoom: 3,
+        maxNativeZoom: cfg.maxNativeZoom,
+        className: cfg.className,
+        noWrap: true,
+        bounds: [[-85, -180], [85, 180]],
         subdomains: ['a', 'b', 'c', 'd'],
         crossOrigin: true
       }).addTo(map);
 
-      if (layerType === 'satellite') {
-        document.body.style.background = '#000000';
-      } else if (layerType === 'street') {
-        document.body.style.background = '#F3F4F6';
-      } else {
-        document.body.style.background = currentIsDark ? '#0B1120' : '#F8FAFC';
-      }
+      document.body.style.background = cfg.bg;
+      var mapEl = document.getElementById('map');
+      if (mapEl) mapEl.style.background = cfg.bg;
 
       if (polylineLayer) {
         polylineLayer.bringToFront();
@@ -543,14 +585,37 @@ export const OpenMapView = forwardRef<OpenMapViewRef, OpenMapViewProps>(
                   }}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.layerOptionIcon}>🗺️</Text>
+                  <Text style={styles.layerOptionIcon}>⚡</Text>
                   <Text
                     style={[
                       styles.layerOptionText,
                       activeLayer === 'default' && styles.layerOptionTextActive,
                     ]}
                   >
-                    Default
+                    Dark Matrix
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.layerOptionBtn,
+                    activeLayer === 'tactical' && styles.layerOptionBtnActive,
+                  ]}
+                  onPress={() => {
+                    switchLayer('tactical');
+                    setIsLayerMenuOpen(false);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.layerOptionIcon}>🛡️</Text>
+                  <Text
+                    style={[
+                      styles.layerOptionText,
+                      activeLayer === 'tactical' &&
+                        styles.layerOptionTextActive,
+                    ]}
+                  >
+                    Tactical Gray
                   </Text>
                 </TouchableOpacity>
 
@@ -595,7 +660,7 @@ export const OpenMapView = forwardRef<OpenMapViewRef, OpenMapViewProps>(
                       activeLayer === 'street' && styles.layerOptionTextActive,
                     ]}
                   >
-                    Street
+                    Street Map
                   </Text>
                 </TouchableOpacity>
 
@@ -617,9 +682,19 @@ export const OpenMapView = forwardRef<OpenMapViewRef, OpenMapViewProps>(
                     ? '🛰️'
                     : activeLayer === 'street'
                       ? '🛣️'
-                      : '🥞'}
+                      : activeLayer === 'tactical'
+                        ? '🛡️'
+                        : '⚡'}
                 </Text>
-                <Text style={styles.layerFabLabel}>Layers</Text>
+                <Text style={styles.layerFabLabel}>
+                  {activeLayer === 'satellite'
+                    ? 'Satellite'
+                    : activeLayer === 'street'
+                      ? 'Street'
+                      : activeLayer === 'tactical'
+                        ? 'Tactical'
+                        : 'Dark Matrix'}
+                </Text>
               </TouchableOpacity>
             )}
           </View>

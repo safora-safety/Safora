@@ -9,6 +9,9 @@
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0"
   },
+  "overrides": {
+    "react-dom": "19.2.3"
+  },
   "scripts": {
     "prepare": "npx husky"
   },

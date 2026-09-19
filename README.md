@@ -23,16 +23,24 @@ Users crowdsource hazard reports (poor lighting, road hazards, waterlogging, iso
 
 ```mermaid
 flowchart TD
-    User(["👤 Mobile User"])
+    User(["👤 Mobile User (Student / Citizen)"])
+    Admin(["🛡️ Operations Lead (Web Admin Only)"])
     
-    subgraph MobileApp ["Mobile Client (React Native + TypeScript)"]
+    subgraph MobileApp ["Mobile Safety App (React Native + TypeScript)"]
         Radar["Safety Radar & Geospatial Canvas"]
         SafeWalk["Safe Walk Engine (150m Corridor)"]
         SOS["One-Tap SOS Emergency Trigger"]
     end
+
+    subgraph WebAdmin ["Web Operations Command (React + Vite - Web Only)"]
+        CommandMap["Tactical Live Operations Map (Dark Matrix)"]
+        IncidentQueue["Real-time SOS Dispatch Queue"]
+        Moderation["Hazard Moderation & Verification Hub"]
+        UserMgmt["User Directory & Civic Authorities"]
+    end
     
     subgraph BackendGateway ["Backend API & Real-Time Gateway (Node.js + Express)"]
-        Auth["JWT Auth & Security"]
+        Auth["JWT Auth & Role Guards"]
         ScoreEngine["Decay-Weighted Safety Score Engine"]
         IncidentMgr["Incident & Socket.IO Dispatcher"]
     end
@@ -41,15 +49,19 @@ flowchart TD
         PostGIS[("PostGIS Engine<br/>geography(Point, 4326) + GiST Indexes")]
     end
     
-    subgraph EmergencyContacts ["Safety Network"]
+    subgraph ExternalServices ["External Services & Notifications"]
         FCM["Firebase Cloud Messaging (FCM)"]
-        Contacts["👥 Trusted Contacts (SMS & Push Alerts)"]
+        Cloudinary["Cloudinary Evidence Vault"]
+        Contacts["👥 Trusted Contacts (SMS & Push)"]
     end
 
     User <--> MobileApp
+    Admin <--> WebAdmin
     MobileApp <==>|"HTTPS (REST) & WSS (Socket.IO)"| BackendGateway
-    BackendGateway <-->|"ST_DWithin & ST_ClusterDBSCAN"| SpatialDB
-    BackendGateway -->|"Emergency Payload"| FCM
+    WebAdmin <==>|"HTTPS (REST) & WSS (Socket.IO)"| BackendGateway
+    BackendGateway <-->|"ST_DWithin & GiST Spatial Query"| SpatialDB
+    BackendGateway -->|"Emergency Push"| FCM
+    BackendGateway -->|"Media Storage"| Cloudinary
     FCM --> Contacts
 ```
 
@@ -121,7 +133,7 @@ Based on Section 4.2 of the [Project Synopsis](file:///D:/Safora/docs/SAFORA_Syn
 | Layer | Technology | Engineering Rationale |
 |---|---|---|
 | **Mobile App** | React Native `0.87.1` + TypeScript | Native mobile performance with **Hermes** bytecode engine and **Fabric (New Architecture)** enabled. |
-| **Spatial Canvas** | Open Geospatial Canvas (`OpenMapView.tsx`) | Leaflet-powered hardware-accelerated WebView with 10km offline tile caching (`CacheStorage`) and multi-layer switcher (Esri Satellite, OSM Street, MapTiler Default). |
+| **Spatial Canvas** | Open Geospatial Canvas (`OpenMapView.tsx` & `LiveCommandMap.tsx`) | Leaflet-powered hardware-accelerated WebView with 10km offline tile caching (`CacheStorage`), anti-duplication bounds lock (`noWrap`), and 4-layer tactical switcher (⚡ Dark Matrix, 🛡️ Tactical Gray, 🛰️ Satellite, 🛣️ Street Map). |
 | **Routing Engine** | OSRM + Calibrated Multi-Modal Matrix | Real street-network polylines with human-accurate pedestrian walking speed ($1.60\text{ m/s}$) and 2-wheeler/car estimates. |
 | **State & Navigation** | Zustand + Native Stack Navigator | Fast, decoupled state management with native transitions, session hydration, and persistent AsyncStorage. |
 | **Backend API** | Node.js + Express + TypeScript | Lightweight asynchronous REST API with in-memory RAM caching (<2ms responses) and Socket.IO WebSocket gateway. |
@@ -138,13 +150,21 @@ The project is configured as an npm workspace monorepo:
 ```
 safora/
 ├── apps/
-│   ├── backend/                # Express.js + TypeScript API server
+│   ├── backend/                # Express.js + TypeScript API server (Port 5000)
 │   │   ├── src/
 │   │   │   ├── config/         # Database pool, diagnostics, environment
 │   │   │   ├── controllers/    # Route controllers (auth, reports)
 │   │   │   ├── middleware/     # Auth guards, validation, rate limiting
 │   │   │   ├── routes/         # Express routers (/api/auth, /api/reports)
 │   │   │   └── app.ts          # Server bootstrap & Socket.IO initialization
+│   │   ├── .env
+│   │   └── package.json
+│   │
+│   ├── frontend/               # Vite + React + Tailwind Admin Command Center (Port 5173)
+│   │   ├── src/
+│   │   │   ├── components/     # Command map, dispatch console, diagnostics
+│   │   │   ├── pages/          # Admin dashboard, incident moderation
+│   │   │   └── services/       # Socket.IO client & API integration
 │   │   ├── .env
 │   │   └── package.json
 │   │

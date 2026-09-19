@@ -10,6 +10,7 @@ export interface CreateReportData {
   latitude: number;
   longitude: number;
   photoUrl?: string | null;
+  source?: string | null;
 }
 
 export class ReportRepository {
@@ -52,12 +53,12 @@ export class ReportRepository {
       `INSERT INTO reports (
          user_id, category, title, description,
          severity, latitude, longitude, location,
-         photo_url, confirmations_count, status
+         photo_url, source, confirmations_count, status
        )
        VALUES (
          $1, $2, $3, $4,
          $5, $6, $7, ST_SetSRID(ST_MakePoint($7, $6), 4326)::geography,
-         $8, 0, 'active'
+         $8, COALESCE($9, 'community_crowdsource'), 0, 'active'
        )
        RETURNING *;`,
       [
@@ -69,9 +70,21 @@ export class ReportRepository {
         data.latitude,
         data.longitude,
         data.photoUrl || null,
+        data.source || null,
       ],
     );
     return result.rows[0];
+  }
+
+  static async findById(id: string | number): Promise<ReportRow | null> {
+    const result = await db.query(
+      `SELECT r.*, u.name as reporter_name
+       FROM reports r
+       LEFT JOIN users u ON r.user_id = u.id
+       WHERE r.id = $1;`,
+      [id],
+    );
+    return result.rows[0] || null;
   }
 
   static async incrementConfirmations(
@@ -91,7 +104,15 @@ export class ReportRepository {
   static async updateStatus(
     id: string | number,
     status: string,
+    resolutionNotes?: string,
   ): Promise<boolean> {
+    if (resolutionNotes !== undefined) {
+      const result = await db.query(
+        `UPDATE reports SET status = $1, resolution_notes = $2 WHERE id = $3 RETURNING id;`,
+        [status, resolutionNotes, id],
+      );
+      return result.rows.length > 0;
+    }
     const result = await db.query(
       `UPDATE reports SET status = $1 WHERE id = $2 RETURNING id;`,
       [status, id],
@@ -119,5 +140,74 @@ export class ReportRepository {
       longitude: Number(r.longitude),
       severity: Number(r.severity),
     }));
+  }
+
+  static async getCategoryCounts(): Promise<
+    Array<{ category: string; count: number }>
+  > {
+    const result = await db.query(`
+      SELECT category, COUNT(*)::int as count
+      FROM reports
+      GROUP BY category
+      ORDER BY count DESC;
+    `);
+    return result.rows;
+  }
+
+  static async getSeverityCounts(): Promise<
+    Array<{ severity: number; count: number }>
+  > {
+    const result = await db.query(`
+      SELECT severity, COUNT(*)::int as count
+      FROM reports
+      GROUP BY severity
+      ORDER BY severity ASC;
+    `);
+    return result.rows;
+  }
+
+  static async getHourlyDistribution(): Promise<
+    Array<{ hour: number; count: number }>
+  > {
+    const result = await db.query(`
+      SELECT EXTRACT(HOUR FROM created_at)::int as hour, COUNT(*)::int as count
+      FROM reports
+      GROUP BY hour
+      ORDER BY hour ASC;
+    `);
+    return result.rows;
+  }
+
+  static async getAnalyticsSummary(): Promise<{
+    totalReports: number;
+    activeReports: number;
+    resolvedReports: number;
+    totalSos: number;
+    activeJourneys: number;
+    totalUsers: number;
+  }> {
+    const [reportsRes, sosRes, journeyRes, usersRes] = await Promise.all([
+      db.query(`
+        SELECT 
+          COUNT(*)::int as total,
+          COUNT(CASE WHEN status = 'active' THEN 1 END)::int as active,
+          COUNT(CASE WHEN status = 'resolved' THEN 1 END)::int as resolved
+        FROM reports;
+      `),
+      db.query(`SELECT COUNT(*)::int as total FROM sos_alerts;`),
+      db.query(
+        `SELECT COUNT(*)::int as active FROM journeys WHERE status = 'active' OR status = 'deviated';`,
+      ),
+      db.query(`SELECT COUNT(*)::int as total FROM users;`),
+    ]);
+
+    return {
+      totalReports: reportsRes.rows[0]?.total || 0,
+      activeReports: reportsRes.rows[0]?.active || 0,
+      resolvedReports: reportsRes.rows[0]?.resolved || 0,
+      totalSos: sosRes.rows[0]?.total || 0,
+      activeJourneys: journeyRes.rows[0]?.active || 0,
+      totalUsers: usersRes.rows[0]?.total || 0,
+    };
   }
 }

@@ -9,6 +9,7 @@ import reportRoutes from "./routes/reportRoutes";
 import journeyRoutes from "./routes/journeyRoutes";
 import sosRoutes from "./routes/sosRoutes";
 import notificationRoutes from "./routes/notificationRoutes";
+import userRoutes from "./routes/userRoutes";
 import { errorHandler } from "./middleware/errorHandler";
 
 dotenv.config();
@@ -51,6 +52,7 @@ app.get("/api/diagnostics", async (_req: Request, res: Response) => {
 
 // Modular API Routes
 app.use("/api/auth", authRoutes);
+app.use("/api/users", userRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/journeys", journeyRoutes);
 app.use("/api/sos", sosRoutes);

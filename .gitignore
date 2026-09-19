@@ -69,3 +69,7 @@ Desktop.ini
 # Temporary / Bundling files
 .metro-health-check*
 *.jsbundle
+*.tsbuildinfo
+.project
+.classpath
+.settings/

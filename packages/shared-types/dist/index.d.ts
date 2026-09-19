@@ -7,10 +7,12 @@ export interface User {
     bloodGroup?: string;
     emergencyNotes?: string;
     role?: UserRole;
+    isActive?: boolean;
     createdAt?: string;
 }
 export type HazardCategory = 'lighting' | 'road_hazard' | 'waterlogging' | 'isolated_area' | 'traffic' | 'other';
 export type HazardStatus = 'active' | 'resolved' | 'duplicate' | 'fake';
+export type HazardSource = 'campus_security' | 'municipal_sync' | 'police_liaison' | 'admin_dispatch' | 'community_crowdsource';
 export interface HazardReport {
     id: string | number;
     userId?: string | number | null;
@@ -22,6 +24,8 @@ export interface HazardReport {
     latitude: number;
     longitude: number;
     photoUrl?: string | null;
+    source?: HazardSource | string;
+    resolutionNotes?: string;
     confirmationsCount?: number;
     status: HazardStatus;
     distanceMeters?: number;

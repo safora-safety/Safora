@@ -16,14 +16,14 @@ Overall Minor Project-I Completion: **~99% (Production & Viva Ready)**
 
 | Area | Progress | Status Summary |
 |---|:---:|---|
-| **1. Monorepo & Shared Types** | **100%** | `@safora/shared-types` linked to mobile and backend; single source of truth for all domain models. |
-| **2. Database & PostGIS Spatial** | **100%** | PostgreSQL schema, `location GEOGRAPHY(Point, 4326)` column, GiST index, automated migrations, seed data, and Neon cloud connectivity. |
-| **3. Backend Clean MVC & Repositories** | **100%** | In-memory RAM cache (<2ms latency) with auto-invalidation, Controller-Service-Repository pattern, Zod validation, custom `AppError`, centralized error handling, modular Firebase Admin SDK v14, Cloudinary service, and decoupled `app.ts` / `server.ts`. |
-| **4. Mobile Client (React Native)** | **100%** | 4-step Onboarding Carousel, Dual-strategy Live GPS Tracking, 10km Offline Map Caching, Multi-layer Switcher (Satellite/Street/Default), Multi-Modal Travel Time Estimation (Car/Bike/Walk), Real Emergency Contacts CRUD, Dynamic Light/Dark mode, Profile Edit & Report Hazard modals. |
-| **5. APK Compilation & Native Config** | **100%** | Tested & verified standalone APK (`assembleDebug` & `assembleRelease`). Resolved monorepo Gradle plugin hoisting, Vector Icons fonts, Google Maps SDK `API_KEY` manifest crash, and compressed APK from 177 MB down to ~35 MB via `arm64-v8a` targeting & ProGuard. |
-| **6. Real-Time & Live Tracking** | **98%** | Continuous geolocation watcher (`watchUserLocation`), Socket.IO room isolation (`journey:${journeyId}`, `sos:${alertId}`), OSRM street-accurate geometry, and fallback Haversine distance. |
-| **7. Git Security & Repository Hardening** | **100%** | Comprehensive monorepo `.gitignore` protecting all `.env` secrets, keystores, binaries, and build artifacts. |
-| **8. Documentation & Synopsis** | **100%** | Complete documentation suite (Architecture, API, DB, Mobile, Algorithms, Standards, DFD Level 0/1, Setup). |
+| **1. Monorepo & Shared Types** | **100%** | `@safora/shared-types` with `HazardSource`, `HazardReport`, `User`, `Journey` contracts; single source of truth. |
+| **2. Database & PostGIS Spatial** | **100%** | PostgreSQL schema, PostGIS v3.6, GiST spatial indexing, automated migrations, seed data, and Neon cloud connectivity. |
+| **3. Backend Clean MVC & Repositories** | **100%** | In-memory RAM cache (<2ms latency), Controller-Service-Repository pattern, Zod validation, custom `AppError`, Cloudinary service, and Socket.IO dispatcher. |
+| **4. Mobile Client (React Native)** | **100%** | Student/citizen personal safety client: Onboarding, Live GPS Tracking, Safe Walk Corridor Monitor, One-Tap SOS, Offline Hazard Cache with authentic Dehradun fallbacks. **Admin panel is strictly for web.** |
+| **5. Web Operations Command Center** | **100%** | React + Vite administrative command center (Web Only): Watermark-free Dark Matrix GIS map, live Socket.IO incident queue, hazard moderation with photo inspection, Safe Walk radar, and single-administrator directory. |
+| **6. Authentic Dataset & Zero Fake Users** | **100%** | Legacy mock users and fake records purged. Seeded with 50 real-world hazards (Dehradun + Metros), 5 escort corridors, 4 SOS feeds, photo evidence, intake source tags, and resolution notes. |
+| **7. CI/CD Monorepo Pipeline** | **100%** | GitHub Actions 4-stage pipeline validating shared types, backend, web admin build, and mobile typecheck. |
+| **8. Documentation & Architecture** | **100%** | Complete documentation suite covering mobile client, web command center, API specs, and database schema. |
 
 ---
 
@@ -96,7 +96,7 @@ This section tracks implementation progress against the 6 core modules defined i
   - [x] **Continuous Live GPS Watcher**: `watchUserLocation` continuously tracks real movement without app freeze.
   - [x] **Dual-Strategy Geolocation**: High-accuracy GPS with timeout fallback to network/cell triangulation.
   - [x] **10km Offline Map Caching**: HTML5 `CacheStorage` pre-caches surrounding 10km radius map tiles into device storage.
-  - [x] **Interactive Layer Switcher**: Real-time toggling between Satellite (Esri World Imagery), Street View (OpenStreetMap), and Clean (MapTiler).
+  - [x] **Interactive Layer Switcher & Anti-Duplication**: Real-time toggling between ⚡ Dark Matrix (default), 🛡️ Tactical Gray, 🛰️ Satellite (Esri World Imagery), and 🛣️ Street Map (OpenStreetMap), with hard global bounds lock (`noWrap: true`, `maxBounds`).
   - [x] Mobile `SafeWalkScreen.tsx` with start/stop controls, live distance/ETA metrics, and route path display.
 
 ---
