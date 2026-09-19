@@ -68,10 +68,22 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     });
 
+    // Listen for audio evidence attachment without triggering siren/alarm
+    s.on('sos:audio', (data: { alertId: string | number; audioUrl: string }) => {
+      console.log('[Socket] AUDIO ATTACHED TO SOS ALERT:', data);
+      setActiveEmergency(prev => {
+        if (prev && String(prev.alertId) === String(data.alertId)) {
+          return { ...prev, audioUrl: data.audioUrl };
+        }
+        return prev;
+      });
+    });
+
     return () => {
       s.off('connect', onConnect);
       s.off('disconnect', onDisconnect);
       s.off('sos:alert');
+      s.off('sos:audio');
       socketService.disconnect();
     };
   }, [token]);

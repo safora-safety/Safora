@@ -17,6 +17,7 @@ import { ContactModal, EditableContact } from '../components/ContactModal';
 import { useTheme } from '../theme/ThemeContext';
 
 import { SosService } from '../services/sosService';
+import { AudioRecorderService } from '../services/audioRecorderService';
 
 interface Contact {
   id: string;
@@ -299,6 +300,9 @@ export const ProfileScreen: React.FC = () => {
       : '';
     const mapsLink = 'https://maps.google.com/?q=30.3165,78.0322';
     const drillMsg = `[SAFORA SAFETY DRILL] 🚨 Test SOS alert from your emergency contact. All safe! Test GPS: ${mapsLink} - Sent via SAFORA`;
+
+    // Ensure microphone permission is ready for emergency evidence
+    AudioRecorderService.requestPermission().catch(() => {});
 
     // If contact has a registered Safora account/email, dispatch in-app push drill first
     if (contact.email) {

@@ -49,6 +49,31 @@ export function broadcastSosAlert(data: {
   }
 }
 
+export function broadcastSosAudio(data: {
+  alertId: string | number;
+  userId: string | number;
+  audioUrl: string;
+}): void {
+  if (socketServerInstance) {
+    const payload = {
+      alertId: data.alertId,
+      userId: data.userId,
+      audioUrl: data.audioUrl,
+      timestamp: new Date().toISOString(),
+    };
+
+    // 1. Emit audio update to operations staff command center without re-alerting
+    socketServerInstance.to("staff").emit("sos:audio", payload);
+
+    // 2. Emit to user's own channel
+    socketServerInstance.to(`user:${data.userId}`).emit("sos:audio", payload);
+
+    console.log(
+      `[Socket.IO] Verified SOS audio attachment broadcast for alert ${data.alertId}`,
+    );
+  }
+}
+
 export function setupJourneySockets(io: Server): void {
   socketServerInstance = io;
 

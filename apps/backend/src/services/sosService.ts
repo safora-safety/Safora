@@ -12,7 +12,7 @@ import { TrustedContactModel } from "../models/TrustedContact";
 import { NotificationModel } from "../models/Notification";
 import { db } from "../config/database";
 import { CloudinaryService } from "./cloudinaryService";
-import { broadcastSosAlert } from "../sockets/journeySocket";
+import { broadcastSosAlert, broadcastSosAudio } from "../sockets/journeySocket";
 
 export class SosService {
   static async triggerSOS(data: {
@@ -311,16 +311,14 @@ export class SosService {
     }
     const alert = SosAlertModel.fromRow(row);
 
-    // Broadcast audio attachment to staff and guardians
-    broadcastSosAlert({
-      alertId: alert.id,
-      userId: alert.userId,
-      latitude: alert.latitude,
-      longitude: alert.longitude,
-      batteryPercentage: alert.batteryPercentage,
-      audioUrl: alert.audioUrl,
-      isTest: alert.isTest,
-    });
+    // Broadcast audio attachment to staff and user channel without re-alerting
+    if (alert.audioUrl) {
+      broadcastSosAudio({
+        alertId: alert.id,
+        userId: alert.userId,
+        audioUrl: alert.audioUrl,
+      });
+    }
 
     return alert;
   }

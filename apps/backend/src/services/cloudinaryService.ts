@@ -1,4 +1,5 @@
 import { v2 as cloudinary } from "cloudinary";
+import crypto from "crypto";
 // @ts-ignore - multer untyped module declaration fallback
 import multer from "multer";
 import { AppError } from "../errors/AppError";
@@ -96,18 +97,21 @@ export class CloudinaryService {
   }
 
   /**
-   * Uploads an audio buffer directly to Cloudinary in the safora/sos_audio folder.
+   * Uploads an audio buffer directly to Cloudinary in the safora/sos_audio folder
+   * using an unguessable UUID and authenticated access type to prevent enumeration.
    */
   static async uploadAudioEvidence(
     buffer: Buffer,
-    filename = "sos-evidence",
+    _filename = "sos-evidence",
   ): Promise<{ url: string; publicId: string }> {
+    const audioUuid = crypto.randomUUID();
     return new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         {
           resource_type: "video", // Cloudinary stores audio under video resource_type
           folder: "safora/sos_audio",
-          public_id: `${filename}-${Date.now()}`,
+          public_id: audioUuid,
+          type: "authenticated",
         },
         (error, result) => {
           if (error || !result) {
@@ -118,8 +122,14 @@ export class CloudinaryService {
               ),
             );
           }
+          const signedUrl = cloudinary.url(result.public_id, {
+            resource_type: "video",
+            type: "authenticated",
+            sign_url: true,
+            secure: true,
+          });
           resolve({
-            url: result.secure_url,
+            url: signedUrl || result.secure_url,
             publicId: result.public_id,
           });
         },

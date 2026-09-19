@@ -54,6 +54,36 @@ describe("Journey Corridor Deviation & Ownership Authorization", () => {
       expect(dist).toBeGreaterThan(150);
       expect(dist).toBeGreaterThan(250);
     });
+
+    it("should calculate minimum distance across a multi-segment planned route corridor", () => {
+      // Multi-segment planned route: A -> B -> C
+      const route = [
+        { latitude: 30.3, longitude: 78.0 },
+        { latitude: 30.31, longitude: 78.0 },
+        { latitude: 30.31, longitude: 78.01 },
+      ];
+
+      // Point slightly north of segment B-C (30.3102, 78.0050) ~ 22m offset
+      let minDist = Infinity;
+      const testLat = 30.3102;
+      const testLng = 78.005;
+
+      for (let i = 0; i < route.length - 1; i++) {
+        const d = distanceToSegmentMeters(
+          testLat,
+          testLng,
+          route[i].latitude,
+          route[i].longitude,
+          route[i + 1].latitude,
+          route[i + 1].longitude,
+        );
+        if (d < minDist) minDist = d;
+      }
+
+      expect(minDist).toBeGreaterThan(15);
+      expect(minDist).toBeLessThan(35);
+      expect(minDist).toBeLessThanOrEqual(150); // Well within safe corridor threshold
+    });
   });
 
   describe("Journey Ownership Guards", () => {
