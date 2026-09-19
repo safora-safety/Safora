@@ -16,14 +16,29 @@ export function broadcastSosAlert(data: {
   batteryPercentage?: number;
   audioUrl?: string | null;
   timestamp?: string;
+  guardianUserIds?: (string | number)[];
 }): void {
   if (socketServerInstance) {
-    socketServerInstance.emit("sos:alert", {
+    const payload = {
       ...data,
       timestamp: data.timestamp || new Date().toISOString(),
-    });
+    };
+
+    // 1. Emit to operations staff command center
+    socketServerInstance.to("staff").emit("sos:alert", payload);
+
+    // 2. Emit to the victim's own personal channel
+    socketServerInstance.to(`user:${data.userId}`).emit("sos:alert", payload);
+
+    // 3. Emit specifically to confirmed guardian user channels
+    if (data.guardianUserIds && data.guardianUserIds.length > 0) {
+      for (const gid of data.guardianUserIds) {
+        socketServerInstance.to(`user:${gid}`).emit("sos:alert", payload);
+      }
+    }
+
     console.log(
-      `[Socket.IO] Verified Server-Side SOS broadcast emitted for user ${data.userId}`,
+      `[Socket.IO] Verified SOS broadcast scoped to 'staff' and ${data.guardianUserIds?.length || 0} guardians for user ${data.userId}`,
     );
   }
 }
@@ -84,6 +99,15 @@ export function setupJourneySockets(io: Server): void {
     console.log(
       `[Socket.IO] Authenticated client connected: ${socket.id} (User: ${user?.email})`,
     );
+
+    // 1. Join user's individual room for personal notifications & guardian alerts
+    socket.join(`user:${user.id}`);
+
+    // 2. Join staff operations room if admin or moderator
+    if (user.role === "admin" || user.role === "moderator") {
+      socket.join("staff");
+      console.log(`[Socket.IO] User ${user.email} joined 'staff' channel`);
+    }
 
     // Join a scoped room for an active journey session (Owner or Staff only)
     socket.on("journey:join", async (data: { journeyId: string | number }) => {

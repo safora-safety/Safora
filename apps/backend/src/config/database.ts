@@ -260,7 +260,7 @@ export async function initDatabase(): Promise<void> {
     try {
       const countCheck = await client.query("SELECT COUNT(*) FROM reports;");
       const reportCount = parseInt(countCheck.rows[0].count, 10);
-      if (reportCount === 0) {
+      if (shouldSeedDatabase(reportCount)) {
         await seedRealAdminData();
       } else {
         console.log(
@@ -280,4 +280,8 @@ export async function initDatabase(): Promise<void> {
       client.release();
     }
   }
+}
+
+export function shouldSeedDatabase(reportCount: number): boolean {
+  return reportCount === 0;
 }

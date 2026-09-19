@@ -271,7 +271,7 @@ export const ProfileScreen: React.FC = () => {
         'Guardian Added',
         `${savedData.name} has been added to your emergency network.${
           hasAccount
-            ? '\n\n🟢 Guardian is registered on Safora! In-app push alerts & 30s live audio enabled.'
+            ? '\n\n🟢 Guardian is registered on Safora! High-priority in-app push notifications enabled.'
             : '\n\n📱 Guardian will receive direct cellular SMS alerts.'
         }`,
       );
@@ -589,7 +589,7 @@ export const ProfileScreen: React.FC = () => {
               Family & Personal Guardians
             </Text>
             <Text style={[styles.sectionSub, { color: colors.textSecondary }]}>
-              Will receive instant SOS calls, live GPS, and audio evidence
+              Will receive instant push notifications, live GPS, and SMS alerts
             </Text>
           </View>
           <TouchableOpacity
@@ -680,7 +680,7 @@ export const ProfileScreen: React.FC = () => {
                     {contact.hasSaforaAccount ? (
                       <View style={styles.badgeSaforaActive}>
                         <Text style={styles.badgeSaforaActiveText}>
-                          🟢 Safora Member (Push + 30s Audio)
+                          🟢 Safora Member (Instant Push Alerts)
                         </Text>
                       </View>
                     ) : (

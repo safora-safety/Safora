@@ -64,7 +64,7 @@ const SLIDES: Slide[] = [
     title: 'Instant SOS & Decoy',
     subtitle: 'Zero-Internet Safety Fallbacks',
     description:
-      '30-second ambient audio recording, offline SMS SOS with GPS coordinates targeting 112, and a stealth working calculator decoy for discreet emergencies.',
+      'Offline SMS SOS with live GPS coordinates targeting 112, high-priority push dispatch, and a stealth working calculator decoy for discreet emergencies.',
     accentColor: colors.danger,
   },
 ];

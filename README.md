@@ -80,7 +80,7 @@ All detailed technical specifications, architectural diagrams, mathematical mode
 | 🧠 **[Safety Algorithms & Mathematics](docs/safety-algorithms.md)** | Mathematical safety score decay formulation, DBSCAN 50m clustering, and Safe Walk state machine. |
 | 🛠️ **[Developer Setup & Run Guide](docs/setup.md)** | Prerequisites, `.env` file configurations, running backend & mobile, and troubleshooting. |
 | 📏 **[Engineering Standards & Best Practices](docs/standards-and-best-practices.md)** | Codebase conventions, feature-based mobile folder structure, clean backend architecture, and PostGIS idioms. |
-| 📊 **[Project Status & Roadmap](docs/project-status-and-roadmap.md)** | Completion progress scorecard (~98%), what is done, and remaining tasks for final submission. |
+| 📊 **[Project Status & Roadmap](docs/project-status-and-roadmap.md)** | Completion progress scorecard (~99%), what is done, and remaining tasks for final submission. |
 | 📑 **[Docs Master Index](docs/README.md)** | Comprehensive documentation index and summary of all technical artifacts. |
 | 📄 **[Academic Synopsis PDF](docs/SAFORA_Synopsis_Formatted.pdf)** | Approved project synopsis submitted to Dev Bhoomi Uttarakhand University. |
 

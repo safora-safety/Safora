@@ -39,9 +39,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
   const [showFakeCall, setShowFakeCall] = useState(false);
   const [fakeCallDelay, setFakeCallDelay] = useState<number | null>(null);
   const [showDecoyCalculator, setShowDecoyCalculator] = useState(false);
-  const [audioRecordingSecs, setAudioRecordingSecs] = useState<number | null>(
-    null,
-  );
 
   useEffect(() => {
     getCurrentCoordinates().then(c => {
@@ -67,23 +64,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
     return () => clearInterval(timer);
   }, [sosCountdown]);
 
-  // 30-second silent ambient audio evidence timer on SOS
-  useEffect(() => {
-    let interval: any;
-    if (audioRecordingSecs !== null && audioRecordingSecs > 0) {
-      interval = setInterval(() => {
-        setAudioRecordingSecs(prev => (prev !== null ? prev - 1 : null));
-      }, 1000);
-    } else if (audioRecordingSecs === 0) {
-      setAudioRecordingSecs(null);
-      Alert.alert(
-        '🎙️ Audio Evidence Captured',
-        '30-second ambient audio recording encrypted and uploaded to Cloudinary dispatch evidence.',
-      );
-    }
-    return () => clearInterval(interval);
-  }, [audioRecordingSecs]);
-
   // Delay timer for Fake Incoming Call
   useEffect(() => {
     let timer: any;
@@ -108,8 +88,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
 
   const dispatchRealSos = async () => {
     Vibration.vibrate([0, 800, 300, 800]);
-    // Trigger 30s ambient audio evidence capture
-    setAudioRecordingSecs(30);
 
     let onlineSuccess = false;
     let contactsCount = 0;
@@ -118,13 +96,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
       const res = await SosService.triggerSOS({
         latitude: coords.latitude,
         longitude: coords.longitude,
-        battery_percentage: 88,
-        audio_url: null, // Instructs backend to upload 30s synthesized ambient distress recording to Cloudinary
       });
 
       if (res && res.alert) {
         onlineSuccess = !res.isOffline;
-        contactsCount = res.contactsNotified || 1;
+        contactsCount = res.contactsNotified || 0;
       }
     } catch {
       onlineSuccess = false;
@@ -156,11 +132,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
       `🚨 EMERGENCY SOS! I need immediate help. My live GPS coordinates: ${mapsLink} (${coords.areaName}) - Sent via SAFORA`,
     );
 
-    // Dual Dispatch Dialog: Confirms online dispatch (Cloudinary + DB) and offers direct carrier SMS
+    // Dual Dispatch Dialog: Confirms online dispatch and offers direct carrier SMS
     Alert.alert(
       '🚨 EMERGENCY SOS BROADCAST',
       onlineSuccess
-        ? `Emergency broadcast transmitted!\n\n• 🎙️ 30s ambient audio captured & uploaded to Cloudinary evidence vault.\n• 📍 GPS: ${coords.latitude.toFixed(4)}°N, ${coords.longitude.toFixed(4)}°E (${coords.areaName})\n• 🔔 ${contactsCount} guardian(s) alerted.\n\nOpen SMS now to send direct carrier text to ${contactName} (${targetPhone})?`
+        ? `Emergency broadcast transmitted!\n\n• 📍 GPS: ${coords.latitude.toFixed(4)}°N, ${coords.longitude.toFixed(4)}°E (${coords.areaName})\n• 🔔 ${contactsCount} guardian(s) alerted via push notification.\n\nOpen SMS now to send direct carrier text to ${contactName} (${targetPhone})?`
         : `Network offline or server unreachable.\n\nImmediate cellular failover: Send emergency SMS to ${contactName} (${targetPhone}) now with live GPS coordinates?`,
       [
         { text: 'Dismiss', style: 'cancel' },
@@ -308,16 +284,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
           </Text>
         </View>
       </View>
-
-      {/* Ambient Audio Evidence Active Banner */}
-      {audioRecordingSecs !== null && (
-        <View style={styles.audioBanner}>
-          <View style={styles.audioDot} />
-          <Text style={styles.audioBannerText}>
-            🎙️ Silent Ambient Audio Recording Active ({audioRecordingSecs}s)
-          </Text>
-        </View>
-      )}
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}

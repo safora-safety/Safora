@@ -90,7 +90,6 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
   const [deviationCountdown, setDeviationCountdown] = useState<number | null>(
     null,
   );
-  const [batteryLevel, setBatteryLevel] = useState(82); // Simulated battery check
   const [showArrivalModal, setShowArrivalModal] = useState(false);
 
   // Initialize live position
@@ -241,7 +240,6 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
       SosService.triggerSOS({
         latitude: userPos.latitude,
         longitude: userPos.longitude,
-        battery_percentage: batteryLevel,
         journey_id: journeyId,
       })
         .then(res => {
@@ -252,13 +250,13 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
         })
         .catch(() => {
           Alert.alert(
-            '🚨 Auto-Escalation Alert',
-            '60-second deviation window expired. Emergency distress broadcast triggered.',
+            '🚨 Auto-Escalation: Network Dispatch Failed',
+            `60-second deviation window expired. Unable to transmit online alert. Please dial 112 immediately with coordinates (${userPos.latitude.toFixed(4)}, ${userPos.longitude.toFixed(4)}).`,
           );
         });
     }
     return () => clearInterval(interval);
-  }, [isDeviated, deviationCountdown, userPos, batteryLevel, journeyId]);
+  }, [isDeviated, deviationCountdown, userPos, journeyId]);
 
   const handleSelectPlace = (place: PlaceSearchResult) => {
     setDestPos({
@@ -289,18 +287,10 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
       setIsActive(true);
       setIsDeviated(false);
 
-      // Battery Beacon Check: If < 15%, notify guardians immediately
-      if (batteryLevel < 15) {
-        Alert.alert(
-          '🔋 Low Battery Beacon Activated',
-          `Your phone is at ${batteryLevel}%. Your live coordinates have been transmitted to your emergency guardians in case your phone powers off.`,
-        );
-      } else {
-        Alert.alert(
-          '🚶‍♀️ Safe Walk Activated',
-          `Virtual guardian active along road route to ${destPos.name}.\nEstimated walk: ${formatDistance(routeDistanceMeters)} (${etaMins} mins).`,
-        );
-      }
+      Alert.alert(
+        '🚶‍♀️ Safe Walk Activated',
+        `Virtual guardian active along road route to ${destPos.name}.\nEstimated walk: ${formatDistance(routeDistanceMeters)} (${etaMins} mins).`,
+      );
     } catch {
       Alert.alert('Notice', 'Safe Walk route initialized locally.');
       setIsActive(true);
@@ -355,7 +345,6 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
               const res = await SosService.triggerSOS({
                 latitude: userPos.latitude,
                 longitude: userPos.longitude,
-                battery_percentage: batteryLevel,
                 journey_id: journeyId,
               });
               Alert.alert(
@@ -364,8 +353,8 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
               );
             } catch {
               Alert.alert(
-                '🚨 Emergency Alert Dispatched',
-                `Emergency alert dispatched locally with live GPS coordinates (${userPos.latitude.toFixed(4)}, ${userPos.longitude.toFixed(4)}).`,
+                '🚨 Emergency Dispatch Failed',
+                `Unable to send network SOS. Please dial 112 immediately with coordinates (${userPos.latitude.toFixed(4)}, ${userPos.longitude.toFixed(4)}).`,
               );
             }
           },

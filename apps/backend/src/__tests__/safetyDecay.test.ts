@@ -1,14 +1,13 @@
 import { describe, it, expect } from "@jest/globals";
+import {
+  computeRecencyDecay,
+  computeDistanceFalloff,
+  computeConfirmMultiplier,
+  computeScoreFromPenalty,
+} from "../services/reportService";
 
-describe("Safety Score Mathematical Formulations", () => {
-  const HALF_LIFE_HOURS = 24;
-  const DECAY_LAMBDA = Math.log(2) / HALF_LIFE_HOURS;
-
+describe("Safety Score Mathematical Formulations (from ReportService)", () => {
   describe("Temporal Exponential Decay T(t)", () => {
-    function computeRecencyDecay(ageHours: number): number {
-      return Math.exp(-DECAY_LAMBDA * Math.max(0, ageHours));
-    }
-
     it("should evaluate to 1.0 at immediate creation (t = 0)", () => {
       const decay = computeRecencyDecay(0);
       expect(decay).toBeCloseTo(1.0, 5);
@@ -31,13 +30,6 @@ describe("Safety Score Mathematical Formulations", () => {
   });
 
   describe("Spatial Distance Falloff D(d)", () => {
-    function computeDistanceFalloff(
-      distMeters: number,
-      radiusMeters: number,
-    ): number {
-      return Math.max(0, 1 - distMeters / radiusMeters);
-    }
-
     it("should return maximum 1.0 when observer is right at hazard point (d = 0)", () => {
       expect(computeDistanceFalloff(0, 1000)).toBe(1.0);
     });
@@ -53,10 +45,6 @@ describe("Safety Score Mathematical Formulations", () => {
   });
 
   describe("Community Confirmation Multiplier C(c)", () => {
-    function computeConfirmMultiplier(confirms: number): number {
-      return 1.0 + 0.15 * Math.min(Math.max(0, confirms), 5);
-    }
-
     it("should equal baseline 1.0 for unconfirmed reports (c = 0)", () => {
       expect(computeConfirmMultiplier(0)).toBe(1.0);
     });
@@ -75,37 +63,27 @@ describe("Safety Score Mathematical Formulations", () => {
   });
 
   describe("Safety Score Aggregation & Risk Levels", () => {
-    function calculateScore(totalPenalty: number): {
-      score: number;
-      riskLevel: "safe" | "moderate" | "high";
-    } {
-      const score = Math.max(0, Math.min(100, Math.round(100 - totalPenalty)));
-      const riskLevel =
-        score >= 80 ? "safe" : score >= 50 ? "moderate" : "high";
-      return { score, riskLevel };
-    }
-
     it("should return 100 and safe when there are zero penalties", () => {
-      const result = calculateScore(0);
-      expect(result.score).toBe(100);
+      const result = computeScoreFromPenalty(0);
+      expect(result.safetyScore).toBe(100);
       expect(result.riskLevel).toBe("safe");
     });
 
     it("should evaluate to moderate risk for medium severity penalties", () => {
-      const result = calculateScore(35);
-      expect(result.score).toBe(65);
+      const result = computeScoreFromPenalty(35);
+      expect(result.safetyScore).toBe(65);
       expect(result.riskLevel).toBe("moderate");
     });
 
     it("should evaluate to high risk for severe cluster penalties", () => {
-      const result = calculateScore(60);
-      expect(result.score).toBe(40);
+      const result = computeScoreFromPenalty(60);
+      expect(result.safetyScore).toBe(40);
       expect(result.riskLevel).toBe("high");
     });
 
     it("should never drop below zero even with extreme penalty overload", () => {
-      const result = calculateScore(250);
-      expect(result.score).toBe(0);
+      const result = computeScoreFromPenalty(250);
+      expect(result.safetyScore).toBe(0);
       expect(result.riskLevel).toBe("high");
     });
   });

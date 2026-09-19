@@ -74,22 +74,24 @@ export const updateLocationSchema = z.object({
   heading: z.number().optional(),
 });
 
+const cloudinaryAudioUrl = z
+  .string()
+  .url("Audio evidence must be a valid URL")
+  .refine(
+    (url) => !url || url.startsWith("https://res.cloudinary.com/"),
+    "Audio evidence URL must be hosted on Cloudinary (https://res.cloudinary.com/)",
+  )
+  .optional()
+  .nullable();
+
 export const sosAlertSchema = z.object({
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),
   accuracy: z.number().optional(),
   battery_percentage: z.number().min(0).max(100).optional(),
   journey_id: z.number().or(z.string()).optional().nullable(),
-  audio_url: z
-    .string()
-    .url("audio_url must be a valid URL")
-    .optional()
-    .nullable(),
-  audioUrl: z
-    .string()
-    .url("audioUrl must be a valid URL")
-    .optional()
-    .nullable(),
+  audio_url: cloudinaryAudioUrl,
+  audioUrl: cloudinaryAudioUrl,
 });
 
 export const trustedContactSchema = z.object({
