@@ -8,12 +8,16 @@ dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 import { db, initDatabase } from "../config/database";
 
 async function seedAdmin(): Promise<void> {
-  const adminEmail = (process.env.ADMIN_EMAIL || "amansinghkunwar07@gmail.com")
-    .toLowerCase()
-    .trim();
-  const rawPassword = process.env.ADMIN_PASSWORD || "AmanKunwar@007";
-  const adminName =
-    process.env.ADMIN_NAME || "Aman Singh Kunwar (System Administrator)";
+  const adminEmail = (process.env.ADMIN_EMAIL || "").toLowerCase().trim();
+  const rawPassword = process.env.ADMIN_PASSWORD || "";
+  const adminName = process.env.ADMIN_NAME || "System Administrator";
+
+  if (!adminEmail || !rawPassword) {
+    console.error(
+      "[FATAL] ADMIN_EMAIL and ADMIN_PASSWORD must be configured in environment (.env). Aborting.",
+    );
+    process.exit(1);
+  }
 
   console.log("====================================================");
   console.log(" SAFORA Security — One-Time Administrator Provisioning");

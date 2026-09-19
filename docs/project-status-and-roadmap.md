@@ -29,7 +29,7 @@ Overall Minor Project-I Completion: **~99% (Production & Viva Ready)**
 
 ## 2. Synopsis 6-Module Status Breakdown
 
-This section tracks implementation progress against the 6 core modules defined in **Section 4.2 of the [Project Synopsis](file:///D:/Safora/docs/SAFORA_Synopsis_Formatted.pdf)**:
+This section tracks implementation progress against the 6 core modules defined in **Section 4.2 of the [Project Synopsis](SAFORA_Synopsis_Formatted.pdf)**:
 
 ### 🟢 Module 1: User Authentication, Onboarding & Session
 - **Status**: **100% Complete**

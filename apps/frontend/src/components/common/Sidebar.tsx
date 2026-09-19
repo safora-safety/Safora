@@ -8,6 +8,7 @@ import {
   BarChart3,
   Users,
   Server,
+  Settings,
 } from 'lucide-react';
 import { useSocket } from '../../context/SocketContext';
 
@@ -65,6 +66,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       to: '/diagnostics',
       label: 'System Diagnostics',
       icon: Server,
+      badge: null,
+    },
+    {
+      to: '/settings',
+      label: 'Settings & Security',
+      icon: Settings,
       badge: null,
     },
   ];

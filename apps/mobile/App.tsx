@@ -1,4 +1,4 @@
-import React, { Component, ReactNode } from 'react';
+import React, { Component, ReactNode, useEffect } from 'react';
 import {
   StatusBar,
   StyleSheet,
@@ -9,6 +9,7 @@ import {
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
+import { notificationService } from './src/services/notificationService';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -64,6 +65,10 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 
 function AppContent(): React.JSX.Element {
   const { colors, isDark } = useTheme();
+
+  useEffect(() => {
+    notificationService.initialize();
+  }, []);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>

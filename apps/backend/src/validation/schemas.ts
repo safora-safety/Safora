@@ -4,12 +4,17 @@ export const registerSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters").max(100),
   email: z.string().email("Invalid email address"),
   phone: z.string().optional(),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
 });
 
 export const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(1, "Password is required"),
+});
+
+export const changePasswordSchema = z.object({
+  oldPassword: z.string().min(1, "Current password is required"),
+  newPassword: z.string().min(8, "New password must be at least 8 characters"),
 });
 
 export const updateProfileSchema = z.object({
@@ -75,8 +80,16 @@ export const sosAlertSchema = z.object({
   accuracy: z.number().optional(),
   battery_percentage: z.number().min(0).max(100).optional(),
   journey_id: z.number().or(z.string()).optional().nullable(),
-  audio_url: z.string().optional().nullable(),
-  audioUrl: z.string().optional().nullable(),
+  audio_url: z
+    .string()
+    .url("audio_url must be a valid URL")
+    .optional()
+    .nullable(),
+  audioUrl: z
+    .string()
+    .url("audioUrl must be a valid URL")
+    .optional()
+    .nullable(),
 });
 
 export const trustedContactSchema = z.object({

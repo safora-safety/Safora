@@ -256,12 +256,16 @@ export async function initDatabase(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id, created_at DESC);
     `);
 
-    // 8. Seed verified Dehradun and nationwide safety dataset (only if not already populated)
+    // 8. Seed verified safety dataset ONLY on a fresh, completely empty database (never purge or overwrite user data)
     try {
       const countCheck = await client.query("SELECT COUNT(*) FROM reports;");
       const reportCount = parseInt(countCheck.rows[0].count, 10);
-      if (reportCount !== 50) {
+      if (reportCount === 0) {
         await seedRealAdminData();
+      } else {
+        console.log(
+          `[INFO] Database already contains ${reportCount} reports; skipping seed.`,
+        );
       }
     } catch (seedErr) {
       console.warn("[WARN] Background dataset seeding warning:", seedErr);

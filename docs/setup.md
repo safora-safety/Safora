@@ -31,8 +31,8 @@ NODE_ENV=development
 DATABASE_URL=postgresql://user:password@ep-sample-pooler.region.neon.tech/safora?sslmode=require
 DATABASE_URL_DIRECT=postgresql://user:password@ep-sample.region.neon.tech/safora?sslmode=require
 
-# Security & JWT
-JWT_SECRET=safora_super_secret_jwt_key_2026_dev
+# Security & JWT (use a long random phrase in production)
+JWT_SECRET=your_secure_random_jwt_secret_phrase
 
 # Push Notifications (Optional for local dev)
 FCM_SERVER_KEY=sample_fcm_key

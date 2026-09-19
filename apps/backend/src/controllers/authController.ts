@@ -79,3 +79,32 @@ export async function updateProfile(
     next(err);
   }
 }
+
+export async function changePassword(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (!req.user) {
+      throw new AppError("Unauthorized", 401);
+    }
+
+    const { oldPassword, newPassword } = req.body;
+    if (!oldPassword || !newPassword) {
+      throw new AppError(
+        "Both current password and new password are required",
+        400,
+      );
+    }
+
+    await AuthService.changePassword(req.user.id, oldPassword, newPassword);
+
+    res.status(200).json({
+      success: true,
+      message: "Password changed successfully",
+    });
+  } catch (err) {
+    next(err);
+  }
+}

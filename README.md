@@ -69,26 +69,26 @@ flowchart TD
 
 ## 📚 Project Documentation Hub
 
-All detailed technical specifications, architectural diagrams, mathematical models, and deployment guides are available in the **[`docs/`](file:///D:/Safora/docs)** directory:
+All detailed technical specifications, architectural diagrams, mathematical models, and deployment guides are available in the **[`docs/`](docs/)** directory:
 
 | Document | Description |
 |---|---|
-| 📐 **[System Architecture](file:///D:/Safora/docs/architecture.md)** | Subsystems, C4 container diagram, DFD Level 0 (Context) & Level 1, sequence flows. |
-| 🔌 **[REST API Specification](file:///D:/Safora/docs/api.md)** | Endpoints reference, request/response schemas, JWT bearer authorization, and Socket.IO events. |
-| 🗄️ **[Database & PostGIS Architecture](file:///D:/Safora/docs/database.md)** | ER diagram, table schemas, `geography(Point, 4326)` types, GiST indexes, and spatial query patterns. |
-| 📱 **[Mobile Application Guide](file:///D:/Safora/docs/mobile-guide.md)** | React Native (Fabric/Hermes), screen catalog, Zustand state, Metro monorepo resolver, and Android APK builds. |
-| 🧠 **[Safety Algorithms & Mathematics](file:///D:/Safora/docs/safety-algorithms.md)** | Mathematical safety score decay formulation, DBSCAN 50m clustering, and Safe Walk state machine. |
-| 🛠️ **[Developer Setup & Run Guide](file:///D:/Safora/docs/setup.md)** | Prerequisites, `.env` file configurations, running backend & mobile, and troubleshooting. |
-| 📏 **[Engineering Standards & Best Practices](file:///D:/Safora/docs/standards-and-best-practices.md)** | Codebase conventions, feature-based mobile folder structure, clean backend architecture, and PostGIS idioms. |
-| 📊 **[Project Status & Roadmap](file:///D:/Safora/docs/project-status-and-roadmap.md)** | Completion progress scorecard (~94%), what is done, and remaining tasks for final submission. |
-| 📑 **[Docs Master Index](file:///D:/Safora/docs/README.md)** | Comprehensive documentation index and summary of all technical artifacts. |
-| 📄 **[Academic Synopsis PDF](file:///D:/Safora/docs/SAFORA_Synopsis_Formatted.pdf)** | Approved project synopsis submitted to Dev Bhoomi Uttarakhand University. |
+| 📐 **[System Architecture](docs/architecture.md)** | Subsystems, C4 container diagram, DFD Level 0 (Context) & Level 1, sequence flows. |
+| 🔌 **[REST API Specification](docs/api.md)** | Endpoints reference, request/response schemas, JWT bearer authorization, and Socket.IO events. |
+| 🗄️ **[Database & PostGIS Architecture](docs/database.md)** | ER diagram, table schemas, `geography(Point, 4326)` types, GiST indexes, and spatial query patterns. |
+| 📱 **[Mobile Application Guide](docs/mobile-guide.md)** | React Native (Fabric/Hermes), screen catalog, Zustand state, Metro monorepo resolver, and Android APK builds. |
+| 🧠 **[Safety Algorithms & Mathematics](docs/safety-algorithms.md)** | Mathematical safety score decay formulation, DBSCAN 50m clustering, and Safe Walk state machine. |
+| 🛠️ **[Developer Setup & Run Guide](docs/setup.md)** | Prerequisites, `.env` file configurations, running backend & mobile, and troubleshooting. |
+| 📏 **[Engineering Standards & Best Practices](docs/standards-and-best-practices.md)** | Codebase conventions, feature-based mobile folder structure, clean backend architecture, and PostGIS idioms. |
+| 📊 **[Project Status & Roadmap](docs/project-status-and-roadmap.md)** | Completion progress scorecard (~98%), what is done, and remaining tasks for final submission. |
+| 📑 **[Docs Master Index](docs/README.md)** | Comprehensive documentation index and summary of all technical artifacts. |
+| 📄 **[Academic Synopsis PDF](docs/SAFORA_Synopsis_Formatted.pdf)** | Approved project synopsis submitted to Dev Bhoomi Uttarakhand University. |
 
 ---
 
 ## 🚀 Key Features & The 6 Core Modules
 
-Based on Section 4.2 of the [Project Synopsis](file:///D:/Safora/docs/SAFORA_Synopsis_Formatted.pdf):
+Based on Section 4.2 of the [Project Synopsis](docs/SAFORA_Synopsis_Formatted.pdf):
 
 1. **Module 1: User Authentication, Onboarding & Session Management**
    - Secure stateless authentication using JSON Web Tokens (JWT) and bcrypt password hashing.

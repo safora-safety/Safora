@@ -7,9 +7,11 @@ import {
   confirmReport,
   moderateReport,
   getAnalyticsSummary,
+  getDbscanClusters,
 } from "../controllers/reportController";
-import { authMiddleware } from "../middleware/auth";
+import { authMiddleware, requireStaff } from "../middleware/auth";
 import { validateBody, validateQuery } from "../middleware/validate";
+import { reportCreateRateLimiter } from "../middleware/rateLimiter";
 import {
   createReportSchema,
   nearbyReportsQuerySchema,
@@ -24,7 +26,13 @@ const router = Router();
 
 // Public / Authenticated read routes
 router.get("/", getReports);
-router.get("/analytics/summary", getAnalyticsSummary);
+router.get("/clusters", getDbscanClusters);
+router.get(
+  "/analytics/summary",
+  authMiddleware as any,
+  requireStaff as any,
+  getAnalyticsSummary,
+);
 router.get(
   "/nearby",
   validateQuery(nearbyReportsQuerySchema),
@@ -35,6 +43,7 @@ router.get("/safety-score", getSafetyScore);
 // Mutation routes
 router.post(
   "/",
+  reportCreateRateLimiter,
   authMiddleware as any,
   validateBody(createReportSchema),
   createReport,
@@ -63,6 +72,11 @@ router.post(
   },
 );
 router.patch("/:id/confirm", authMiddleware as any, confirmReport);
-router.patch("/:id/moderate", authMiddleware as any, moderateReport);
+router.patch(
+  "/:id/moderate",
+  authMiddleware as any,
+  requireStaff as any,
+  moderateReport,
+);
 
 export default router;

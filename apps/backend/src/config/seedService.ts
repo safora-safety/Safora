@@ -16,23 +16,24 @@ export async function seedRealAdminData(): Promise<void> {
     );
 
     // ── 1. PROVISION / PRESERVE SYSTEM ADMINISTRATOR ACCOUNT ──
-    const adminEmail = (
-      process.env.ADMIN_EMAIL || "amansinghkunwar07@gmail.com"
-    )
-      .toLowerCase()
-      .trim();
-    const adminAltEmail = "admin@safora.app";
-    const adminName =
-      process.env.ADMIN_NAME || "Aman Singh Kunwar (System Administrator)";
-    const rawPass = process.env.ADMIN_PASSWORD || "AmanKunwar@007";
+    const adminEmail = (process.env.ADMIN_EMAIL || "").toLowerCase().trim();
+    const adminName = process.env.ADMIN_NAME || "System Administrator";
+    const rawPass = process.env.ADMIN_PASSWORD;
+
+    if (!adminEmail || !rawPass) {
+      console.log(
+        "[WARN] ADMIN_EMAIL or ADMIN_PASSWORD not configured in environment; skipping admin provisioning.",
+      );
+      return;
+    }
 
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(rawPass, salt);
 
     let adminId: number;
     const adminCheck = await client.query(
-      `SELECT id FROM users WHERE LOWER(email) = $1 OR LOWER(email) = $2 LIMIT 1;`,
-      [adminEmail, adminAltEmail],
+      `SELECT id FROM users WHERE LOWER(email) = $1 LIMIT 1;`,
+      [adminEmail],
     );
 
     if (adminCheck.rows.length > 0) {
@@ -40,41 +41,22 @@ export async function seedRealAdminData(): Promise<void> {
       await client.query(
         `UPDATE users 
          SET name = $1, password = $2, role = 'admin', is_active = true,
-             phone = '+91 94120 00007', blood_group = 'O+', 
              emergency_notes = 'System Administrator & Emergency Dispatch Lead for SAFORA Command Center.'
          WHERE id = $3;`,
         [adminName, hashedPassword, adminId],
       );
     } else {
       const inserted = await client.query(
-        `INSERT INTO users (name, email, password, role, is_active, phone, blood_group, emergency_notes)
-         VALUES ($1, $2, $3, 'admin', true, '+91 94120 00007', 'O+', 'System Administrator & Emergency Dispatch Lead.')
+        `INSERT INTO users (name, email, password, role, is_active, emergency_notes)
+         VALUES ($1, $2, $3, 'admin', true, 'System Administrator & Emergency Dispatch Lead.')
          RETURNING id;`,
         [adminName, adminEmail, hashedPassword],
       );
       adminId = inserted.rows[0].id;
     }
 
-    // ── 2. PURGE OLD FAKE DATA IN SAFE DEPENDENCY ORDER ──
+    // ── 2. SCHEMA SANITY (No destructive purges - existing user data is preserved) ──
     await client.query(`BEGIN;`);
-    await client.query(`DELETE FROM notifications;`);
-    await client.query(`DELETE FROM sos_alerts;`);
-    await client.query(`DELETE FROM journeys;`);
-    await client.query(`DELETE FROM reports;`);
-    await client.query(`DELETE FROM trusted_contacts WHERE user_id != $1;`, [
-      adminId,
-    ]);
-
-    // Purge all non-admin users (Strict Zero Fake Users enforcement)
-    const purgeUsersRes = await client.query(
-      `DELETE FROM users 
-       WHERE id != $1 
-         AND LOWER(email) NOT IN ($2, $3);`,
-      [adminId, adminEmail, adminAltEmail],
-    );
-    console.log(
-      `[INFO] Purged ${purgeUsersRes.rowCount} fake/dummy users. Only legitimate Administrator preserved.`,
-    );
 
     // ── 3. ENSURE SCHEMA COLUMNS EXIST ON REPORTS ──
     try {

@@ -4,17 +4,20 @@ import {
   getUserStats,
   updateUserRole,
   updateUserStatus,
+  updateFcmToken,
 } from "../controllers/userController";
 import { authMiddleware, requireStaff, requireAdmin } from "../middleware/auth";
 
 const router = Router();
 
-// Staff and Admins can view user directory and statistics
 router.use(authMiddleware as any);
-router.use(requireStaff as any);
 
-router.get("/", listUsers);
-router.get("/stats", getUserStats);
+// User-level endpoints (any authenticated user)
+router.post("/fcm-token", updateFcmToken);
+
+// Staff and Admins can view user directory and statistics
+router.get("/", requireStaff as any, listUsers);
+router.get("/stats", requireStaff as any, getUserStats);
 
 // Elevation or suspension actions require Super/Admin role
 router.patch("/:id/role", requireAdmin as any, updateUserRole);

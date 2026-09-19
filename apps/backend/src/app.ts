@@ -4,6 +4,7 @@ import helmet from "helmet";
 import morgan from "morgan";
 import dotenv from "dotenv";
 import { runSystemDiagnostics } from "./config/diagnostics";
+import { authMiddleware, requireAdmin } from "./middleware/auth";
 import authRoutes from "./routes/authRoutes";
 import reportRoutes from "./routes/reportRoutes";
 import journeyRoutes from "./routes/journeyRoutes";
@@ -16,9 +17,35 @@ dotenv.config();
 
 const app = express();
 
+// Enable reverse proxy support (Render / Cloudflare / AWS ALB)
+app.set("trust proxy", 1);
+
 // Core Security & Request Middleware
 app.use(helmet());
-app.use(cors());
+
+const allowedOrigins = [
+  "https://safora-admin.onrender.com",
+  "http://localhost:5173",
+  "http://localhost:3000",
+  ...(process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())
+    : []),
+];
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests with no origin (such as mobile apps, curl, server-to-server)
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS origin not allowed: ${origin}`));
+      }
+    },
+    credentials: true,
+  }),
+);
+
 app.use(morgan("dev"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -37,18 +64,23 @@ app.get("/api/health", (_req: Request, res: Response) => {
   });
 });
 
-// Live Diagnostics Endpoint
-app.get("/api/diagnostics", async (_req: Request, res: Response) => {
-  try {
-    const report = await runSystemDiagnostics();
-    res.status(200).json(report);
-  } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : String(err);
-    res
-      .status(500)
-      .json({ error: "Failed to run diagnostics", details: errorMsg });
-  }
-});
+// Live Diagnostics Endpoint (Admin-only to avoid leaking infrastructure telemetry)
+app.get(
+  "/api/diagnostics",
+  authMiddleware as any,
+  requireAdmin as any,
+  async (_req: Request, res: Response) => {
+    try {
+      const report = await runSystemDiagnostics();
+      res.status(200).json(report);
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      res
+        .status(500)
+        .json({ error: "Failed to run diagnostics", details: errorMsg });
+    }
+  },
+);
 
 // Modular API Routes
 app.use("/api/auth", authRoutes);

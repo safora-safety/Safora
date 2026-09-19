@@ -5,7 +5,12 @@ import { User } from "@safora/shared-types";
 import { UserRepository } from "../repositories/userRepository";
 import { UserModel } from "../models/User";
 
-const JWT_SECRET = process.env.JWT_SECRET || "safora_jwt_secret_fallback_key";
+import { db } from "../config/database";
+
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error("FATAL: JWT_SECRET environment variable is missing.");
+}
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 
 export class AuthService {
@@ -105,5 +110,39 @@ export class AuthService {
     }
 
     return UserModel.fromRow(updatedRow);
+  }
+
+  static async changePassword(
+    userId: string | number,
+    oldPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    if (!newPassword || newPassword.length < 8) {
+      throw new AppError(
+        "New password must be at least 8 characters long",
+        400,
+      );
+    }
+
+    const userRow = await db.query(
+      "SELECT id, password FROM users WHERE id = $1 LIMIT 1;",
+      [userId],
+    );
+    if (userRow.rows.length === 0 || !userRow.rows[0].password) {
+      throw new AppError("User password record not found", 404);
+    }
+
+    const isMatch = await bcrypt.compare(oldPassword, userRow.rows[0].password);
+    if (!isMatch) {
+      throw new AppError("Incorrect current password", 401);
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const newHashed = await bcrypt.hash(newPassword, salt);
+
+    await db.query("UPDATE users SET password = $1 WHERE id = $2;", [
+      newHashed,
+      userId,
+    ]);
   }
 }
