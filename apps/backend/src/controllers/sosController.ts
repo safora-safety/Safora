@@ -11,6 +11,10 @@ export async function triggerSOS(
   try {
     if (!req.user) throw new AppError("Unauthorized", 401);
 
+    const requestedIsTest = Boolean(req.body.is_test ?? req.body.isTest);
+    const isStaff = req.user.role === "admin" || req.user.role === "moderator";
+    const isTest = isStaff ? requestedIsTest : false;
+
     const result = await SosService.triggerSOS({
       userId: req.user.id,
       latitude: req.body.latitude,
@@ -19,7 +23,7 @@ export async function triggerSOS(
       batteryPercentage: req.body.battery_percentage,
       journeyId: req.body.journey_id,
       audioUrl: req.body.audio_url || req.body.audioUrl,
-      isTest: req.body.is_test ?? req.body.isTest,
+      isTest,
     });
 
     res.status(201).json({

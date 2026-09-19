@@ -62,6 +62,12 @@ export class AudioRecorderService {
   ): Promise<string | null> {
     if (!isRecording) return null;
 
+    // Prevent orphan uploads when there is no alert to attach to
+    if (!alertId) {
+      await this.stopSilent();
+      return null;
+    }
+
     try {
       isRecording = false;
       const uri = await Sound.stopRecorder();

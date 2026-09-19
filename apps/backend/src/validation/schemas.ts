@@ -74,12 +74,26 @@ export const updateLocationSchema = z.object({
   heading: z.number().optional(),
 });
 
+const getExpectedCloudinaryPrefix = (): string => {
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME || "safora";
+  return `https://res.cloudinary.com/${cloudName}/`;
+};
+
 const cloudinaryAudioUrl = z
   .string()
   .url("Audio evidence must be a valid URL")
   .refine(
-    (url) => !url || url.startsWith("https://res.cloudinary.com/"),
-    "Audio evidence URL must be hosted on Cloudinary (https://res.cloudinary.com/)",
+    (url) => {
+      if (!url) return true;
+      const prefix = getExpectedCloudinaryPrefix();
+      if (!url.startsWith(prefix)) return false;
+      return (
+        url.includes("/video/upload/") ||
+        url.includes("/video/authenticated/") ||
+        url.includes("/safora/sos_audio/")
+      );
+    },
+    `Audio evidence URL must be hosted on SAFORA Cloudinary storage (https://res.cloudinary.com/${process.env.CLOUDINARY_CLOUD_NAME || "<cloud-name>"}/)`,
   )
   .optional()
   .nullable();

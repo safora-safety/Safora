@@ -197,4 +197,9 @@ As documented in **Section 1.3 & 10 of the Synopsis**, the following are **not**
    - Cellular SMS failover uses the native operating system `sms:` URI intent. While guaranteed to work with zero internet, it requires the user to confirm the send action within their native SMS application.
 
 3. **Platform Support**:
-   - Production focus is on Android (`react-native-nitro-sound`, Hermes, ProGuard/R8 minified APK). iOS deployment requires CocoaPods configuration and Apple Developer signing certificates during Phase 2.
+   - Production focus is on Android (`react-native-nitro-sound`, Hermes, ProGuard/R8 minified APK). iOS deployment requires CocoaPods configuration and Apple Developer signing certificates during Phase 2 (`NSMicrophoneUsageDescription` configured).
+
+4. **Locked-Screen Background Microphone Recording**:
+   - *Current Mechanism*: Audio evidence capture operates in-process via `react-native-nitro-sound` for 30 seconds immediately upon SOS trigger.
+   - *Limitation*: On modern Android versions (Android 14+ / API 34+), the OS pauses or mutes microphone access if the screen is immediately locked or enters deep sleep without an active foreground service notification.
+   - *Phase 2 Remediation*: Native Android foreground service (`FOREGROUND_SERVICE_MICROPHONE`) to ensure uninterrupted recording across locked screens.

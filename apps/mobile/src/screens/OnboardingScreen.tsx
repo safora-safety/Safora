@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { colors } from '../theme/colors';
 import { useAuthStore } from '../store/authStore';
+import { AudioRecorderService } from '../services/audioRecorderService';
 
 const { width } = Dimensions.get('window');
 
@@ -84,22 +85,30 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     const slide = Math.round(event.nativeEvent.contentOffset.x / width);
     if (slide !== currentIndex) {
       setCurrentIndex(slide);
+      if (slide === SLIDES.length - 1) {
+        AudioRecorderService.requestPermission().catch(() => {});
+      }
     }
   };
 
   const handleNext = async () => {
     if (currentIndex < SLIDES.length - 1) {
+      if (currentIndex === SLIDES.length - 2) {
+        AudioRecorderService.requestPermission().catch(() => {});
+      }
       scrollRef.current?.scrollTo({
         x: (currentIndex + 1) * width,
         animated: true,
       });
     } else {
+      AudioRecorderService.requestPermission().catch(() => {});
       await completeOnboarding();
       navigation.replace('AccountSelect');
     }
   };
 
   const handleSkip = async () => {
+    AudioRecorderService.requestPermission().catch(() => {});
     await completeOnboarding();
     navigation.replace('AccountSelect');
   };
