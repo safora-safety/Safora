@@ -75,10 +75,8 @@ export const updateLocationSchema = z.object({
 });
 
 const getExpectedCloudinaryPrefix = (): string => {
-  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
-  return cloudName
-    ? `https://res.cloudinary.com/${cloudName}/`
-    : "https://res.cloudinary.com/";
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME || "safora";
+  return `https://res.cloudinary.com/${cloudName}/`;
 };
 
 const cloudinaryAudioUrl = z

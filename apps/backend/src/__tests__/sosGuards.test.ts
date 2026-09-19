@@ -155,7 +155,7 @@ describe("SOS Guards & Authorization Security", () => {
 
   describe("Cloudinary URL Validation Schema", () => {
     it("should accept authenticated Cloudinary video URLs matching configured cloud", () => {
-      const cloud = process.env.CLOUDINARY_CLOUD_NAME || "test_safora_cloud";
+      const cloud = process.env.CLOUDINARY_CLOUD_NAME || "safora";
       const valid = sosAlertSchema.safeParse({
         latitude: 30.3165,
         longitude: 78.0322,
