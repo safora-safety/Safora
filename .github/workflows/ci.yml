@@ -1,4 +1,4 @@
-name: CI
+name: SAFORA CI
 
 on:
   push:
@@ -10,14 +10,115 @@ on:
       - main
       - master
 
-jobs:
-  validate:
-    name: Validate repository
-    runs-on: ubuntu-latest
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
+jobs:
+  # ── 1. Validate & Build Shared Types ───────────────────────────────────────
+  packages:
+    name: Build Shared Domain Types
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Confirm workflow setup
-        run: echo "CI workflow is configured for SAFORA."
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install Monorepo Dependencies
+        run: npm ci
+
+      - name: Build @safora/shared-types
+        run: npm run build --workspace=packages/shared-types
+
+      - name: Upload Shared Types Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: shared-types-dist
+          path: packages/shared-types/dist/
+          retention-days: 1
+
+  # ── 2. Validate Backend Gateway ───────────────────────────────────────────
+  backend:
+    name: Validate Backend (Node.js + TypeScript)
+    needs: packages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install Monorepo Dependencies
+        run: npm ci
+
+      - name: Download Shared Types Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: shared-types-dist
+          path: packages/shared-types/dist/
+
+      - name: Build Backend Gateway
+        run: npm run build --workspace=apps/backend
+
+  # ── 3. Validate Web Operations Command Frontend ───────────────────────────
+  frontend:
+    name: Validate Web Admin (Vite + React)
+    needs: packages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install Monorepo Dependencies
+        run: npm ci
+
+      - name: Download Shared Types Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: shared-types-dist
+          path: packages/shared-types/dist/
+
+      - name: Build Web Admin Production Bundle
+        run: npm run build --workspace=apps/frontend
+
+  # ── 4. Validate Mobile App (React Native Client) ───────────────────────────
+  mobile:
+    name: Validate Mobile App (React Native)
+    needs: packages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install Monorepo Dependencies
+        run: npm ci
+
+      - name: Download Shared Types Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: shared-types-dist
+          path: packages/shared-types/dist/
+
+      - name: Typecheck Mobile App TypeScript
+        run: npx tsc --noEmit -p apps/mobile/tsconfig.json

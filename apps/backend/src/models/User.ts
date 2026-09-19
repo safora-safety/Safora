@@ -9,6 +9,7 @@ export interface UserRow {
   emergency_notes?: string | null;
   password?: string;
   role: UserRole;
+  is_active?: boolean;
   created_at: Date | string;
 }
 
@@ -20,6 +21,7 @@ export interface UserEntity {
   bloodGroup?: string;
   emergencyNotes?: string;
   role: UserRole;
+  isActive?: boolean;
   createdAt: string;
 }
 
@@ -33,6 +35,7 @@ export class UserModel {
       bloodGroup: row.blood_group || undefined,
       emergencyNotes: row.emergency_notes || undefined,
       role: row.role || "user",
+      isActive: row.is_active !== undefined ? Boolean(row.is_active) : true,
       createdAt:
         row.created_at instanceof Date
           ? row.created_at.toISOString()

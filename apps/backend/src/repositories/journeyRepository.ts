@@ -91,4 +91,37 @@ export class JourneyRepository {
     );
     return result.rows[0] || null;
   }
+
+  static async findActiveJourneys(): Promise<
+    Array<
+      JourneyRow & {
+        user_name?: string;
+        user_phone?: string;
+        user_email?: string;
+      }
+    >
+  > {
+    const result = await db.query(
+      `SELECT j.*, u.name as user_name, u.phone as user_phone, u.email as user_email
+       FROM journeys j
+       LEFT JOIN users u ON j.user_id = u.id
+       WHERE j.status IN ('active', 'deviated')
+       ORDER BY j.started_at DESC;`,
+    );
+    return result.rows;
+  }
+
+  static async findAll(
+    limit = 50,
+  ): Promise<Array<JourneyRow & { user_name?: string; user_phone?: string }>> {
+    const result = await db.query(
+      `SELECT j.*, u.name as user_name, u.phone as user_phone, u.email as user_email
+       FROM journeys j
+       LEFT JOIN users u ON j.user_id = u.id
+       ORDER BY j.started_at DESC
+       LIMIT $1;`,
+      [limit],
+    );
+    return result.rows;
+  }
 }

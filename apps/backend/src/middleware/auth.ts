@@ -41,3 +41,40 @@ export function authMiddleware(
       .json({ success: false, message: "Invalid or expired token" });
   }
 }
+
+export function requireAdmin(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+): void {
+  if (!req.user || req.user.role !== "admin") {
+    res
+      .status(403)
+      .json({
+        success: false,
+        message: "Forbidden: Admin privileges required",
+      });
+    return;
+  }
+  next();
+}
+
+export function requireStaff(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+): void {
+  if (
+    !req.user ||
+    (req.user.role !== "admin" && req.user.role !== "moderator")
+  ) {
+    res
+      .status(403)
+      .json({
+        success: false,
+        message: "Forbidden: Staff privileges required",
+      });
+    return;
+  }
+  next();
+}

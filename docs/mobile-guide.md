@@ -69,14 +69,20 @@ To provide native Android UX and prevent abrupt app closure:
 
 ### 4.1 Open Geospatial Canvas Engine (`OpenMapView.tsx`)
 Rather than relying on proprietary Google Maps SDKs that require active billing accounts and can crash without API keys, SAFORA features an open-source, resilient geospatial canvas powered by Leaflet inside a hardware-accelerated `WebView`:
-- **100% Watermark-Free & Keyless Basemap Switcher**:
-  - **Default Dark Mode**: High-contrast, dark slate cartography via **Esri World Dark Gray Base** (`https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}`) with `maxNativeZoom: 16, maxZoom: 19`.
-  - **Street View / Light Mode**: Crisp street geometry via **OpenStreetMap** (`https://tile.openstreetmap.org/{z}/{x}/{y}.png`).
-  - **Satellite View**: Ultra-high-resolution satellite imagery via **Esri World Imagery** (`https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}`).
+- **100% Watermark-Free & Keyless Tactical Basemap Switcher**:
+  - ⚡ **Dark Matrix (Default)**: High-tech cyber dark theme via OpenStreetMap tiles processed with hardware-accelerated CSS matrix inversion filter (`.dark-matrix-tiles`), exactly matching the Web Admin Command Center.
+  - 🛡️ **Tactical Gray**: High-contrast, dark slate cartography via **Esri World Dark Gray Base** (`https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}`) with `maxNativeZoom: 16, maxZoom: 19`.
+  - 🛰️ **Satellite View**: Ultra-high-resolution satellite imagery via **Esri World Imagery** (`https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}`).
+  - 🛣️ **Street Map / Light Mode**: Crisp street geometry via **OpenStreetMap** (`https://tile.openstreetmap.org/{z}/{x}/{y}.png`).
+- **Infinite World Duplication & Bounds Locking**:
+  - Configured with `noWrap: true` on `L.tileLayer` to stop horizontal tile repeating beyond the -180° to +180° meridians.
+  - Constrained with `maxBounds: [[-85, -180], [85, 180]]`, `maxBoundsViscosity: 1.0`, `minZoom: 3`, and `worldCopyJump: false` to lock camera view strictly to legitimate global bounds.
 - **10km Offline Map Caching**:
   - The map injects `window.cacheSurrounding10km(lat, lon, radiusKm)` upon coordinate load.
   - Automatically fetches and stores the 10km bounding box matrix of tiles into the device's HTML5 `CacheStorage`.
   - When the phone enters offline or no-signal zones, cached map tiles load instantly from internal storage.
+- **Keyless & Quota-Independent Tile Architecture**:
+  - Map tile rendering requires zero MapTiler or third-party API keys, preventing quota exhaustion, billing freezes, or watermark pollution. MapTiler API keys in the project are reserved strictly for optional geocoding fallback and diagnostics telemetry.
 
 ### 4.2 Calibrated Multi-Modal Routing Engine (`routingService.ts`)
 Standard routing services often fail to represent real-world pedestrian speeds. SAFORA implements calibrated travel-time mathematics:
@@ -183,7 +189,46 @@ adb install -r apps/mobile/android/app/build/outputs/apk/release/app-release.apk
 
 ---
 
-## 5. Permissions Checklist
+## 5. Direct USB Running on Physical Phone (Developer Options)
+
+To directly deploy, run, and live-debug SAFORA on your physical Android smartphone over USB:
+
+### 5.1 Enable Developer Options & USB Debugging
+1. Open phone **Settings** → **About Phone**.
+2. Tap **Build Number** 7 times until you see *"You are now a developer!"*.
+3. Navigate to **System** (or **Additional Settings**) → **Developer Options**.
+4. Enable:
+   - ✅ **USB Debugging**
+   - ✅ **Install via USB** *(vital on Xiaomi/Redmi/MIUI, Realme, and Oppo devices)*.
+
+### 5.2 Connect via USB & Authorize
+1. Connect the phone to the workstation via a USB data cable and select **File Transfer (MTP)** mode.
+2. Accept the on-screen prompt: *"Allow USB debugging from this computer?"* (check *Always allow*).
+3. Verify device connection in terminal:
+   ```bash
+   adb devices
+   ```
+
+### 5.3 Reverse Ports for Local Backend & Metro
+Since the backend API (`:5000`) and Metro bundler (`:8081`) run on your host PC, bridge ports over USB so the phone accesses them directly at `http://localhost:5000`:
+```bash
+adb reverse tcp:8081 tcp:8081
+adb reverse tcp:5000 tcp:5000
+```
+
+### 5.4 Launch App onto Phone
+From `apps/mobile`:
+```powershell
+# Terminal 1: Start Metro bundler
+npm start
+
+# Terminal 2: Build & install debug APK directly onto phone
+npm run android
+```
+
+---
+
+## 6. Permissions Checklist
 
 | Permission | Android Manifest Key | Purpose |
 |---|---|---|

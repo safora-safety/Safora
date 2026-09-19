@@ -6,6 +6,7 @@ import {
   getSafetyScore,
   confirmReport,
   moderateReport,
+  getAnalyticsSummary,
 } from "../controllers/reportController";
 import { authMiddleware } from "../middleware/auth";
 import { validateBody, validateQuery } from "../middleware/validate";
@@ -23,6 +24,7 @@ const router = Router();
 
 // Public / Authenticated read routes
 router.get("/", getReports);
+router.get("/analytics/summary", getAnalyticsSummary);
 router.get(
   "/nearby",
   validateQuery(nearbyReportsQuerySchema),

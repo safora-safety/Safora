@@ -14,6 +14,7 @@ export class ReportService {
     latitude: number;
     longitude: number;
     photo_url?: string | null;
+    source?: string | null;
   }): Promise<HazardReport> {
     const parsedSeverity = Math.min(5, Math.max(1, data.severity || 3));
 
@@ -26,6 +27,7 @@ export class ReportService {
       latitude: data.latitude,
       longitude: data.longitude,
       photoUrl: data.photo_url || null,
+      source: data.source || null,
     });
 
     // Invalidate cached reports across spatial grids
@@ -147,13 +149,18 @@ export class ReportService {
   static async moderateReport(
     reportId: string | number,
     status: string,
+    resolutionNotes?: string,
   ): Promise<void> {
     const allowed = ["active", "resolved", "duplicate", "fake"];
     if (!allowed.includes(status)) {
       throw new AppError("Invalid moderation status", 400);
     }
 
-    const updated = await ReportRepository.updateStatus(reportId, status);
+    const updated = await ReportRepository.updateStatus(
+      reportId,
+      status,
+      resolutionNotes,
+    );
     if (!updated) {
       throw new AppError("Hazard report not found", 404);
     }

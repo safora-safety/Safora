@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { ReportService } from "../services/reportService";
+import { ReportRepository } from "../repositories/reportRepository";
 import { AuthenticatedRequest } from "../middleware/auth";
 
 export async function createReport(
@@ -17,6 +18,11 @@ export async function createReport(
       latitude: req.body.latitude,
       longitude: req.body.longitude,
       photo_url: req.body.photo_url,
+      source:
+        req.body.source ||
+        (req.user?.role === "admin"
+          ? "admin_dispatch"
+          : "community_crowdsource"),
     });
 
     res.status(201).json({
@@ -125,13 +131,119 @@ export async function moderateReport(
   next: NextFunction,
 ): Promise<void> {
   try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     await ReportService.moderateReport(
-      req.params.id as string,
+      id,
       req.body.status,
+      req.body.resolutionNotes || req.body.resolution_notes,
     );
     res.status(200).json({
       success: true,
       message: `Report marked as ${req.body.status}`,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+const CATEGORY_META: Record<string, { label: string; color: string }> = {
+  lighting: { label: "Poor Lighting", color: "#F59E0B" },
+  road_hazard: { label: "Road Hazard", color: "#EF4444" },
+  waterlogging: { label: "Waterlogging", color: "#06B6D4" },
+  isolated_area: { label: "Isolated Area", color: "#8B5CF6" },
+  traffic: { label: "Heavy Traffic", color: "#EC4899" },
+  other: { label: "Other Hazard", color: "#64748B" },
+};
+
+export async function getAnalyticsSummary(
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const [rawCategories, rawSeverities, rawHourly, summaryStats] =
+      await Promise.all([
+        ReportRepository.getCategoryCounts(),
+        ReportRepository.getSeverityCounts(),
+        ReportRepository.getHourlyDistribution(),
+        ReportRepository.getAnalyticsSummary(),
+      ]);
+
+    // Format categories
+    const categoryData = rawCategories.map(
+      (item: { category: string; count: number }) => {
+        const meta = CATEGORY_META[item.category] || {
+          label: item.category
+            .replace(/_/g, " ")
+            .replace(/\b\w/g, (l: string) => l.toUpperCase()),
+          color: "#6366F1",
+        };
+        return {
+          category: item.category,
+          name: meta.label,
+          count: item.count,
+          fill: meta.color,
+        };
+      },
+    );
+
+    // Format severities (ensure 1 through 5 are represented)
+    const severityLabels: Record<number, string> = {
+      1: "Severity 1 (Minor)",
+      2: "Severity 2 (Moderate)",
+      3: "Severity 3 (Substantial)",
+      4: "Severity 4 (Severe)",
+      5: "Severity 5 (Critical)",
+    };
+    const severityMap = new Map(
+      rawSeverities.map((s: { severity: number; count: number }) => [
+        s.severity,
+        s.count,
+      ]),
+    );
+    const severityData = [1, 2, 3, 4, 5].map((level) => ({
+      level: severityLabels[level] || `Level ${level}`,
+      severity: level,
+      reports: severityMap.get(level) || 0,
+    }));
+
+    // Format hourly trend (fill 24 hours or peak corridor hours 18:00 - 02:00)
+    const hourlyMap = new Map(
+      rawHourly.map((h: { hour: number; count: number }) => [h.hour, h.count]),
+    );
+    const timeSlots = [18, 19, 20, 21, 22, 23, 0, 1, 2];
+    const hourlyTrend = timeSlots.map((hour) => ({
+      time: `${String(hour).padStart(2, "0")}:00`,
+      incidents: hourlyMap.get(hour) || 0,
+    }));
+
+    // Compute campus safety score (base 100 minus weighted active hazards)
+    const safetyIndex = Math.max(
+      20,
+      Math.min(
+        100,
+        100 - summaryStats.activeReports * 3 - summaryStats.totalSos * 5,
+      ),
+    );
+
+    res.status(200).json({
+      success: true,
+      data: {
+        categoryData,
+        severityData,
+        hourlyTrend,
+        kpis: {
+          safetyIndex: `${safetyIndex} / 100`,
+          totalReports: summaryStats.totalReports,
+          activeReports: summaryStats.activeReports,
+          resolvedReports: summaryStats.resolvedReports,
+          totalSos: summaryStats.totalSos,
+          activeJourneys: summaryStats.activeJourneys,
+          totalUsers: summaryStats.totalUsers,
+          peakRiskHours: "21:00 - 23:00",
+          averageDispatchSla: "2.4 mins",
+        },
+      },
     });
   } catch (err) {
     next(err);

@@ -88,10 +88,12 @@ Small UI details separate amateur prototypes from real-life apps:
     - **Car**: Calibrated to $7.22\text{ m/s}$ ($26\text{ km/h}$) $+ 45\text{s}$ buffer $\rightarrow$ **~3.0 mins per 1 km**.
   - Count of active safety hazards along the selected path.
 - [x] **Recenter GPS Floating Action Button (FAB)**: Smoothly animates camera back to the user's current live coordinates.
-- [x] **Dynamic Map Layer Toggle**:
-  - **Clean Default**: Fast vector tiles via MapTiler.
-  - **Street View**: OpenStreetMap cartography.
-  - **Satellite View**: High-definition Esri World Imagery satellite layer.
+- [x] **Dynamic Map Layer Switcher & Anti-Duplication**:
+  - ⚡ **Dark Matrix (Default)**: High-tech cyber dark theme with hardware-accelerated CSS matrix inversion, matching Web Admin Command Center.
+  - 🛡️ **Tactical Gray**: Esri World Dark Gray Canvas.
+  - 🛰️ **Satellite View**: High-definition Esri World Imagery satellite layer.
+  - 🛣️ **Street Map**: OpenStreetMap standard navigation view.
+  - 🔒 **Global Bounds Lock**: World duplication prevented horizontally via `noWrap: true` and `maxBounds: [[-85, -180], [85, 180]]`.
 - [x] **Hazard Pin Callout**: Tapping a hazard pin expands a bottom drawer showing:
   - Hazard category icon, severity pill (1–5).
   - Time reported (e.g. `"Reported 45 mins ago"`).

@@ -11,6 +11,8 @@ export interface ReportRow {
   latitude: number;
   longitude: number;
   photo_url?: string | null;
+  source?: string | null;
+  resolution_notes?: string | null;
   confirmations_count: number;
   status: HazardStatus;
   distance_meters?: number | string | null;
@@ -28,6 +30,8 @@ export interface ReportEntity {
   latitude: number;
   longitude: number;
   photoUrl?: string | null;
+  source?: string;
+  resolutionNotes?: string;
   confirmationsCount: number;
   status: HazardStatus;
   distanceMeters?: number;
@@ -47,6 +51,8 @@ export class ReportModel {
       latitude: Number(row.latitude),
       longitude: Number(row.longitude),
       photoUrl: row.photo_url || null,
+      source: row.source || "admin_dispatch",
+      resolutionNotes: row.resolution_notes || undefined,
       confirmationsCount: Number(row.confirmations_count || 0),
       status: row.status || "active",
       distanceMeters:
