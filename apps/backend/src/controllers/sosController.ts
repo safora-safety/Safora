@@ -74,6 +74,29 @@ export async function addContact(
   }
 }
 
+export async function updateContact(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (!req.user) throw new AppError("Unauthorized", 401);
+
+    const contact = await SosService.updateContact(
+      req.user.id,
+      req.params.id as string,
+      req.body,
+    );
+    res.status(200).json({
+      success: true,
+      message: "Trusted contact updated",
+      contact,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function deleteContact(
   req: AuthenticatedRequest,
   res: Response,
@@ -98,11 +121,13 @@ export async function checkGuardian(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const email = (req.query.email as string) || "";
-    const result = await SosService.checkGuardianAccount(email);
+    const query =
+      (req.query.email as string) || (req.query.query as string) || "";
+    const result = await SosService.checkGuardianAccount(query);
     res.status(200).json({
       success: true,
       exists: result.exists,
+      name: result.name,
     });
   } catch (err) {
     next(err);

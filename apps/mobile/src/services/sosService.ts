@@ -92,6 +92,26 @@ export class SosService {
   }
 
   /**
+   * Update an existing emergency trusted contact
+   */
+  static async updateContact(
+    contactId: string | number,
+    contact: {
+      name: string;
+      phone: string;
+      email?: string;
+      relationship?: string;
+    },
+  ): Promise<TrustedContact> {
+    const res = await apiClient.put<
+      ApiResponse<{ contact: TrustedContact }> & {
+        contact: TrustedContact;
+      }
+    >(`/sos/contacts/${contactId}`, contact);
+    return res.data.contact || (res.data as any).data?.contact;
+  }
+
+  /**
    * Delete an emergency trusted contact
    */
   static async deleteContact(contactId: string | number): Promise<void> {

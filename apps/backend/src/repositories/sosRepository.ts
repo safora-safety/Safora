@@ -86,10 +86,50 @@ export class SosRepository {
     return result.rows.length > 0;
   }
 
+  static async updateContact(
+    userId: string | number,
+    contactId: string | number,
+    data: {
+      name: string;
+      phone: string;
+      email?: string;
+      relationship?: string;
+    },
+  ): Promise<TrustedContactRow | null> {
+    const result = await db.query(
+      `UPDATE trusted_contacts
+       SET name = $1, phone = $2, email = $3, relationship = $4
+       WHERE id = $5 AND user_id = $6
+       RETURNING *;`,
+      [
+        data.name.trim(),
+        data.phone.trim(),
+        data.email?.trim().toLowerCase() || null,
+        data.relationship || null,
+        contactId,
+        userId,
+      ],
+    );
+    return result.rows[0] || null;
+  }
+
   static async findUserByEmail(email: string): Promise<any | null> {
     const result = await db.query(
       `SELECT id, name, email, phone, fcm_token FROM users WHERE LOWER(email) = LOWER($1);`,
       [email.trim()],
+    );
+    return result.rows[0] || null;
+  }
+
+  static async findUserByPhone(phone: string): Promise<any | null> {
+    const cleanPhone = phone.replace(/[^0-9]/g, "").slice(-10);
+    if (!cleanPhone || cleanPhone.length < 10) return null;
+    const result = await db.query(
+      `SELECT id, name, email, phone, fcm_token 
+       FROM users 
+       WHERE RIGHT(REGEXP_REPLACE(phone, '[^0-9]', '', 'g'), 10) = $1 
+       LIMIT 1;`,
+      [cleanPhone],
     );
     return result.rows[0] || null;
   }

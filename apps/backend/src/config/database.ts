@@ -230,6 +230,7 @@ export async function initDatabase(): Promise<void> {
         battery_percentage INTEGER,
         status VARCHAR(50) DEFAULT 'dispatched',
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
       ALTER TABLE sos_alerts ADD COLUMN IF NOT EXISTS audio_url TEXT;
       ALTER TABLE sos_alerts ADD COLUMN IF NOT EXISTS is_test BOOLEAN DEFAULT FALSE;
       ALTER TABLE notifications ADD COLUMN IF NOT EXISTS sos_alert_id INTEGER;
