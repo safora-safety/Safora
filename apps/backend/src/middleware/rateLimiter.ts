@@ -5,11 +5,15 @@ interface RateLimitRecord {
   resetTime: number;
 }
 
-export function createRateLimiter(options: {
+export interface RateLimiterOptions {
   windowMs: number;
   max: number;
   message?: string;
-}) {
+  keyGenerator?: (req: Request) => string;
+  skipSuccessfulRequests?: boolean;
+}
+
+export function createRateLimiter(options: RateLimiterOptions) {
   const hits = new Map<string, RateLimitRecord>();
 
   // Periodically clean up expired entries every 5 minutes
@@ -27,16 +31,38 @@ export function createRateLimiter(options: {
   cleanupTimer.unref();
 
   return (req: Request, res: Response, next: NextFunction): void => {
-    // Obtain client IP address (works with app.set('trust proxy', 1))
-    const ip = req.ip || req.socket.remoteAddress || "unknown";
+    const key = options.keyGenerator
+      ? options.keyGenerator(req)
+      : req.ip || req.socket.remoteAddress || "unknown";
     const now = Date.now();
-    const record = hits.get(ip);
+    const record = hits.get(key);
+
+    const setupSkipSuccess = () => {
+      if (
+        options.skipSuccessfulRequests &&
+        !res.locals?.[`_rateLimitSkipBound_${key}`]
+      ) {
+        if (!res.locals) {
+          res.locals = {};
+        }
+        res.locals[`_rateLimitSkipBound_${key}`] = true;
+        res.on("finish", () => {
+          if (res.statusCode < 400) {
+            const current = hits.get(key);
+            if (current) {
+              current.count = Math.max(0, current.count - 1);
+            }
+          }
+        });
+      }
+    };
 
     if (!record || now > record.resetTime) {
-      hits.set(ip, {
+      hits.set(key, {
         count: 1,
         resetTime: now + options.windowMs,
       });
+      setupSkipSuccess();
       return next();
     }
 
@@ -51,11 +77,43 @@ export function createRateLimiter(options: {
       return;
     }
 
+    setupSkipSuccess();
     next();
   };
 }
 
-// 15 requests per 15 minutes for authentication
+/**
+ * Key generator for authenticated routes: keys by `user:${req.user.id}`
+ * falling back to `ip:${req.ip}` if unauthenticated.
+ * Prevents mobile carrier CGNAT and campus Wi-Fi shared IPs from exhausting individual limits.
+ */
+export const userOrIpKeyGenerator = (req: Request): string => {
+  const userId = (req as any).user?.id;
+  if (userId !== undefined && userId !== null) {
+    return `user:${userId}`;
+  }
+  return `ip:${req.ip || req.socket.remoteAddress || "unknown"}`;
+};
+
+/**
+ * Key generator for login attempts by account email.
+ */
+export const loginEmailKeyGenerator = (req: Request): string => {
+  const email = req.body?.email;
+  if (typeof email === "string" && email.trim()) {
+    return `email:${email.trim().toLowerCase()}`;
+  }
+  return `ip:${req.ip || req.socket.remoteAddress || "unknown"}`;
+};
+
+/**
+ * Key generator for login attempts by network IP.
+ */
+export const loginIpKeyGenerator = (req: Request): string => {
+  return `ip:${req.ip || req.socket.remoteAddress || "unknown"}`;
+};
+
+// 15 requests per 15 minutes for registration
 export const authRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 15,
@@ -63,42 +121,68 @@ export const authRateLimiter = createRateLimiter({
     "Too many authentication attempts from this IP. Please try again after 15 minutes.",
 });
 
-// 10 requests per minute for emergency SOS trigger
+// Dual-tier login limiters:
+// 1. Per-account limit: 10 failed attempts per 15 minutes, successful logins skipped
+export const loginEmailRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  keyGenerator: loginEmailKeyGenerator,
+  skipSuccessfulRequests: true,
+  message:
+    "Too many failed login attempts for this account. Please try again after 15 minutes.",
+});
+
+// 2. Network ceiling: 100 attempts per 15 minutes, successful logins skipped
+export const loginIpRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  keyGenerator: loginIpKeyGenerator,
+  skipSuccessfulRequests: true,
+  message:
+    "Too many login attempts from this network. Please try again after 15 minutes.",
+});
+
+// 10 requests per minute for emergency SOS trigger (keyed by user ID)
 export const sosRateLimiter = createRateLimiter({
   windowMs: 60 * 1000,
   max: 10,
+  keyGenerator: userOrIpKeyGenerator,
   message:
     "Too many SOS requests triggered in a short period. Please wait 1 minute.",
 });
 
-// 20 reports per 15 minutes
+// 20 reports per 15 minutes (keyed by user ID)
 export const reportCreateRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 20,
+  keyGenerator: userOrIpKeyGenerator,
   message:
-    "Too many safety incident reports submitted from this IP. Please wait before reporting again.",
+    "Too many safety incident reports submitted. Please wait before reporting again.",
 });
 
-// 30 requests per 15 minutes for checking registered guardian accounts
+// 30 requests per 15 minutes for checking registered guardian accounts (keyed by user ID)
 export const checkGuardianRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 30,
+  keyGenerator: userOrIpKeyGenerator,
   message:
-    "Too many guardian verification requests from this IP. Please wait before checking again.",
+    "Too many guardian verification requests. Please wait before checking again.",
 });
 
-// 5 audio evidence uploads per 15 minutes
+// 5 audio evidence uploads per 15 minutes (keyed by user ID)
 export const uploadAudioRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 5,
+  keyGenerator: userOrIpKeyGenerator,
   message:
-    "Too many audio evidence uploads from this IP. Please wait before uploading again.",
+    "Too many audio evidence uploads. Please wait before uploading again.",
 });
 
-// 5 test guardian drills per 15 minutes
+// 5 test guardian drills per 15 minutes (keyed by user ID)
 export const testGuardianRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 5,
+  keyGenerator: userOrIpKeyGenerator,
   message:
     "Too many test safety drills dispatched. Please wait before testing again.",
 });

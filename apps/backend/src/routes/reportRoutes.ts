@@ -43,8 +43,8 @@ router.get("/safety-score", getSafetyScore);
 // Mutation routes
 router.post(
   "/",
-  reportCreateRateLimiter,
   authMiddleware as any,
+  reportCreateRateLimiter,
   validateBody(createReportSchema),
   createReport,
 );
