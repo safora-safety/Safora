@@ -6,6 +6,7 @@ import {
   updateStatus,
   getContacts,
   addContact,
+  updateContact,
   deleteContact,
   checkGuardian,
   testGuardian,
@@ -87,6 +88,7 @@ router.post(
 // Trusted Contacts
 router.get("/contacts", getContacts);
 router.post("/contacts", validateBody(trustedContactSchema), addContact);
+router.put("/contacts/:id", validateBody(trustedContactSchema), updateContact);
 router.delete("/contacts/:id", deleteContact);
 
 export default router;

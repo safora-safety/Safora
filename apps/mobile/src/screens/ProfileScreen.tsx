@@ -128,6 +128,8 @@ export const ProfileScreen: React.FC = () => {
               id: String(c.id),
               name: c.name,
               phone: c.phone,
+              email: c.email,
+              hasSaforaAccount: c.hasSaforaAccount,
               relationship: c.relationship || 'Guardian',
               isHelpline: false,
             }));
@@ -214,14 +216,63 @@ export const ProfileScreen: React.FC = () => {
     if (savedData.email) {
       const checkRes = await SosService.checkGuardian(savedData.email);
       hasAccount = checkRes.exists;
+    } else if (savedData.phone) {
+      const checkRes = await SosService.checkGuardian(savedData.phone);
+      hasAccount = checkRes.exists;
     }
 
     if (savedData.id) {
       // Edit existing
+      let assignedId = savedData.id;
+      if (
+        !isGuest &&
+        user &&
+        !savedData.id.startsWith('family-') &&
+        !savedData.id.startsWith('custom-')
+      ) {
+        try {
+          const dbContact = await SosService.updateContact(savedData.id, {
+            name: savedData.name,
+            phone: savedData.phone,
+            email: savedData.email,
+            relationship: savedData.relationship,
+          });
+          if (dbContact && dbContact.hasSaforaAccount !== undefined) {
+            hasAccount = dbContact.hasSaforaAccount;
+          }
+        } catch (e) {
+          // Handled gracefully
+        }
+      } else if (
+        !isGuest &&
+        user &&
+        (savedData.id.startsWith('family-') ||
+          savedData.id.startsWith('custom-'))
+      ) {
+        // Upgrade local fallback contact to persistent PostgreSQL contact
+        try {
+          const dbContact = await SosService.addContact({
+            name: savedData.name,
+            phone: savedData.phone,
+            email: savedData.email,
+            relationship: savedData.relationship,
+          });
+          if (dbContact && dbContact.id) {
+            assignedId = String(dbContact.id);
+            if (dbContact.hasSaforaAccount !== undefined) {
+              hasAccount = dbContact.hasSaforaAccount;
+            }
+          }
+        } catch {
+          // Fallback to local
+        }
+      }
+
       const updated = customContacts.map(c =>
         c.id === savedData.id
           ? {
               ...c,
+              id: assignedId,
               name: savedData.name,
               phone: savedData.phone,
               email: savedData.email,
@@ -233,7 +284,11 @@ export const ProfileScreen: React.FC = () => {
       await saveCustomContacts(updated);
       Alert.alert(
         'Contact Updated',
-        `${savedData.name}'s details have been saved.`,
+        `${savedData.name}'s details have been saved.${
+          hasAccount
+            ? '\n\n🟢 Guardian is registered on Safora! High-priority in-app push notifications enabled.'
+            : '\n\n📱 Guardian will receive direct cellular SMS alerts.'
+        }`,
       );
     } else {
       // Add new contact - save to PostgreSQL database if logged in
@@ -302,7 +357,7 @@ export const ProfileScreen: React.FC = () => {
     const drillMsg = `[SAFORA SAFETY DRILL] 🚨 Test SOS alert from your emergency contact. All safe! Test GPS: ${mapsLink} - Sent via SAFORA`;
 
     // If contact has a registered Safora account/email, dispatch in-app push drill first
-    if (contact.email) {
+    if (contact.hasSaforaAccount || contact.email) {
       try {
         const res = await SosService.testGuardian({
           contactId: contact.id,

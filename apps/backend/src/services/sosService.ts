@@ -106,18 +106,34 @@ export class SosService {
 
     // Also lookup guardian accounts whose phone matches trusted contact phone numbers
     try {
-      const contactPhones = contacts
-        .map((c) => c.phone?.trim())
-        .filter((p): p is string => Boolean(p && p.length >= 6));
+      const normalizedPhones = contacts
+        .map((c) => c.phone?.replace(/[^0-9]/g, "").slice(-10))
+        .filter((p): p is string => Boolean(p && p.length === 10));
 
-      if (contactPhones.length > 0) {
+      if (normalizedPhones.length > 0) {
         const queryRes = await db.query(
-          "SELECT id, fcm_token FROM users WHERE phone = ANY($1);",
-          [contactPhones],
+          `SELECT id, fcm_token FROM users WHERE RIGHT(REGEXP_REPLACE(phone, '[^0-9]', '', 'g'), 10) = ANY($1);`,
+          [normalizedPhones],
         );
         for (const r of queryRes.rows) {
           if (!guardianUserIds.includes(r.id)) {
             guardianUserIds.push(r.id);
+            // Save in-app notification for phone-matched guardian
+            await SosRepository.createNotification({
+              userId: r.id,
+              senderId: data.userId,
+              senderName: userName,
+              senderPhone: userPhone,
+              type: "sos_alert",
+              title: `🚨 EMERGENCY SOS from ${userName}`,
+              body: `Immediate distress signal at ${data.latitude.toFixed(4)}°N, ${data.longitude.toFixed(4)}°E.${data.batteryPercentage != null ? ` Battery: ${data.batteryPercentage}%.` : ""}`,
+              latitude: data.latitude,
+              longitude: data.longitude,
+              batteryPercentage: data.batteryPercentage,
+              audioUrl: finalAudioUrl,
+              sosAlertId: row.id,
+              isTest: false,
+            });
           }
           if (r.fcm_token && !fcmTokens.includes(r.fcm_token)) {
             fcmTokens.push(r.fcm_token);
@@ -168,6 +184,10 @@ export class SosService {
         const u = await SosRepository.findUserByEmail(r.email);
         hasAccount = Boolean(u);
       }
+      if (!hasAccount && r.phone) {
+        const u = await SosRepository.findUserByPhone(r.phone);
+        hasAccount = Boolean(u);
+      }
       results.push(TrustedContactModel.fromRow(r, hasAccount));
     }
 
@@ -189,6 +209,36 @@ export class SosService {
       const u = await SosRepository.findUserByEmail(row.email);
       hasAccount = Boolean(u);
     }
+    if (!hasAccount && row.phone) {
+      const u = await SosRepository.findUserByPhone(row.phone);
+      hasAccount = Boolean(u);
+    }
+    return TrustedContactModel.fromRow(row, hasAccount);
+  }
+
+  static async updateContact(
+    userId: string | number,
+    contactId: string | number,
+    data: {
+      name: string;
+      phone: string;
+      email?: string;
+      relationship?: string;
+    },
+  ): Promise<TrustedContact> {
+    const row = await SosRepository.updateContact(userId, contactId, data);
+    if (!row) {
+      throw new AppError("Contact not found or unauthorized", 404);
+    }
+    let hasAccount = false;
+    if (row.email) {
+      const u = await SosRepository.findUserByEmail(row.email);
+      hasAccount = Boolean(u);
+    }
+    if (!hasAccount && row.phone) {
+      const u = await SosRepository.findUserByPhone(row.phone);
+      hasAccount = Boolean(u);
+    }
     return TrustedContactModel.fromRow(row, hasAccount);
   }
 
@@ -203,13 +253,18 @@ export class SosService {
   }
 
   static async checkGuardianAccount(
-    email: string,
-  ): Promise<{ exists: boolean }> {
-    if (!email || !email.includes("@")) {
+    query: string,
+  ): Promise<{ exists: boolean; name?: string }> {
+    if (!query) {
       return { exists: false };
     }
-    const user = await SosRepository.findUserByEmail(email);
-    return { exists: Boolean(user) };
+    const trimmed = query.trim();
+    if (trimmed.includes("@")) {
+      const user = await SosRepository.findUserByEmail(trimmed);
+      return { exists: Boolean(user), name: user?.name };
+    }
+    const user = await SosRepository.findUserByPhone(trimmed);
+    return { exists: Boolean(user), name: user?.name };
   }
 
   static async testGuardianAlert(
@@ -239,21 +294,21 @@ export class SosService {
     }
 
     const targetEmail = contact.email?.trim().toLowerCase();
-    if (!targetEmail) {
-      return {
-        success: true,
-        deliveredToApp: false,
-        message:
-          "No registered email associated with this contact. Direct cellular SMS will be used.",
-      };
+    let guardianUser: any = null;
+    if (targetEmail) {
+      guardianUser = await SosRepository.findUserByEmail(targetEmail);
+    }
+    if (!guardianUser && contact.phone) {
+      guardianUser = await SosRepository.findUserByPhone(contact.phone);
     }
 
-    const guardianUser = await SosRepository.findUserByEmail(targetEmail);
     if (!guardianUser) {
       return {
         success: true,
         deliveredToApp: false,
-        message: `Guardian (${targetEmail}) is not registered on Safora yet. Direct cellular SMS will be used.`,
+        message: targetEmail
+          ? `Guardian (${targetEmail}) is not registered on Safora yet. Direct cellular SMS will be used.`
+          : `Guardian phone (${contact.phone}) is not registered on Safora yet. Direct cellular SMS will be used.`,
       };
     }
 
