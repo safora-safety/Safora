@@ -8,7 +8,11 @@ import {
 } from "../controllers/authController";
 import { authMiddleware } from "../middleware/auth";
 import { validateBody } from "../middleware/validate";
-import { authRateLimiter } from "../middleware/rateLimiter";
+import {
+  authRateLimiter,
+  loginEmailRateLimiter,
+  loginIpRateLimiter,
+} from "../middleware/rateLimiter";
 import {
   registerSchema,
   loginSchema,
@@ -24,7 +28,13 @@ router.post(
   validateBody(registerSchema),
   register,
 );
-router.post("/login", authRateLimiter, validateBody(loginSchema), login);
+router.post(
+  "/login",
+  loginIpRateLimiter,
+  loginEmailRateLimiter,
+  validateBody(loginSchema),
+  login,
+);
 router.get("/me", authMiddleware as any, getMe);
 router.patch(
   "/profile",
