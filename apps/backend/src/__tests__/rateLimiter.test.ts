@@ -9,6 +9,8 @@ import {
   sosRateLimiter,
   loginEmailRateLimiter,
   loginIpRateLimiter,
+  registerEmailRateLimiter,
+  registerIpRateLimiter,
 } from "../middleware/rateLimiter";
 
 // Helper to simulate Express mock response with event emitter for res.on("finish")
@@ -230,6 +232,52 @@ describe("Rate Limiter Network & Identity Hardening", () => {
 
       expect(next6).not.toHaveBeenCalled();
       expect(res6.status).toHaveBeenCalledWith(429);
+    });
+  });
+
+  describe("Registration Campus Network & Per-Email Rate Limiting", () => {
+    it("should allow many distinct student registrations from the same campus Wi-Fi IP without 429", () => {
+      const campusWifiIp = "172.16.50.10";
+
+      // 25 distinct students registering from the same campus Wi-Fi IP
+      for (let i = 0; i < 25; i++) {
+        const req: any = {
+          body: { email: `student_${i}@dbuu.ac.in` },
+          ip: campusWifiIp,
+        };
+        const res = createMockResponse();
+        const next = jest.fn();
+
+        registerIpRateLimiter(req, res, next);
+        expect(next).toHaveBeenCalledTimes(1);
+        expect(res.status).not.toHaveBeenCalledWith(429);
+      }
+    });
+
+    it("should enforce the 5-attempt per-email registration limiter to prevent spamming single addresses", () => {
+      const targetEmail = "repeat_reg@dbuu.ac.in";
+      const req: any = {
+        body: { email: targetEmail },
+        ip: "10.10.10.1",
+      };
+
+      for (let i = 0; i < 5; i++) {
+        const res = createMockResponse();
+        const next = jest.fn();
+        registerEmailRateLimiter(req, res, next);
+        expect(next).toHaveBeenCalledTimes(1);
+      }
+
+      // 6th attempt for the exact same email address is blocked with 429
+      const resBlocked = createMockResponse();
+      const nextBlocked = jest.fn();
+      registerEmailRateLimiter(req, resBlocked, nextBlocked);
+
+      expect(nextBlocked).not.toHaveBeenCalled();
+      expect(resBlocked.status).toHaveBeenCalledWith(429);
+      expect(resBlocked.body.message).toMatch(
+        /Too many registration attempts for this email address/,
+      );
     });
   });
 });
