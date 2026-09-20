@@ -1,34 +1,37 @@
 import React, { useState, useEffect } from 'react';
-import { sosService } from '../services/sosService';
+import { sosService, AdminSosAlert } from '../services/sosService';
 import { useSocket } from '../context/SocketContext';
-import { SosNotification } from '@safora/shared-types';
 import { Badge } from '../components/common/Badge';
 import { AudioPlayer } from '../components/common/AudioPlayer';
 import {
-  Flame,
   Battery,
   MapPin,
   Clock,
   CheckCircle2,
-  AlertOctagon,
+  AlertCircle,
   RefreshCw,
   ExternalLink,
   Volume2,
+  ShieldAlert,
 } from 'lucide-react';
 
 export const SosAlertsPage: React.FC = () => {
-  const [alerts, setAlerts] = useState<SosNotification[]>([]);
-  const [selectedAlert, setSelectedAlert] = useState<SosNotification | null>(null);
+  const [alerts, setAlerts] = useState<AdminSosAlert[]>([]);
+  const [selectedAlert, setSelectedAlert] = useState<AdminSosAlert | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const { activeEmergency } = useSocket();
+  const { socket, activeEmergency } = useSocket();
 
   const loadAlerts = async () => {
     setIsLoading(true);
     try {
-      const data = await sosService.getNotifications();
+      const data = await sosService.getAdminAlerts();
       setAlerts(data);
-      if (data.length > 0 && !selectedAlert) {
-        setSelectedAlert(data[0]);
+      if (data.length > 0) {
+        setSelectedAlert((prev) => {
+          if (!prev) return data[0];
+          const found = data.find((a) => a.id === prev.id);
+          return found || data[0];
+        });
       }
     } catch (err) {
       console.warn('Failed to load SOS alerts:', err);
@@ -41,24 +44,54 @@ export const SosAlertsPage: React.FC = () => {
     loadAlerts();
   }, []);
 
-  const handleResolveAlert = async (id: string | number) => {
+  // Real-time automatic updates when new citizen SOS or audio arrives
+  useEffect(() => {
+    if (!socket) return;
+    const handleAlert = () => {
+      loadAlerts();
+    };
+    const handleAudio = () => {
+      loadAlerts();
+    };
+
+    socket.on('sos:alert', handleAlert);
+    socket.on('sos:audio', handleAudio);
+
+    return () => {
+      socket.off('sos:alert', handleAlert);
+      socket.off('sos:audio', handleAudio);
+    };
+  }, [socket]);
+
+  const handleUpdateStatus = async (
+    id: string | number,
+    status: 'dispatched' | 'acknowledged' | 'resolved',
+  ) => {
     try {
-      await sosService.markRead(id);
+      await sosService.updateAlertStatus(id, status);
       setAlerts((prev) =>
-        prev.map((a) => (a.id === id ? { ...a, isRead: true } : a))
+        prev.map((a) => (a.id === id ? { ...a, status } : a)),
       );
       if (selectedAlert?.id === id) {
-        setSelectedAlert((prev) => (prev ? { ...prev, isRead: true } : null));
+        setSelectedAlert((prev) => (prev ? { ...prev, status } : null));
       }
     } catch (err) {
-      console.error('Failed to resolve alert:', err);
+      console.error('Failed to update alert status:', err);
     }
   };
 
   const handleResolveAll = async () => {
     try {
-      await sosService.markAllRead();
-      setAlerts((prev) => prev.map((a) => ({ ...a, isRead: true })));
+      const unresolved = alerts.filter((a) => a.status !== 'resolved');
+      await Promise.all(
+        unresolved.map((a) => sosService.updateAlertStatus(a.id, 'resolved')),
+      );
+      setAlerts((prev) => prev.map((a) => ({ ...a, status: 'resolved' })));
+      if (selectedAlert) {
+        setSelectedAlert((prev) =>
+          prev ? { ...prev, status: 'resolved' } : null,
+        );
+      }
     } catch (err) {
       console.error('Failed to resolve all alerts:', err);
     }
@@ -74,11 +107,11 @@ export const SosAlertsPage: React.FC = () => {
               Emergency SOS Response Queue
             </h1>
             <Badge variant="danger" pulse={activeEmergency !== null}>
-              PRIORITY LEVEL 1
+              OPERATIONS LIVE DISPATCH
             </Badge>
           </div>
           <p className="text-xs text-gray-400 font-mono mt-0.5">
-            Real-time SOS Dispatch &bull; Ambient Cloudinary Audio Evidence &bull; GPS Tracking
+            Real-time Citizen SOS Queue &bull; Cloudinary Audio Evidence &bull; GPS Telemetry
           </p>
         </div>
 
@@ -105,7 +138,7 @@ export const SosAlertsPage: React.FC = () => {
         {/* Alerts List (5 cols) */}
         <div className="lg:col-span-5 space-y-3">
           <div className="flex items-center justify-between text-xs font-mono text-gray-400 pb-1">
-            <span>INBOUND BEACONS ({alerts.length})</span>
+            <span>CITIZEN BEACONS ({alerts.length})</span>
             <span>STATUS</span>
           </div>
 
@@ -122,6 +155,9 @@ export const SosAlertsPage: React.FC = () => {
 
             {alerts.map((alert) => {
               const isSelected = selectedAlert?.id === alert.id;
+              const isResolved = alert.status === 'resolved';
+              const isAcknowledged = alert.status === 'acknowledged';
+
               return (
                 <div
                   key={`alert-item-${alert.id}`}
@@ -129,7 +165,7 @@ export const SosAlertsPage: React.FC = () => {
                   className={`p-4 rounded-2xl cursor-pointer border transition-all ${
                     isSelected
                       ? 'bg-obsidian-700 border-red-500/60 shadow-lg shadow-red-950/30 ring-1 ring-red-500/40'
-                      : alert.isRead
+                      : isResolved
                       ? 'bg-obsidian-850/60 border-white/5 opacity-70 hover:opacity-100 hover:border-white/10'
                       : 'bg-obsidian-800/90 border-red-500/30 hover:border-red-500/50'
                   }`}
@@ -138,21 +174,42 @@ export const SosAlertsPage: React.FC = () => {
                     <div className="flex items-center gap-2">
                       <span
                         className={`w-2.5 h-2.5 rounded-full ${
-                          alert.isRead ? 'bg-emerald-400' : 'bg-red-500 animate-ping'
+                          isResolved
+                            ? 'bg-emerald-400'
+                            : isAcknowledged
+                            ? 'bg-amber-400'
+                            : 'bg-red-500 animate-ping'
                         }`}
                       ></span>
-                      <span className="font-bold text-sm text-white">{alert.senderName}</span>
+                      <span className="font-bold text-sm text-white">
+                        {alert.userName || 'Citizen Beacon'}
+                      </span>
+                      {alert.isTest && (
+                        <span className="text-[10px] font-mono uppercase bg-obsidian-700 border border-white/10 text-gray-300 px-1.5 py-0.5 rounded">
+                          TEST
+                        </span>
+                      )}
                     </div>
                     <Badge
-                      variant={alert.isRead ? 'success' : 'danger'}
+                      variant={
+                        isResolved
+                          ? 'success'
+                          : isAcknowledged
+                          ? 'warning'
+                          : 'danger'
+                      }
                       size="sm"
-                      pulse={!alert.isRead}
+                      pulse={alert.status === 'dispatched'}
                     >
-                      {alert.isRead ? 'RESOLVED' : 'DISPATCHED'}
+                      {alert.status.toUpperCase()}
                     </Badge>
                   </div>
 
-                  <p className="text-xs text-gray-300 mt-2 line-clamp-2">{alert.body}</p>
+                  <p className="text-xs text-gray-300 mt-2 line-clamp-2">
+                    {alert.isTest
+                      ? 'System verification drill (Staff simulated dispatch).'
+                      : `Emergency SOS triggered at coordinates ${alert.latitude?.toFixed(4)}, ${alert.longitude?.toFixed(4)}.`}
+                  </p>
 
                   <div className="mt-3 flex items-center justify-between text-[11px] font-mono text-gray-400 pt-2 border-t border-white/5">
                     <span className="flex items-center gap-1">
@@ -173,7 +230,7 @@ export const SosAlertsPage: React.FC = () => {
                     {alert.audioUrl && (
                       <span className="flex items-center gap-1 text-indigo-400">
                         <Volume2 className="w-3 h-3" />
-                        Audio
+                        Audio Evidence
                       </span>
                     )}
                   </div>
@@ -188,35 +245,67 @@ export const SosAlertsPage: React.FC = () => {
           {selectedAlert ? (
             <div className="p-6 rounded-2xl bg-obsidian-850 border border-white/10 shadow-2xl space-y-6">
               {/* Header Info */}
-              <div className="flex items-start justify-between">
+              <div className="flex items-start justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-mono uppercase tracking-widest text-red-400 font-bold">
                       INCIDENT CASE #{selectedAlert.id}
                     </span>
-                    <Badge variant={selectedAlert.isRead ? 'success' : 'danger'} pulse={!selectedAlert.isRead}>
-                      {selectedAlert.isRead ? 'CASE RESOLVED' : 'ACTIVE EMERGENCY'}
+                    <Badge
+                      variant={
+                        selectedAlert.status === 'resolved'
+                          ? 'success'
+                          : selectedAlert.status === 'acknowledged'
+                          ? 'warning'
+                          : 'danger'
+                      }
+                      pulse={selectedAlert.status === 'dispatched'}
+                    >
+                      {selectedAlert.status.toUpperCase()}
                     </Badge>
+                    {selectedAlert.isTest && (
+                      <Badge variant="neutral">DRILL / TEST</Badge>
+                    )}
                   </div>
                   <h2 className="text-xl font-black text-white mt-1">
-                    {selectedAlert.senderName}
+                    {selectedAlert.userName || 'Citizen Beacon'}
                   </h2>
-                  {selectedAlert.senderPhone && (
+                  {selectedAlert.userPhone && (
                     <p className="text-xs text-indigo-400 font-mono mt-0.5">
-                      Phone Contact: {selectedAlert.senderPhone}
+                      Phone Contact: {selectedAlert.userPhone}
+                    </p>
+                  )}
+                  {selectedAlert.userEmail && (
+                    <p className="text-xs text-gray-400 font-mono mt-0.5">
+                      Email: {selectedAlert.userEmail}
                     </p>
                   )}
                 </div>
 
-                {!selectedAlert.isRead && (
-                  <button
-                    onClick={() => handleResolveAlert(selectedAlert.id)}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition-colors shadow-lg"
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Acknowledge & Resolve</span>
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  {selectedAlert.status === 'dispatched' && (
+                    <button
+                      onClick={() =>
+                        handleUpdateStatus(selectedAlert.id, 'acknowledged')
+                      }
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs transition-colors shadow-lg"
+                    >
+                      <AlertCircle className="w-4 h-4" />
+                      <span>Acknowledge</span>
+                    </button>
+                  )}
+                  {selectedAlert.status !== 'resolved' && (
+                    <button
+                      onClick={() =>
+                        handleUpdateStatus(selectedAlert.id, 'resolved')
+                      }
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition-colors shadow-lg"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Resolve</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Coordinates & Telemetry Cards */}
@@ -227,7 +316,8 @@ export const SosAlertsPage: React.FC = () => {
                     <span>GPS Telemetry</span>
                   </div>
                   <div className="text-base font-mono font-bold text-white">
-                    {selectedAlert.latitude?.toFixed(5) || '30.3165'}, {selectedAlert.longitude?.toFixed(5) || '78.0322'}
+                    {selectedAlert.latitude?.toFixed(5) || '30.3165'},{' '}
+                    {selectedAlert.longitude?.toFixed(5) || '78.0322'}
                   </div>
                   <a
                     href={`https://www.google.com/maps/search/?api=1&query=${selectedAlert.latitude},${selectedAlert.longitude}`}
@@ -245,7 +335,7 @@ export const SosAlertsPage: React.FC = () => {
                     <span>Device Battery Level</span>
                   </div>
                   <div className="text-base font-mono font-bold text-amber-400">
-                    {selectedAlert.batteryPercentage || 85}% Remaining
+                    {selectedAlert.batteryPercentage ?? 85}% Remaining
                   </div>
                   <div className="text-xs text-gray-400">
                     Transmitted via SAFORA Safety Guard
@@ -253,24 +343,27 @@ export const SosAlertsPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Message Body */}
+              {/* Incident Details Card */}
               <div className="p-4 rounded-xl bg-obsidian-800/60 border border-white/5 space-y-2">
-                <span className="text-xs font-mono uppercase tracking-wider text-gray-400 font-semibold">
-                  Transmitted Emergency Message
-                </span>
+                <div className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-gray-400 font-semibold">
+                  <ShieldAlert className="w-3.5 h-3.5 text-red-400" />
+                  <span>Incident Telemetry Details</span>
+                </div>
                 <p className="text-sm text-gray-200 leading-relaxed font-sans">
-                  {selectedAlert.body}
+                  {selectedAlert.isTest
+                    ? 'This is a verified test drill dispatched for operations team response training.'
+                    : `Emergency signal dispatched by user #${selectedAlert.userId}. Accuracy: ±${selectedAlert.accuracy || 5}m. Journey ID: ${selectedAlert.journeyId || 'None (Direct SOS)'}.`}
                 </p>
               </div>
 
               {/* Cloudinary Ambient Audio Evidence Scrubber */}
               <div className="space-y-2">
                 <span className="text-xs font-mono uppercase tracking-wider text-gray-400 font-semibold">
-                  30-Second Ambient Audio Evidence
+                  Ambient Audio Evidence
                 </span>
                 <AudioPlayer
-                  audioUrl={selectedAlert.audioUrl}
-                  title={`SOS Ambient Recording — ${selectedAlert.senderName}`}
+                  audioUrl={selectedAlert.audioUrl || undefined}
+                  title={`SOS Ambient Recording — ${selectedAlert.userName || 'Citizen'}`}
                 />
               </div>
             </div>

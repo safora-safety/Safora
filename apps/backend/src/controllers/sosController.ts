@@ -102,7 +102,7 @@ export async function checkGuardian(
     const result = await SosService.checkGuardianAccount(email);
     res.status(200).json({
       success: true,
-      ...result,
+      exists: result.exists,
     });
   } catch (err) {
     next(err);
@@ -205,6 +205,43 @@ export async function attachAudio(
       success: true,
       message: "Audio evidence attached to SOS alert",
       alert,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getAlerts(
+  _req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const alerts = await SosService.getAllAlerts();
+    res.status(200).json({
+      success: true,
+      count: alerts.length,
+      alerts,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function updateStatus(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const updated = await SosService.updateStatus(
+      req.params.id as string,
+      req.body.status,
+    );
+    res.status(200).json({
+      success: true,
+      message: `SOS alert status updated to ${req.body.status}`,
+      alert: updated,
     });
   } catch (err) {
     next(err);

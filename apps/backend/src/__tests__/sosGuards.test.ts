@@ -182,5 +182,130 @@ describe("SOS Guards & Authorization Security", () => {
       });
       expect(invalid.success).toBe(false);
     });
+
+    it("should reject Cloudinary URLs not stored in the safora/sos_audio folder", () => {
+      const cloud = process.env.CLOUDINARY_CLOUD_NAME || "safora";
+      const invalid = sosAlertSchema.safeParse({
+        latitude: 30.3165,
+        longitude: 78.0322,
+        audio_url: `https://res.cloudinary.com/${cloud}/video/authenticated/s--xyz--/unauthorized_folder/test.m4a`,
+      });
+      expect(invalid.success).toBe(false);
+    });
+  });
+
+  describe("Staff-Only SOS Admin Endpoints Guards", () => {
+    it("should block a normal citizen user from accessing GET /api/sos/alerts with 403", () => {
+      const req: any = {
+        user: { id: 42, role: "user" },
+      };
+      const res: any = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn(),
+      };
+      const next = jest.fn();
+
+      const { requireStaff } = require("../middleware/auth");
+      requireStaff(req, res, next);
+
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          message: expect.stringMatching(/Staff privileges required/),
+        }),
+      );
+    });
+
+    it("should allow staff (admin / moderator) to access GET /api/sos/alerts", () => {
+      const reqAdmin: any = { user: { id: 1, role: "admin" } };
+      const reqMod: any = { user: { id: 2, role: "moderator" } };
+      const res: any = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+      const next = jest.fn();
+
+      const { requireStaff } = require("../middleware/auth");
+      requireStaff(reqAdmin, res, next);
+      expect(next).toHaveBeenCalledTimes(1);
+
+      requireStaff(reqMod, res, next);
+      expect(next).toHaveBeenCalledTimes(2);
+    });
+
+    it("should block a normal citizen user from PATCH /api/sos/:id/status with 403", () => {
+      const req: any = {
+        user: { id: 42, role: "user" },
+        params: { id: "100" },
+        body: { status: "resolved" },
+      };
+      const res: any = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn(),
+      };
+      const next = jest.fn();
+
+      const { requireStaff } = require("../middleware/auth");
+      requireStaff(req, res, next);
+
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(403);
+    });
+  });
+
+  describe("checkGuardian Privacy Protection", () => {
+    it("should return only { exists: true } and never leak name or phone", async () => {
+      const { checkGuardian } = require("../controllers/sosController");
+      jest.spyOn(SosService, "checkGuardianAccount").mockResolvedValueOnce({
+        exists: true,
+      } as any);
+
+      const req: any = {
+        user: { id: 42, role: "user" },
+        query: { email: "target@example.com" },
+      };
+      const res: any = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn(),
+      };
+      const next = jest.fn();
+
+      await checkGuardian(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        success: true,
+        exists: true,
+      });
+      // Explicitly ensure private fields are not present
+      const responsePayload = res.json.mock.calls[0][0];
+      expect(responsePayload.name).toBeUndefined();
+      expect(responsePayload.phone).toBeUndefined();
+      expect(responsePayload.email).toBeUndefined();
+    });
+
+    it("should return { exists: false } when guardian is not registered", async () => {
+      const { checkGuardian } = require("../controllers/sosController");
+      jest.spyOn(SosService, "checkGuardianAccount").mockResolvedValueOnce({
+        exists: false,
+      } as any);
+
+      const req: any = {
+        user: { id: 42, role: "user" },
+        query: { email: "unregistered@example.com" },
+      };
+      const res: any = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn(),
+      };
+      const next = jest.fn();
+
+      await checkGuardian(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        success: true,
+        exists: false,
+      });
+    });
   });
 });

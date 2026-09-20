@@ -81,9 +81,7 @@ export function setupJourneySockets(io: Server): void {
   io.use(async (socket: Socket, next) => {
     try {
       const authHeader =
-        socket.handshake.auth?.token ||
-        socket.handshake.headers?.authorization ||
-        socket.handshake.query?.token;
+        socket.handshake.auth?.token || socket.handshake.headers?.authorization;
 
       if (!authHeader) {
         return next(new Error("Authentication error: No token provided"));
@@ -100,7 +98,9 @@ export function setupJourneySockets(io: Server): void {
         );
       }
 
-      const decoded = jwt.verify(token, JWT_SECRET) as {
+      const decoded = jwt.verify(token, JWT_SECRET, {
+        algorithms: ["HS256"],
+      }) as {
         id: number;
         email: string;
         role?: string;

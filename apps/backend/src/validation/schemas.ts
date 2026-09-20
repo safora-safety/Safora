@@ -87,13 +87,12 @@ const cloudinaryAudioUrl = z
       if (!url) return true;
       const prefix = getExpectedCloudinaryPrefix();
       if (!url.startsWith(prefix)) return false;
+      if (!url.includes("/safora/sos_audio/")) return false;
       return (
-        url.includes("/video/upload/") ||
-        url.includes("/video/authenticated/") ||
-        url.includes("/safora/sos_audio/")
+        url.includes("/video/upload/") || url.includes("/video/authenticated/")
       );
     },
-    `Audio evidence URL must be hosted on SAFORA Cloudinary storage (https://res.cloudinary.com/${process.env.CLOUDINARY_CLOUD_NAME || "<cloud-name>"}/)`,
+    `Audio evidence URL must be hosted on SAFORA Cloudinary storage in /safora/sos_audio/ (https://res.cloudinary.com/${process.env.CLOUDINARY_CLOUD_NAME || "<cloud-name>"}/)`,
   )
   .optional()
   .nullable();
@@ -115,6 +114,10 @@ export const attachAudioSchema = z.object({
     (url) => typeof url === "string" && url.length > 0,
     "Valid Cloudinary audio URL is required",
   ),
+});
+
+export const updateSosStatusSchema = z.object({
+  status: z.enum(["dispatched", "acknowledged", "resolved"]),
 });
 
 export const trustedContactSchema = z.object({
