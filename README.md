@@ -96,12 +96,12 @@ Based on Section 4.2 of the [Project Synopsis](docs/SAFORA_Synopsis_Formatted.pd
    - Rehydration splash loader preventing login screen flicker on app resume; guest mode examiner bypass.
 2. **Module 2: Community Hazard Reporting & Offline Queue**
    - Crowdsourced hazard pinning with category selection (lighting, construction, waterlogging, isolated trail, traffic) and severity ratings (1 to 5).
-   - Anti-abuse mechanisms: Rate limiting (max 5/hr) and text filters against personal names.
+   - Anti-abuse mechanisms: Rate limiting (20 requests per 15 min window) and strict schema input validation.
    - **Sub-2ms In-Memory RAM Caching** with automatic cache invalidation upon report submission.
    - **Offline Incident Queue**: Stores unsubmitted hazard reports in `AsyncStorage` when internet drops, automatically syncing once connection is restored.
 3. **Module 3: Safety Score & Calibrated Multi-Modal Routing Engine**
    - Real-time score computation (0 to 100) combining hazard frequency, severity, recency exponential decay ($t_{\text{half}} = 24\text{h}$), and community confirmations.
-   - Spatial clustering via PostGIS `ST_ClusterDBSCAN` grouping hazards within **50 meters** to prevent duplicate marker clutter.
+   - Spatial clustering via PostGIS `ST_ClusterDBSCAN` endpoint (`GET /api/reports/clusters`) grouping hazards within **50 meters** to prevent duplicate marker clutter.
    - **Calibrated Multi-Modal Travel Times**:
      - **Walk**: Calibrated to $1.60\text{ m/s}$ ($5.8\text{ km/h}$) $\rightarrow$ exactly **~10.4 mins per 1 km**.
      - **2-Wheeler (Bike/Scooter)**: $8.88\text{ m/s}$ ($32\text{ km/h}$) $+ 20\text{s}$ buffer $\rightarrow$ **~2.2 mins per 1 km**.

@@ -116,6 +116,12 @@ This section tracks implementation progress against the 6 core modules defined i
   - [x] Fallback emergency helplines (112, 108) with one-tap native telephone dialer (`tel:` intent).
   - [x] Modular Firebase Admin SDK v14 push alert dispatch integration.
 
+  - [x] **Real-Time Staff SOS Dispatch Queue**: Dedicated staff operations queue (`GET /api/sos/alerts`) joining citizen name, phone, and coordinates with live Socket.IO refresh (`sos:alert`, `sos:audio`).
+  - [x] **Staff Emergency Lifecycle Status Management**: Endpoints (`PATCH /api/sos/:id/status`) allowing operators to triage alerts across `dispatched`, `acknowledged`, and `resolved`.
+  - [x] **Privacy-Hardened Guardian Lookup**: Rate-limited endpoint (`GET /api/sos/check-guardian`) returning only `{ exists: boolean }` to prevent account enumeration.
+  - [x] **Tamper-Resistant Audio Evidence Vault**: Ambient recordings uploaded to Cloudinary authenticated vault using unguessable UUIDs, restricted `/safora/sos_audio/` folder validation, and signed `.m4a` URLs.
+  - [x] **Single-Prompt Microphone Consent**: Persisted under `@safora_mic_permission_prompted` in AsyncStorage, eliminating repeated prompts during navigation and drills.
+
 ---
 
 ### 🟢 Module 6: Diagnostics & System Moderation
@@ -125,7 +131,7 @@ This section tracks implementation progress against the 6 core modules defined i
   - [x] Moderation endpoint `PATCH /api/reports/:id/moderate` allowing admins to mark reports `active`, `resolved`, `duplicate`, or `fake`.
   - [x] Real-time system diagnostics endpoint (`GET /api/diagnostics`) testing PostGIS, latency, and service reachability.
   - [x] Backend RAM cache performance metrics and auto-invalidation on updates.
-  - [x] Anti-abuse rate limiting and text sanitization rules defined.
+  - [x] Anti-abuse rate limiting (20 req / 15 min for reports, 15 req / 15 min for auth, 30 req / 15 min for guardian lookups) and text sanitization rules defined.
 
 ---
 
@@ -155,12 +161,14 @@ This section tracks implementation progress against the 6 core modules defined i
 4. **Security & Git Hardening (100%)**:
    - Full `.gitignore` protection preventing leakage of `.env`, `.apk`, `.aab`, keystores, credentials, or build directories.
    - Verified clean git index with 0 tracked secrets.
+   - Strict JWT HS256 algorithm pinning and removal of query token transports.
+   - Staff route authorization guards verified by automated Jest test suites.
 
 ---
 
 ## 4. Final Demonstration & Submission Roadmap 📋
 
-With **~94% completed**, only final field-testing and submission prep remain:
+With **~95% completed**, only final field-testing and submission prep remain:
 
 ### Step 1: Campus Field Testing (1–2 days)
 - [ ] Install the compiled `app-debug.apk` (~35 MB) on team members' Android phones.
@@ -186,20 +194,23 @@ As documented in **Section 1.3 & 10 of the Synopsis**, the following are **not**
 
 ---
 
-## 6. Known Limitations & Security Considerations
+## 6. Known Limitations & Phase 2 Technical Roadmap
 
-1. **Unverified Guardian Account Linking**:
-   - *Current Mechanism*: When an SOS alert triggers, the backend looks up registered users whose email or phone matches a victim's `trusted_contacts`.
-   - *Limitation*: Because guardian linking in Phase 1 is single-sided without phone/email verification handshakes, any user who registers with an email/phone listed as someone's emergency contact receives their emergency alerts.
-   - *Phase 2 Remediation*: 2-way mutual OTP verification / invitation link handshake before guardian activation (`status = 'verified'`).
+1. **Mutual Guardian Verification Handshake (OTP / Invitation Link)**:
+   - *Current Mechanism (Phase 1)*: When an SOS alert triggers, the backend looks up registered users whose email matches a victim's `trusted_contacts`. Privacy is preserved on lookups via `{ exists: boolean }`.
+   - *Phase 2 Remediation*: 2-way mutual OTP verification / cryptographic invitation handshake before guardian activation (`status = 'pending' | 'verified'`). Only verified guardians receive live location broadcasts and push alerts.
 
-2. **Carrier SMS Intent Fallback**:
+2. **Android Native Foreground Microphone Service**:
+   - *Current Mechanism (Phase 1)*: Audio evidence capture operates in-process via `react-native-nitro-sound` for 30 seconds immediately upon SOS trigger.
+   - *Limitation*: On modern Android versions (Android 14+ / API 34+), the OS pauses microphone access if the screen is immediately locked or enters deep sleep without an active foreground service notification.
+   - *Phase 2 Remediation*: Native Android foreground service with type `FOREGROUND_SERVICE_MICROPHONE` (`android.permission.FOREGROUND_SERVICE_MICROPHONE`) to ensure uninterrupted recording across locked screens and background states.
+
+3. **Distributed Redis Rate Limiting & Spatial Caching**:
+   - *Current Mechanism (Phase 1)*: In-memory sliding window rate limiting (`express-rate-limit`) and in-memory spatial cache (`hazardCache.ts`).
+   - *Phase 2 Remediation*: Redis-backed distributed store (`rate-limit-redis`) and Redis geospatial clustering (`GEOADD` / `GEORADIUS`) for horizontally scaled multi-instance cluster deployments.
+
+4. **Carrier SMS Intent Fallback**:
    - Cellular SMS failover uses the native operating system `sms:` URI intent. While guaranteed to work with zero internet, it requires the user to confirm the send action within their native SMS application.
 
-3. **Platform Support**:
+5. **Platform Support**:
    - Production focus is on Android (`react-native-nitro-sound`, Hermes, ProGuard/R8 minified APK). iOS deployment requires CocoaPods configuration and Apple Developer signing certificates during Phase 2 (`NSMicrophoneUsageDescription` configured).
-
-4. **Locked-Screen Background Microphone Recording**:
-   - *Current Mechanism*: Audio evidence capture operates in-process via `react-native-nitro-sound` for 30 seconds immediately upon SOS trigger.
-   - *Limitation*: On modern Android versions (Android 14+ / API 34+), the OS pauses or mutes microphone access if the screen is immediately locked or enters deep sleep without an active foreground service notification.
-   - *Phase 2 Remediation*: Native Android foreground service (`FOREGROUND_SERVICE_MICROPHONE`) to ensure uninterrupted recording across locked screens.

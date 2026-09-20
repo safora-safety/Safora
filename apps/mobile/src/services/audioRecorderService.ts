@@ -1,12 +1,14 @@
 import { PermissionsAndroid, Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Sound } from 'react-native-nitro-sound';
 import { SosService } from './sosService';
 
 let isRecording = false;
+const MIC_PERMISSION_PROMPTED_KEY = '@safora_mic_permission_prompted';
 
 export class AudioRecorderService {
   /**
-   * Request microphone recording permission on Android
+   * Request microphone recording permission on Android with explicit user consent.
    */
   static async requestPermission(): Promise<boolean> {
     if (Platform.OS !== 'android') return true;
@@ -14,15 +16,40 @@ export class AudioRecorderService {
       const granted = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
         {
-          title: 'Microphone Permission',
+          title: 'Microphone Consent for Safety Evidence',
           message:
-            'SAFORA captures 30 seconds of ambient audio evidence to protect your safety during an emergency SOS.',
+            'SAFORA captures 30 seconds of ambient audio when an emergency SOS is triggered. This evidence is stored securely and shared only with your emergency contacts and verified dispatchers. Do you allow microphone access for this safety feature?',
           buttonNeutral: 'Ask Later',
-          buttonNegative: 'Cancel',
-          buttonPositive: 'Allow',
+          buttonNegative: 'Deny',
+          buttonPositive: 'Allow & Consent',
         },
       );
       return granted === PermissionsAndroid.RESULTS.GRANTED;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Prompt user for microphone permission at most once unless forced.
+   * Persists prompt state in AsyncStorage under @safora_mic_permission_prompted.
+   */
+  static async requestPermissionOnce(force = false): Promise<boolean> {
+    if (Platform.OS !== 'android') return true;
+    try {
+      if (!force) {
+        const alreadyPrompted = await AsyncStorage.getItem(
+          MIC_PERMISSION_PROMPTED_KEY,
+        );
+        if (alreadyPrompted === 'true') {
+          return await PermissionsAndroid.check(
+            PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+          );
+        }
+      }
+
+      await AsyncStorage.setItem(MIC_PERMISSION_PROMPTED_KEY, 'true');
+      return await this.requestPermission();
     } catch {
       return false;
     }
@@ -37,9 +64,20 @@ export class AudioRecorderService {
         await this.stopSilent();
       }
 
-      const hasPermission = await this.requestPermission();
+      let hasPermission = false;
+      if (Platform.OS === 'android') {
+        hasPermission = await PermissionsAndroid.check(
+          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+        );
+        if (!hasPermission) {
+          hasPermission = await this.requestPermissionOnce(false);
+        }
+      } else {
+        hasPermission = true;
+      }
+
       if (!hasPermission) {
-        console.warn('[AudioRecorder] Microphone permission denied');
+        console.warn('[AudioRecorder] Microphone permission not granted');
         return false;
       }
 

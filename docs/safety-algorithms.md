@@ -71,25 +71,30 @@ To prevent duplicate reports of the same incident (e.g. 5 students reporting the
 
 - **Algorithm**: Density-Based Spatial Clustering of Applications with Noise (**DBSCAN**) via PostGIS `ST_ClusterDBSCAN`.
 - **Clustering Threshold ($\epsilon$)**: **50 meters** ($\approx 0.00045^\circ$).
-- **Rule**: Hazards of the same category within 50 meters are visually merged into a single cluster marker on the client map, displaying the consolidated count and max severity.
+- **Rule**: Active hazard reports within 50 meters with at least 2 points are clustered using PostGIS centroid aggregation, returning consolidated counts, average severity, centroid coordinates, and constituent report IDs via `GET /api/reports/clusters`.
 
 ```sql
--- DBSCAN 50m cluster query
+-- DBSCAN 50m cluster query (reportRepository.ts)
 SELECT 
-    cid,
-    category,
-    COUNT(*) as total_reports,
-    AVG(latitude) as cluster_latitude,
-    AVG(longitude) as cluster_longitude,
-    MAX(severity) as peak_severity
+    cid as cluster_id,
+    COUNT(*)::int as point_count,
+    ROUND(AVG(severity)::numeric, 1)::float as avg_severity,
+    ST_Y(ST_Centroid(ST_Collect(location::geometry))) as center_lat,
+    ST_X(ST_Centroid(ST_Collect(location::geometry))) as center_lng,
+    ARRAY_AGG(id) as report_ids
 FROM (
-    SELECT 
-        id, category, severity, latitude, longitude,
-        ST_ClusterDBSCAN(location::geometry, eps := 0.00045, minpoints := 1) OVER (PARTITION BY category) AS cid
+    SELECT
+        id,
+        severity,
+        location,
+        ST_ClusterDBSCAN(location::geometry, eps := 0.00045, minpoints := 2) OVER () as cid
     FROM reports
     WHERE status = 'active'
-) grouped
-GROUP BY cid, category;
+) sub
+WHERE cid IS NOT NULL
+GROUP BY cid
+HAVING COUNT(*) >= 2
+ORDER BY point_count DESC;
 ```
 
 ---

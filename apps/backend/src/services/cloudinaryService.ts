@@ -127,6 +127,7 @@ export class CloudinaryService {
             type: "authenticated",
             sign_url: true,
             secure: true,
+            format: result.format,
           });
           resolve({
             url: signedUrl || result.secure_url,

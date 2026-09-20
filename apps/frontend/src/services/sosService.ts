@@ -8,7 +8,64 @@ export interface SosResponse {
   contactsNotified?: number;
 }
 
+export interface AdminSosAlert {
+  id: string | number;
+  userId: string | number;
+  userName?: string;
+  userPhone?: string;
+  userEmail?: string;
+  journeyId?: string | number | null;
+  latitude: number;
+  longitude: number;
+  accuracy?: number;
+  batteryPercentage?: number;
+  status: 'dispatched' | 'acknowledged' | 'resolved';
+  audioUrl?: string | null;
+  isTest?: boolean;
+  createdAt?: string;
+}
+
 export const sosService = {
+  // Fetch real citizen emergency alerts for operations staff queue
+  async getAdminAlerts(): Promise<AdminSosAlert[]> {
+    try {
+      const response = await apiClient.get<{ success: boolean; alerts: any[] }>('/sos/alerts');
+      if (response.data.alerts) {
+        return response.data.alerts.map((a) => ({
+          id: a.id,
+          userId: a.user_id || a.userId,
+          userName: a.user_name || a.userName || 'Citizen Beacon',
+          userPhone: a.user_phone || a.userPhone,
+          userEmail: a.user_email || a.userEmail,
+          journeyId: a.journey_id || a.journeyId,
+          latitude: Number(a.latitude),
+          longitude: Number(a.longitude),
+          accuracy: a.accuracy ? Number(a.accuracy) : undefined,
+          batteryPercentage:
+            a.battery_percentage !== undefined && a.battery_percentage !== null
+              ? Number(a.battery_percentage)
+              : a.batteryPercentage,
+          status: a.status || 'dispatched',
+          audioUrl: a.audio_url || a.audioUrl,
+          isTest: Boolean(a.is_test ?? a.isTest),
+          createdAt: a.created_at || a.createdAt,
+        }));
+      }
+      return [];
+    } catch (err) {
+      console.warn('[SOS Service] Could not fetch admin alerts:', err);
+      return [];
+    }
+  },
+
+  // Update alert status (staff only)
+  async updateAlertStatus(
+    alertId: string | number,
+    status: 'dispatched' | 'acknowledged' | 'resolved',
+  ): Promise<void> {
+    await apiClient.patch(`/sos/${alertId}/status`, { status });
+  },
+
   // Fetch inbound notifications / SOS feeds
   async getNotifications(): Promise<SosNotification[]> {
     try {

@@ -2,19 +2,25 @@ import { Router } from "express";
 import {
   triggerSOS,
   attachAudio,
+  getAlerts,
+  updateStatus,
   getContacts,
   addContact,
   deleteContact,
   checkGuardian,
   testGuardian,
 } from "../controllers/sosController";
-import { authMiddleware } from "../middleware/auth";
+import { authMiddleware, requireStaff } from "../middleware/auth";
 import { validateBody } from "../middleware/validate";
-import { sosRateLimiter } from "../middleware/rateLimiter";
+import {
+  sosRateLimiter,
+  checkGuardianRateLimiter,
+} from "../middleware/rateLimiter";
 import {
   sosAlertSchema,
   trustedContactSchema,
   attachAudioSchema,
+  updateSosStatusSchema,
 } from "../validation/schemas";
 import {
   audioUploadMiddleware,
@@ -28,6 +34,15 @@ router.use(authMiddleware as any);
 
 // SOS
 router.post("/", sosRateLimiter, validateBody(sosAlertSchema), triggerSOS);
+
+// Real Admin Emergency Alert Queue & Status Updates (Staff Only)
+router.get("/alerts", requireStaff, getAlerts);
+router.patch(
+  "/:id/status",
+  requireStaff,
+  validateBody(updateSosStatusSchema),
+  updateStatus,
+);
 
 // Attach audio evidence to SOS alert
 router.patch("/:id/audio", validateBody(attachAudioSchema), attachAudio);
@@ -57,7 +72,7 @@ router.post(
 );
 
 // Guardian verification and test alert
-router.get("/check-guardian", checkGuardian);
+router.get("/check-guardian", checkGuardianRateLimiter, checkGuardian);
 router.post("/test-guardian", testGuardian);
 
 // Trusted Contacts

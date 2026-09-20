@@ -55,7 +55,7 @@ export function createRateLimiter(options: {
   };
 }
 
-// 10 requests per 15 minutes for authentication
+// 15 requests per 15 minutes for authentication
 export const authRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 15,
@@ -77,4 +77,12 @@ export const reportCreateRateLimiter = createRateLimiter({
   max: 20,
   message:
     "Too many safety incident reports submitted from this IP. Please wait before reporting again.",
+});
+
+// 30 requests per 15 minutes for checking registered guardian accounts
+export const checkGuardianRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  message:
+    "Too many guardian verification requests from this IP. Please wait before checking again.",
 });

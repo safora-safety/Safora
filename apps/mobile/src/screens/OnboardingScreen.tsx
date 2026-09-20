@@ -85,30 +85,25 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     const slide = Math.round(event.nativeEvent.contentOffset.x / width);
     if (slide !== currentIndex) {
       setCurrentIndex(slide);
-      if (slide === SLIDES.length - 1) {
-        AudioRecorderService.requestPermission().catch(() => {});
-      }
     }
   };
 
   const handleNext = async () => {
     if (currentIndex < SLIDES.length - 1) {
-      if (currentIndex === SLIDES.length - 2) {
-        AudioRecorderService.requestPermission().catch(() => {});
-      }
       scrollRef.current?.scrollTo({
         x: (currentIndex + 1) * width,
         animated: true,
       });
     } else {
-      AudioRecorderService.requestPermission().catch(() => {});
+      // Prompt user for emergency microphone recording consent once upon completing onboarding
+      await AudioRecorderService.requestPermissionOnce().catch(() => {});
       await completeOnboarding();
       navigation.replace('AccountSelect');
     }
   };
 
   const handleSkip = async () => {
-    AudioRecorderService.requestPermission().catch(() => {});
+    // Skip bypasses permission prompt directly
     await completeOnboarding();
     navigation.replace('AccountSelect');
   };

@@ -191,4 +191,52 @@ export class SosRepository {
 
     return result.rows[0] || null;
   }
+
+  static async findAllAlerts(limit = 100): Promise<
+    Array<
+      SosAlertRow & {
+        user_name?: string;
+        user_phone?: string;
+        user_email?: string;
+      }
+    >
+  > {
+    const result = await db.query(
+      `SELECT 
+         s.id,
+         s.user_id,
+         u.name AS user_name,
+         u.phone AS user_phone,
+         u.email AS user_email,
+         s.journey_id,
+         s.latitude,
+         s.longitude,
+         s.accuracy,
+         s.battery_percentage,
+         s.status,
+         s.audio_url,
+         s.is_test,
+         s.created_at
+       FROM sos_alerts s
+       LEFT JOIN users u ON s.user_id = u.id
+       ORDER BY s.created_at DESC
+       LIMIT $1;`,
+      [limit],
+    );
+    return result.rows;
+  }
+
+  static async updateAlertStatus(
+    alertId: string | number,
+    status: string,
+  ): Promise<SosAlertRow | null> {
+    const result = await db.query(
+      `UPDATE sos_alerts
+       SET status = $1
+       WHERE id = $2
+       RETURNING *;`,
+      [status, alertId],
+    );
+    return result.rows[0] || null;
+  }
 }

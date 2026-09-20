@@ -204,15 +204,12 @@ export class SosService {
 
   static async checkGuardianAccount(
     email: string,
-  ): Promise<{ exists: boolean; name?: string }> {
+  ): Promise<{ exists: boolean }> {
     if (!email || !email.includes("@")) {
       return { exists: false };
     }
     const user = await SosRepository.findUserByEmail(email);
-    if (user) {
-      return { exists: true, name: user.name };
-    }
-    return { exists: false };
+    return { exists: Boolean(user) };
   }
 
   static async testGuardianAlert(
@@ -321,5 +318,44 @@ export class SosService {
     }
 
     return alert;
+  }
+
+  static async getAllAlerts(limit = 100): Promise<any[]> {
+    const rows = await SosRepository.findAllAlerts(limit);
+    return rows.map((r) => ({
+      id: r.id,
+      userId: r.user_id,
+      userName: r.user_name || "Anonymous Citizen",
+      userPhone: r.user_phone || undefined,
+      userEmail: r.user_email || undefined,
+      journeyId: r.journey_id,
+      latitude: Number(r.latitude),
+      longitude: Number(r.longitude),
+      accuracy: r.accuracy != null ? Number(r.accuracy) : undefined,
+      batteryPercentage:
+        r.battery_percentage != null ? Number(r.battery_percentage) : undefined,
+      status: r.status,
+      audioUrl: r.audio_url || undefined,
+      isTest: Boolean(r.is_test),
+      createdAt: r.created_at,
+    }));
+  }
+
+  static async updateStatus(
+    alertId: string | number,
+    status: string,
+  ): Promise<SosAlert> {
+    const allowed = ["dispatched", "acknowledged", "resolved"];
+    if (!allowed.includes(status)) {
+      throw new AppError(
+        `Invalid status. Must be one of: ${allowed.join(", ")}`,
+        400,
+      );
+    }
+    const row = await SosRepository.updateAlertStatus(alertId, status);
+    if (!row) {
+      throw new AppError("SOS alert not found", 404);
+    }
+    return SosAlertModel.fromRow(row);
   }
 }
