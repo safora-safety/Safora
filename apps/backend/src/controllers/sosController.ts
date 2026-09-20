@@ -118,7 +118,6 @@ export async function testGuardian(
     if (!req.user) throw new AppError("Unauthorized", 401);
 
     const result = await SosService.testGuardianAlert(req.user.id, {
-      email: req.body.email,
       contactId: req.body.contactId,
     });
     res.status(200).json(result);

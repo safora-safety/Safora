@@ -8,7 +8,7 @@
 
 ## 1. Executive Summary & Progress Scorecard
 
-Overall Minor Project-I Completion: **~95% (Production & Viva Ready)**
+Overall Minor Project-I Completion: **~95% (Viva-Ready Prototype)**
 
 ```
 [███████████████████░] 95% Completed

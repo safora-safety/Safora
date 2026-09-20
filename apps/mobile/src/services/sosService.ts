@@ -123,15 +123,14 @@ export class SosService {
    * Send a test drill alert to guardian
    */
   static async testGuardian(params: {
-    contactId?: string | number;
-    email?: string;
+    contactId: string | number;
   }): Promise<{ success: boolean; deliveredToApp: boolean; message: string }> {
     try {
       const res = await apiClient.post<{
         success: boolean;
         deliveredToApp: boolean;
         message: string;
-      }>('/sos/test-guardian', params);
+      }>('/sos/test-guardian', { contactId: params.contactId });
       return res.data;
     } catch (e: any) {
       return {

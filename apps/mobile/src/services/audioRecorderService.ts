@@ -56,7 +56,34 @@ export class AudioRecorderService {
   }
 
   /**
-   * Start 30-second ambient audio recording in background
+   * Check whether microphone permission is currently granted on the device.
+   */
+  static async isPermissionGranted(): Promise<boolean> {
+    if (Platform.OS !== 'android') return true;
+    try {
+      return await PermissionsAndroid.check(
+        PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Record that the consent modal was shown or dismissed by the user.
+   */
+  static async markConsentDecided(): Promise<void> {
+    try {
+      await AsyncStorage.setItem(MIC_PERMISSION_PROMPTED_KEY, 'true');
+    } catch {
+      // Ignore storage error
+    }
+  }
+
+  /**
+   * Start 30-second ambient audio recording in background.
+   * If permission is not granted, gracefully returns false without
+   * triggering intrusive dialogs during an active SOS panic trigger.
    */
   static async startRecording(): Promise<boolean> {
     try {
@@ -64,20 +91,11 @@ export class AudioRecorderService {
         await this.stopSilent();
       }
 
-      let hasPermission = false;
-      if (Platform.OS === 'android') {
-        hasPermission = await PermissionsAndroid.check(
-          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-        );
-        if (!hasPermission) {
-          hasPermission = await this.requestPermissionOnce(false);
-        }
-      } else {
-        hasPermission = true;
-      }
-
+      const hasPermission = await this.isPermissionGranted();
       if (!hasPermission) {
-        console.warn('[AudioRecorder] Microphone permission not granted');
+        console.warn(
+          '[AudioRecorder] Microphone permission not granted — skipping audio evidence without blocking SOS dispatch',
+        );
         return false;
       }
 

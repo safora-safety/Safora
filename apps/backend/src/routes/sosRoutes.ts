@@ -15,12 +15,15 @@ import { validateBody } from "../middleware/validate";
 import {
   sosRateLimiter,
   checkGuardianRateLimiter,
+  uploadAudioRateLimiter,
+  testGuardianRateLimiter,
 } from "../middleware/rateLimiter";
 import {
   sosAlertSchema,
   trustedContactSchema,
   attachAudioSchema,
   updateSosStatusSchema,
+  testGuardianSchema,
 } from "../validation/schemas";
 import {
   audioUploadMiddleware,
@@ -47,9 +50,10 @@ router.patch(
 // Attach audio evidence to SOS alert
 router.patch("/:id/audio", validateBody(attachAudioSchema), attachAudio);
 
-// Upload real SOS audio evidence
+// Upload real SOS audio evidence (Rate-limited to 5 per 15 min)
 router.post(
   "/upload-audio",
+  uploadAudioRateLimiter,
   audioUploadMiddleware.single("audio"),
   async (req: any, res, next) => {
     try {
@@ -71,9 +75,14 @@ router.post(
   },
 );
 
-// Guardian verification and test alert
+// Guardian verification and test alert (Rate-limited and ownership validated)
 router.get("/check-guardian", checkGuardianRateLimiter, checkGuardian);
-router.post("/test-guardian", testGuardian);
+router.post(
+  "/test-guardian",
+  testGuardianRateLimiter,
+  validateBody(testGuardianSchema),
+  testGuardian,
+);
 
 // Trusted Contacts
 router.get("/contacts", getContacts);

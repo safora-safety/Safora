@@ -21,8 +21,8 @@ export const SosAlertsPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const { socket, activeEmergency } = useSocket();
 
-  const loadAlerts = async () => {
-    setIsLoading(true);
+  const loadAlerts = async (silent = false) => {
+    if (!silent) setIsLoading(true);
     try {
       const data = await sosService.getAdminAlerts();
       setAlerts(data);
@@ -32,11 +32,13 @@ export const SosAlertsPage: React.FC = () => {
           const found = data.find((a) => a.id === prev.id);
           return found || data[0];
         });
+      } else {
+        setSelectedAlert(null);
       }
     } catch (err) {
       console.warn('Failed to load SOS alerts:', err);
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   };
 
@@ -44,14 +46,14 @@ export const SosAlertsPage: React.FC = () => {
     loadAlerts();
   }, []);
 
-  // Real-time automatic updates when new citizen SOS or audio arrives
+  // Real-time automatic background updates when new citizen SOS or audio arrives without full-screen loading spinner
   useEffect(() => {
     if (!socket) return;
     const handleAlert = () => {
-      loadAlerts();
+      loadAlerts(true);
     };
     const handleAudio = () => {
-      loadAlerts();
+      loadAlerts(true);
     };
 
     socket.on('sos:alert', handleAlert);
@@ -81,8 +83,15 @@ export const SosAlertsPage: React.FC = () => {
   };
 
   const handleResolveAll = async () => {
+    const unresolved = alerts.filter((a) => a.status !== 'resolved');
+    if (unresolved.length === 0) return;
+
+    const confirmed = window.confirm(
+      `Are you sure you want to mark all ${unresolved.length} active emergency alert(s) as resolved? This action will archive them as handled.`,
+    );
+    if (!confirmed) return;
+
     try {
-      const unresolved = alerts.filter((a) => a.status !== 'resolved');
       await Promise.all(
         unresolved.map((a) => sosService.updateAlertStatus(a.id, 'resolved')),
       );
@@ -111,7 +120,7 @@ export const SosAlertsPage: React.FC = () => {
             </Badge>
           </div>
           <p className="text-xs text-gray-400 font-mono mt-0.5">
-            Real-time Citizen SOS Queue &bull; Cloudinary Audio Evidence &bull; GPS Telemetry
+            Real-time Citizen SOS Queue (up to 100 recent) &bull; Cloudinary Audio Evidence &bull; GPS Telemetry
           </p>
         </div>
 
@@ -123,7 +132,7 @@ export const SosAlertsPage: React.FC = () => {
             Mark All Resolved
           </button>
           <button
-            onClick={loadAlerts}
+            onClick={() => loadAlerts(false)}
             disabled={isLoading}
             className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-colors disabled:opacity-50"
           >
@@ -138,7 +147,12 @@ export const SosAlertsPage: React.FC = () => {
         {/* Alerts List (5 cols) */}
         <div className="lg:col-span-5 space-y-3">
           <div className="flex items-center justify-between text-xs font-mono text-gray-400 pb-1">
-            <span>CITIZEN BEACONS ({alerts.length})</span>
+            <span>
+              CITIZEN BEACONS ({alerts.length}){' '}
+              <span className="text-[10px] text-gray-500 font-normal">
+                (LATEST 100)
+              </span>
+            </span>
             <span>STATUS</span>
           </div>
 

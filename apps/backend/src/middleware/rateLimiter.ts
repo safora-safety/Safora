@@ -86,3 +86,19 @@ export const checkGuardianRateLimiter = createRateLimiter({
   message:
     "Too many guardian verification requests from this IP. Please wait before checking again.",
 });
+
+// 5 audio evidence uploads per 15 minutes
+export const uploadAudioRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message:
+    "Too many audio evidence uploads from this IP. Please wait before uploading again.",
+});
+
+// 5 test guardian drills per 15 minutes
+export const testGuardianRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message:
+    "Too many test safety drills dispatched. Please wait before testing again.",
+});

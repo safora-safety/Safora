@@ -214,28 +214,37 @@ export class SosService {
 
   static async testGuardianAlert(
     senderId: string | number,
-    data: { email?: string; contactId?: string | number },
+    data: { contactId: string | number },
   ): Promise<{ success: boolean; deliveredToApp: boolean; message: string }> {
     const sender = await UserRepository.findById(senderId);
     const senderName = sender?.name || "Family Member";
 
-    let targetEmail = data.email?.trim().toLowerCase();
-    if (!targetEmail && data.contactId) {
-      const contacts = await SosRepository.findContactsByUserId(senderId);
-      const contact = contacts.find(
-        (c) => String(c.id) === String(data.contactId),
+    if (!data?.contactId) {
+      throw new AppError(
+        "contactId is required to test a guardian connection",
+        400,
       );
-      if (contact?.email) {
-        targetEmail = contact.email.trim().toLowerCase();
-      }
     }
 
+    const contacts = await SosRepository.findContactsByUserId(senderId);
+    const contact = contacts.find(
+      (c) => String(c.id) === String(data.contactId),
+    );
+
+    if (!contact) {
+      throw new AppError(
+        "Contact not found in your trusted contacts list",
+        404,
+      );
+    }
+
+    const targetEmail = contact.email?.trim().toLowerCase();
     if (!targetEmail) {
       return {
         success: true,
         deliveredToApp: false,
         message:
-          "Direct cellular SMS fallback required for unverified phone number.",
+          "No registered email associated with this contact. Direct cellular SMS will be used.",
       };
     }
 
