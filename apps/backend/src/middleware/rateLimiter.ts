@@ -113,13 +113,27 @@ export const loginIpKeyGenerator = (req: Request): string => {
   return `ip:${req.ip || req.socket.remoteAddress || "unknown"}`;
 };
 
-// 15 requests per 15 minutes for registration
-export const authRateLimiter = createRateLimiter({
+// Registration rate limiters:
+// 1. Per-email limit: 5 registration attempts per 15 minutes to prevent hammering a single email address
+export const registerEmailRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
-  max: 15,
+  max: 5,
+  keyGenerator: loginEmailKeyGenerator,
   message:
-    "Too many authentication attempts from this IP. Please try again after 15 minutes.",
+    "Too many registration attempts for this email address. Please try again after 15 minutes.",
 });
+
+// 2. Network IP ceiling: 60 registrations per 15 minutes per IP (supports classrooms/evaluators on campus Wi-Fi)
+export const registerIpRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  keyGenerator: loginIpKeyGenerator,
+  message:
+    "Too many account registrations from this network. Please try again after 15 minutes.",
+});
+
+// Backward-compatible alias for registration IP limiter
+export const authRateLimiter = registerIpRateLimiter;
 
 // Dual-tier login limiters:
 // 1. Per-account limit: 10 failed attempts per 15 minutes, successful logins skipped

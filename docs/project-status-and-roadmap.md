@@ -214,3 +214,8 @@ As documented in **Section 1.3 & 10 of the Synopsis**, the following are **not**
 
 5. **Platform Support**:
    - Production focus is on Android (`react-native-nitro-sound`, Hermes, ProGuard/R8 minified APK). iOS deployment requires CocoaPods configuration and Apple Developer signing certificates during Phase 2 (`NSMicrophoneUsageDescription` configured).
+
+6. **Account Lockout vs. Brute-Force Rate Limiting Trade-Off**:
+   - *Current Mechanism (Phase 1)*: Login enforces a per-email ceiling of 10 failed attempts per 15 minutes (`skipSuccessfulRequests: true`) alongside a 100-attempt network IP ceiling, while registration enforces 60 per 15 min per IP and 5 per email. Keying failed logins by email prevents automated dictionary and credential-stuffing attacks without broadcasting shared IP blocks on campus Wi-Fi or mobile CGNAT.
+   - *Known Trade-Off & Viva Defense Explanation*: An adversary knowing a victim's email can deliberately submit 10 incorrect passwords to place that email into a 15-minute login cooldown. Crucially, **existing active JWT sessions on the victim's mobile device are completely unaffected** (they continue to authenticate normally via bearer token). This is an industry-standard defense trade-off prioritizing brute-force defense over unauthenticated lockout prevention.
+   - *Phase 2 Remediation*: Progressive exponential back-off delays ($2^n$ seconds), CAPTCHA verification (Cloudflare Turnstile or reCAPTCHA v3) triggered after 5 failed attempts, and an immediate cryptographic "unlock account via email" magic link.

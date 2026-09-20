@@ -9,7 +9,8 @@ import {
 import { authMiddleware } from "../middleware/auth";
 import { validateBody } from "../middleware/validate";
 import {
-  authRateLimiter,
+  registerIpRateLimiter,
+  registerEmailRateLimiter,
   loginEmailRateLimiter,
   loginIpRateLimiter,
 } from "../middleware/rateLimiter";
@@ -24,7 +25,8 @@ const router = Router();
 
 router.post(
   "/register",
-  authRateLimiter,
+  registerIpRateLimiter,
+  registerEmailRateLimiter,
   validateBody(registerSchema),
   register,
 );
