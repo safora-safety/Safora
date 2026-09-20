@@ -14,6 +14,7 @@ import {
 import { colors } from '../theme/colors';
 import { useAuthStore } from '../store/authStore';
 import { AudioRecorderService } from '../services/audioRecorderService';
+import { MicrophoneConsentModal } from '../components/MicrophoneConsentModal';
 
 const { width } = Dimensions.get('window');
 
@@ -78,6 +79,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   navigation,
 }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [showConsentModal, setShowConsentModal] = useState(false);
   const scrollRef = useRef<any>(null);
   const completeOnboarding = useAuthStore(state => state.completeOnboarding);
 
@@ -95,15 +97,29 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         animated: true,
       });
     } else {
-      // Prompt user for emergency microphone recording consent once upon completing onboarding
-      await AudioRecorderService.requestPermissionOnce().catch(() => {});
-      await completeOnboarding();
-      navigation.replace('AccountSelect');
+      // Show explicit in-app consent modal explaining emergency audio evidence
+      setShowConsentModal(true);
     }
   };
 
+  const handleConsentAccept = async () => {
+    setShowConsentModal(false);
+    await AudioRecorderService.requestPermission().catch(() => {});
+    await AudioRecorderService.markConsentDecided();
+    await completeOnboarding();
+    navigation.replace('AccountSelect');
+  };
+
+  const handleConsentDecline = async () => {
+    setShowConsentModal(false);
+    await AudioRecorderService.markConsentDecided();
+    await completeOnboarding();
+    navigation.replace('AccountSelect');
+  };
+
   const handleSkip = async () => {
-    // Skip bypasses permission prompt directly
+    // Skip marks consent decided so panic SOS does not pop unexpected dialogs
+    await AudioRecorderService.markConsentDecided();
     await completeOnboarding();
     navigation.replace('AccountSelect');
   };
@@ -111,6 +127,11 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
+      <MicrophoneConsentModal
+        visible={showConsentModal}
+        onConsent={handleConsentAccept}
+        onDecline={handleConsentDecline}
+      />
 
       {/* Top Header with Skip */}
       <View style={styles.topBar}>

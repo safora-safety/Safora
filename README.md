@@ -101,7 +101,7 @@ Based on Section 4.2 of the [Project Synopsis](docs/SAFORA_Synopsis_Formatted.pd
    - **Offline Incident Queue**: Stores unsubmitted hazard reports in `AsyncStorage` when internet drops, automatically syncing once connection is restored.
 3. **Module 3: Safety Score & Calibrated Multi-Modal Routing Engine**
    - Real-time score computation (0 to 100) combining hazard frequency, severity, recency exponential decay ($t_{\text{half}} = 24\text{h}$), and community confirmations.
-   - Spatial clustering via PostGIS `ST_ClusterDBSCAN` endpoint (`GET /api/reports/clusters`) grouping hazards within **50 meters** to prevent duplicate marker clutter.
+   - Spatial analysis endpoint via PostGIS `ST_ClusterDBSCAN` (`GET /api/reports/clusters`) grouping hazards within **50 meters** for density analytics (server-side analytical API; client application maps render calibrated markers with sub-2ms RAM caching).
    - **Calibrated Multi-Modal Travel Times**:
      - **Walk**: Calibrated to $1.60\text{ m/s}$ ($5.8\text{ km/h}$) $\rightarrow$ exactly **~10.4 mins per 1 km**.
      - **2-Wheeler (Bike/Scooter)**: $8.88\text{ m/s}$ ($32\text{ km/h}$) $+ 20\text{s}$ buffer $\rightarrow$ **~2.2 mins per 1 km**.
@@ -251,7 +251,7 @@ To maintain high quality within the academic timeline, strict boundaries are enf
 - **Included in Minor Project-I Scope**:
   - Fully functional React Native mobile application.
   - Node.js/Express backend with Socket.IO real-time location streaming.
-  - PostgreSQL + PostGIS spatial querying (`ST_DWithin`) and 50m DBSCAN hazard clustering.
+  - PostgreSQL + PostGIS spatial querying (`ST_DWithin`) and 50m DBSCAN hazard clustering API endpoint.
   - Safe Walk corridor compliance and 60-second deviation escalation.
   - One-tap SOS emergency alert dispatch.
   - Administrative moderation and system diagnostics.

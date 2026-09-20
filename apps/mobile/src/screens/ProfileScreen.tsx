@@ -17,6 +17,7 @@ import { ContactModal, EditableContact } from '../components/ContactModal';
 import { useTheme } from '../theme/ThemeContext';
 
 import { SosService } from '../services/sosService';
+import { AudioRecorderService } from '../services/audioRecorderService';
 
 interface Contact {
   id: string;
@@ -305,7 +306,6 @@ export const ProfileScreen: React.FC = () => {
       try {
         const res = await SosService.testGuardian({
           contactId: contact.id,
-          email: contact.email,
         });
 
         if (res.deliveredToApp) {
@@ -791,6 +791,55 @@ export const ProfileScreen: React.FC = () => {
             </View>
           ))}
         </View>
+
+        {/* Microphone Safety Evidence Card */}
+        <TouchableOpacity
+          style={[
+            styles.settingsShortcutCard,
+            {
+              backgroundColor: colors.backgroundCard,
+              borderColor: colors.border,
+            },
+          ]}
+          onPress={async () => {
+            const granted = await AudioRecorderService.isPermissionGranted();
+            if (!granted) {
+              const req = await AudioRecorderService.requestPermission();
+              if (!req) {
+                Linking.openSettings();
+              }
+            } else {
+              Linking.openSettings();
+            }
+          }}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.settingsShortcutEmoji}>🎙️</Text>
+          <View style={{ flex: 1 }}>
+            <Text
+              style={[
+                styles.settingsShortcutTitle,
+                { color: colors.textPrimary },
+              ]}
+            >
+              Microphone Safety Evidence
+            </Text>
+            <Text
+              style={[
+                styles.settingsShortcutDesc,
+                { color: colors.textSecondary },
+              ]}
+            >
+              Captures 30s ambient audio on SOS. Tap to manage system
+              permission.
+            </Text>
+          </View>
+          <Text
+            style={[styles.settingsShortcutArrow, { color: colors.primary }]}
+          >
+            Manage ›
+          </Text>
+        </TouchableOpacity>
 
         {/* Quick Settings Shortcut */}
         <TouchableOpacity

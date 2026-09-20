@@ -2,6 +2,7 @@ import { describe, it, expect, jest, beforeEach } from "@jest/globals";
 import { triggerSOS } from "../controllers/sosController";
 import { SosService } from "../services/sosService";
 import { SosRepository } from "../repositories/sosRepository";
+import { UserRepository } from "../repositories/userRepository";
 import { AppError } from "../errors/AppError";
 import { sosAlertSchema } from "../validation/schemas";
 
@@ -306,6 +307,115 @@ describe("SOS Guards & Authorization Security", () => {
         success: true,
         exists: false,
       });
+    });
+  });
+
+  describe("testGuardian Abuse Prevention & Ownership", () => {
+    it("should reject test drill if contactId does not belong to caller contacts", async () => {
+      jest.spyOn(UserRepository, "findById").mockResolvedValueOnce({
+        id: 42,
+        name: "Test Caller",
+      } as any);
+      // User 42 has no contact with id 999
+      jest
+        .spyOn(SosRepository, "findContactsByUserId")
+        .mockResolvedValueOnce([]);
+
+      await expect(
+        SosService.testGuardianAlert(42, { contactId: "999" }),
+      ).rejects.toThrow(AppError);
+    });
+
+    it("should dispatch test drill when contactId belongs to caller contacts", async () => {
+      jest.spyOn(UserRepository, "findById").mockResolvedValueOnce({
+        id: 42,
+        name: "Test Caller",
+      } as any);
+      jest.spyOn(SosRepository, "findContactsByUserId").mockResolvedValueOnce([
+        {
+          id: 55,
+          user_id: 42,
+          name: "Trusted Sister",
+          phone: "9876543210",
+          email: "sister@safora.safety",
+          relationship: "Sister",
+          created_at: new Date(),
+        } as any,
+      ]);
+
+      jest.spyOn(SosRepository, "findUserByEmail").mockResolvedValueOnce({
+        id: 77,
+        name: "Sister Account",
+        email: "sister@safora.safety",
+        fcm_token: "mock-token",
+      } as any);
+
+      jest
+        .spyOn(SosRepository, "createNotification")
+        .mockResolvedValueOnce({ id: 1 } as any);
+
+      const result = await SosService.testGuardianAlert(42, {
+        contactId: 55,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.deliveredToApp).toBe(true);
+      expect(result.message).toMatch(/Test alert successfully delivered/);
+    });
+
+    it("should reject missing contactId via testGuardianSchema", () => {
+      const { testGuardianSchema } = require("../validation/schemas");
+      const invalid = testGuardianSchema.safeParse({});
+      expect(invalid.success).toBe(false);
+
+      const valid = testGuardianSchema.safeParse({ contactId: 55 });
+      expect(valid.success).toBe(true);
+    });
+  });
+
+  describe("Upload Audio and Test Guardian Rate Limiters", () => {
+    it("should enforce uploadAudioRateLimiter max 5 requests", () => {
+      const { uploadAudioRateLimiter } = require("../middleware/rateLimiter");
+      const req: any = { ip: "192.168.1.10" };
+      const res: any = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+      const next = jest.fn();
+
+      for (let i = 0; i < 5; i++) {
+        uploadAudioRateLimiter(req, res, next);
+      }
+      expect(next).toHaveBeenCalledTimes(5);
+
+      // 6th request is rejected
+      uploadAudioRateLimiter(req, res, next);
+      expect(res.status).toHaveBeenCalledWith(429);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          message: expect.stringMatching(/Too many audio evidence uploads/),
+        }),
+      );
+    });
+
+    it("should enforce testGuardianRateLimiter max 5 requests", () => {
+      const { testGuardianRateLimiter } = require("../middleware/rateLimiter");
+      const req: any = { ip: "192.168.1.20" };
+      const res: any = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+      const next = jest.fn();
+
+      for (let i = 0; i < 5; i++) {
+        testGuardianRateLimiter(req, res, next);
+      }
+      expect(next).toHaveBeenCalledTimes(5);
+
+      // 6th request is rejected
+      testGuardianRateLimiter(req, res, next);
+      expect(res.status).toHaveBeenCalledWith(429);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          message: expect.stringMatching(/Too many test safety drills/),
+        }),
+      );
     });
   });
 });

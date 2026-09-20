@@ -11,9 +11,13 @@
     "typescript": "5.7.2"
   },
   "overrides": {
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "gaxios": {
+      "uuid": "^11.1.1"
+    }
   },
   "scripts": {
+    "test": "npm test --workspace=apps/backend",
     "prepare": "npx husky"
   },
   "lint-staged": {

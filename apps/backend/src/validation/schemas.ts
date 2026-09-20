@@ -126,3 +126,7 @@ export const trustedContactSchema = z.object({
   email: z.string().email().optional().nullable().or(z.literal("")),
   relationship: z.string().max(50).optional(),
 });
+
+export const testGuardianSchema = z.object({
+  contactId: z.union([z.string(), z.number()]),
+});
