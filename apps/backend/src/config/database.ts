@@ -258,7 +258,56 @@ export async function initDatabase(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id, created_at DESC);
     `);
 
-    // 8. Seed verified safety dataset ONLY on a fresh, completely empty database (never purge or overwrite user data)
+    // 8. V1 — Journey Breadcrumbs Table (live tracking, architecture.md §3)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS journey_breadcrumbs (
+        id BIGSERIAL PRIMARY KEY,
+        journey_id INTEGER NOT NULL REFERENCES journeys(id) ON DELETE CASCADE,
+        location GEOGRAPHY(Point, 4326) NOT NULL,
+        speed REAL,
+        battery SMALLINT,
+        recorded_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS idx_breadcrumbs_journey
+        ON journey_breadcrumbs (journey_id, recorded_at DESC);
+    `);
+
+    // 9. V1 — Watchdog state columns on journeys (architecture.md §4/§6)
+    await client.query(`
+      ALTER TABLE journeys
+        ADD COLUMN IF NOT EXISTS last_location GEOGRAPHY(Point, 4326),
+        ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS deviated_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS escalated_at TIMESTAMPTZ;
+      CREATE INDEX IF NOT EXISTS idx_journeys_active
+        ON journeys (status) WHERE status = 'active';
+    `);
+
+    // 10. V1 — Age notice + terms columns on users (tasks.md #10, #11)
+    await client.query(`
+      ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS age SMALLINT,
+        ADD COLUMN IF NOT EXISTS age_notice_ack BOOLEAN NOT NULL DEFAULT false,
+        ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMPTZ;
+    `);
+
+    // 11. V1 — Optional per-report name visibility (database.md §3)
+    await client.query(`
+      ALTER TABLE reports
+        ADD COLUMN IF NOT EXISTS show_reporter_name BOOLEAN NOT NULL DEFAULT true;
+    `);
+
+    // 12. V1 — SOS alerts source column for watchdog-triggered alerts
+    await client.query(`
+      ALTER TABLE sos_alerts
+        ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'manual';
+    `);
+
+    console.log(
+      "[INFO] V1 schema extensions applied (breadcrumbs, watchdog, age/terms)",
+    );
+
+    // 13. Seed verified safety dataset ONLY on a fresh, completely empty database (never purge or overwrite user data)
     try {
       const countCheck = await client.query("SELECT COUNT(*) FROM reports;");
       const reportCount = parseInt(countCheck.rows[0].count, 10);

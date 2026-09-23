@@ -13,6 +13,7 @@ import {
   Alert,
   Image,
 } from 'react-native';
+import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { useTheme } from '../theme/ThemeContext';
 import { HazardCategory, HazardReport } from '@safora/shared-types';
 import { ReportService } from '../services/reportService';
@@ -62,8 +63,66 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [customPhotoInput, setCustomPhotoInput] = useState('');
   const [showPhotoInput, setShowPhotoInput] = useState(false);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [loading, setLoading] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  const handleTakePhoto = async () => {
+    try {
+      const result = await launchCamera({
+        mediaType: 'photo',
+        quality: 0.8,
+        saveToPhotos: false,
+      });
+
+      if (result.didCancel || !result.assets || result.assets.length === 0) {
+        return;
+      }
+
+      const asset = result.assets[0];
+      if (asset.uri) {
+        setIsUploadingPhoto(true);
+        const uploaded = await ReportService.uploadPhoto(
+          asset.uri,
+          asset.fileName || 'hazard_camera.jpg',
+        );
+        setPhotoUrl(uploaded);
+        setShowPhotoInput(false);
+      }
+    } catch {
+      Alert.alert('Camera Error', 'Could not open camera on device.');
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
+
+  const handlePickGallery = async () => {
+    try {
+      const result = await launchImageLibrary({
+        mediaType: 'photo',
+        quality: 0.8,
+      });
+
+      if (result.didCancel || !result.assets || result.assets.length === 0) {
+        return;
+      }
+
+      const asset = result.assets[0];
+      if (asset.uri) {
+        setIsUploadingPhoto(true);
+        const uploaded = await ReportService.uploadPhoto(
+          asset.uri,
+          asset.fileName || 'hazard_gallery.jpg',
+        );
+        setPhotoUrl(uploaded);
+        setShowPhotoInput(false);
+      }
+    } catch {
+      Alert.alert('Gallery Error', 'Could not open photo gallery.');
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
 
   const handleSubmit = async () => {
     setFormError(null);
@@ -347,7 +406,89 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
                           { color: colors.textSecondary },
                         ]}
                       >
-                        Quick sample proof photo:
+                        Capture or upload live evidence:
+                      </Text>
+
+                      {isUploadingPhoto ? (
+                        <View
+                          style={{
+                            paddingVertical: 12,
+                            alignItems: 'center',
+                            gap: 6,
+                          }}
+                        >
+                          <ActivityIndicator
+                            size="small"
+                            color={colors.primary}
+                          />
+                          <Text
+                            style={{
+                              fontSize: 12,
+                              color: colors.textSecondary,
+                            }}
+                          >
+                            Uploading photo to secure storage...
+                          </Text>
+                        </View>
+                      ) : (
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            gap: 10,
+                            marginBottom: 12,
+                          }}
+                        >
+                          <TouchableOpacity
+                            style={[
+                              styles.pickerActionBtn,
+                              {
+                                backgroundColor: colors.backgroundCard,
+                                borderColor: colors.border,
+                              },
+                            ]}
+                            onPress={handleTakePhoto}
+                          >
+                            <Text style={styles.pickerActionIcon}>📷</Text>
+                            <Text
+                              style={[
+                                styles.pickerActionText,
+                                { color: colors.textPrimary },
+                              ]}
+                            >
+                              Take Photo
+                            </Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            style={[
+                              styles.pickerActionBtn,
+                              {
+                                backgroundColor: colors.backgroundCard,
+                                borderColor: colors.border,
+                              },
+                            ]}
+                            onPress={handlePickGallery}
+                          >
+                            <Text style={styles.pickerActionIcon}>🖼️</Text>
+                            <Text
+                              style={[
+                                styles.pickerActionText,
+                                { color: colors.textPrimary },
+                              ]}
+                            >
+                              Choose Gallery
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+
+                      <Text
+                        style={[
+                          styles.presetTitle,
+                          { color: colors.textSecondary, marginTop: 4 },
+                        ]}
+                      >
+                        Or choose quick preset proof:
                       </Text>
                       <View style={styles.presetChipsRow}>
                         {SAMPLE_PHOTO_PRESETS.map(preset => (
@@ -625,6 +766,18 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   presetTitle: { fontSize: 11, fontWeight: '600' },
+  pickerActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    gap: 6,
+  },
+  pickerActionIcon: { fontSize: 16 },
+  pickerActionText: { fontSize: 12, fontWeight: '700' },
   presetChipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   presetChip: {
     borderWidth: 1,

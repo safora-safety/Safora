@@ -96,3 +96,37 @@ export function requireStaff(
   }
   next();
 }
+
+export async function optionalAuth(
+  req: AuthenticatedRequest,
+  _res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return next();
+  }
+
+  const token = authHeader.split(" ")[1];
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET!, {
+      algorithms: ["HS256"],
+    }) as {
+      id: number;
+      email: string;
+      role?: string;
+    };
+
+    const user = await UserRepository.findById(decoded.id);
+    if (user && user.is_active !== false) {
+      req.user = {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+      };
+    }
+  } catch {
+    // Non-blocking: unauthenticated / invalid token continues as public visitor
+  }
+  next();
+}

@@ -11,6 +11,8 @@ import { AuthScreen } from '../screens/AuthScreen';
 import { OnboardingScreen } from '../screens/OnboardingScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { NotificationScreen } from '../screens/NotificationScreen';
+import { GuardianLiveScreen } from '../screens/GuardianLiveScreen';
+import { TermsScreen } from '../screens/TermsScreen';
 import { MainTabNavigator } from './MainTabNavigator';
 import { colors } from '../theme/colors';
 
@@ -27,6 +29,14 @@ export type RootStackParamList = {
   MainTabs: undefined;
   Settings: undefined;
   Notifications: undefined;
+  GuardianLive:
+    | {
+        journeyId?: string | number;
+        walkerName?: string;
+        initialLocation?: { latitude: number; longitude: number };
+      }
+    | undefined;
+  Terms: undefined;
 };
 
 export const navigationRef = createNavigationContainerRef<RootStackParamList>();
@@ -34,25 +44,44 @@ export const navigationRef = createNavigationContainerRef<RootStackParamList>();
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const RootNavigator: React.FC = () => {
-  const { isAuthenticated, isHydrated, hasSeenOnboarding, hydrateAuth } =
-    useAuthStore();
+  const {
+    user,
+    isAuthenticated,
+    isGuest,
+    isHydrated,
+    hasSeenOnboarding,
+    hydrateAuth,
+  } = useAuthStore();
 
   useEffect(() => {
     hydrateAuth();
   }, [hydrateAuth]);
+
+  const needsTerms =
+    isAuthenticated &&
+    !isGuest &&
+    user &&
+    (!user.terms_accepted_at || !user.age_notice_ack);
 
   // When authentication state changes dynamically (e.g. Guest mode tapped), switch immediately
   useEffect(() => {
     if (!isHydrated) return;
     if (navigationRef.isReady()) {
       if (isAuthenticated) {
-        navigationRef.reset({
-          index: 0,
-          routes: [{ name: 'MainTabs' }],
-        });
+        if (needsTerms) {
+          navigationRef.reset({
+            index: 0,
+            routes: [{ name: 'Terms' }],
+          });
+        } else {
+          navigationRef.reset({
+            index: 0,
+            routes: [{ name: 'MainTabs' }],
+          });
+        }
       }
     }
-  }, [isAuthenticated, isHydrated]);
+  }, [isAuthenticated, isHydrated, needsTerms]);
 
   // Show dark splash loader while rehydrating stored login session
   if (!isHydrated) {
@@ -65,7 +94,9 @@ export const RootNavigator: React.FC = () => {
 
   // Dynamically calculate initial route so it always exists in the navigator
   const initialRoute = isAuthenticated
-    ? 'MainTabs'
+    ? needsTerms
+      ? 'Terms'
+      : 'MainTabs'
     : !hasSeenOnboarding
       ? 'Onboarding'
       : 'AccountSelect';
@@ -81,6 +112,7 @@ export const RootNavigator: React.FC = () => {
         }}
       >
         <Stack.Screen name="MainTabs" component={MainTabNavigator} />
+        <Stack.Screen name="Terms" component={TermsScreen} />
         <Stack.Screen name="AccountSelect" component={AccountSelectScreen} />
         <Stack.Screen name="Auth" component={AuthScreen} />
         <Stack.Screen name="Onboarding" component={OnboardingScreen} />
@@ -92,6 +124,11 @@ export const RootNavigator: React.FC = () => {
         <Stack.Screen
           name="Notifications"
           component={NotificationScreen}
+          options={{ animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
+          name="GuardianLive"
+          component={GuardianLiveScreen}
           options={{ animation: 'slide_from_right' }}
         />
       </Stack.Navigator>

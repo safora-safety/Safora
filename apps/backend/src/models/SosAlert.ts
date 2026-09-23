@@ -10,6 +10,7 @@ export interface SosAlertRow {
   battery_percentage?: number | null;
   audio_url?: string | null;
   is_test?: boolean;
+  source?: string | null;
   status: SosAlertStatus;
   created_at: Date | string;
 }
@@ -24,6 +25,7 @@ export interface SosAlertEntity {
   batteryPercentage?: number;
   audioUrl?: string;
   isTest?: boolean;
+  source?: string;
   status: SosAlertStatus;
   createdAt: string;
 }
@@ -43,6 +45,7 @@ export class SosAlertModel {
           : undefined,
       audioUrl: row.audio_url || undefined,
       isTest: Boolean(row.is_test),
+      source: row.source || undefined,
       status: row.status || "dispatched",
       createdAt:
         row.created_at instanceof Date

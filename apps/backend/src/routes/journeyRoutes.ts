@@ -4,6 +4,7 @@ import {
   updateLocation,
   completeJourney,
   cancelJourney,
+  confirmSafe,
   getActiveJourneys,
   getAllJourneys,
 } from "../controllers/journeyController";
@@ -26,6 +27,7 @@ router.patch(
   validateBody(updateLocationSchema),
   updateLocation,
 );
+router.post("/:id/confirm-safe", confirmSafe);
 router.patch("/:id/complete", completeJourney);
 router.patch("/:id/cancel", cancelJourney);
 

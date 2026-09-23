@@ -92,17 +92,91 @@ export class JourneyRepository {
     return result.rows[0] || null;
   }
 
+  // --- V1: Breadcrumb persistence (TRK-1) ---
+
+  static async insertBreadcrumb(
+    journeyId: number,
+    lat: number,
+    lng: number,
+    speed?: number | null,
+    battery?: number | null,
+  ): Promise<void> {
+    await db.query(
+      `INSERT INTO journey_breadcrumbs (journey_id, location, speed, battery)
+       VALUES ($1, ST_SetSRID(ST_MakePoint($3, $2), 4326)::geography, $4, $5);`,
+      [journeyId, lat, lng, speed ?? null, battery ?? null],
+    );
+  }
+
+  static async updateLastLocation(
+    journeyId: number,
+    lat: number,
+    lng: number,
+  ): Promise<void> {
+    await db.query(
+      `UPDATE journeys
+       SET last_location = ST_SetSRID(ST_MakePoint($3, $2), 4326)::geography,
+           last_seen_at = now()
+       WHERE id = $1;`,
+      [journeyId, lat, lng],
+    );
+  }
+
+  // --- V1: Watchdog state (SYN-5) ---
+
+  static async setDeviatedAt(journeyId: number, date: Date): Promise<void> {
+    await db.query(`UPDATE journeys SET deviated_at = $2 WHERE id = $1;`, [
+      journeyId,
+      date,
+    ]);
+  }
+
+  static async clearDeviatedAt(journeyId: number): Promise<void> {
+    await db.query(`UPDATE journeys SET deviated_at = NULL WHERE id = $1;`, [
+      journeyId,
+    ]);
+  }
+
+  static async setEscalatedAt(journeyId: number, date: Date): Promise<void> {
+    await db.query(`UPDATE journeys SET escalated_at = $2 WHERE id = $1;`, [
+      journeyId,
+      date,
+    ]);
+  }
+
+  /**
+   * Lightweight query for watchdog boot — only returns id + deviated_at
+   * for active journeys, no joins needed.
+   */
+  static async findActiveForWatchdog(): Promise<
+    Array<{ id: number; deviated_at: Date | null }>
+  > {
+    const result = await db.query(
+      `SELECT id, deviated_at FROM journeys WHERE status IN ('active', 'deviated');`,
+    );
+    return result.rows;
+  }
+
+  // --- V1: Updated active journeys for admin radar (returns real last_location) ---
+
   static async findActiveJourneys(): Promise<
     Array<
       JourneyRow & {
         user_name?: string;
         user_phone?: string;
         user_email?: string;
+        last_lat?: number;
+        last_lng?: number;
+        last_seen_at?: Date | string | null;
+        deviated_at?: Date | string | null;
       }
     >
   > {
     const result = await db.query(
-      `SELECT j.*, u.name as user_name, u.phone as user_phone, u.email as user_email
+      `SELECT j.*,
+              u.name as user_name, u.phone as user_phone, u.email as user_email,
+              ST_Y(j.last_location::geometry) as last_lat,
+              ST_X(j.last_location::geometry) as last_lng
        FROM journeys j
        LEFT JOIN users u ON j.user_id = u.id
        WHERE j.status IN ('active', 'deviated')

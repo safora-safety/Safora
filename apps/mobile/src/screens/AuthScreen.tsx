@@ -114,7 +114,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           </TouchableOpacity>
           <View style={styles.badgeLive}>
             <View style={styles.liveDot} />
-            <Text style={styles.badgeLiveText}>256-BIT ENCRYPTED</Text>
+            <Text style={styles.badgeLiveText}>SECURE CITIZEN ACCESS</Text>
           </View>
         </View>
 

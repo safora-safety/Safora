@@ -11,6 +11,7 @@ export function errorHandler(
     res.status(err.statusCode).json({
       success: false,
       error: err.message,
+      message: err.message,
       details: err.details || null,
       timestamp: new Date().toISOString(),
     });
@@ -22,6 +23,7 @@ export function errorHandler(
   res.status(500).json({
     success: false,
     error: "Internal server error",
+    message: "Internal server error",
     details: process.env.NODE_ENV === "development" ? err.message : null,
     timestamp: new Date().toISOString(),
   });

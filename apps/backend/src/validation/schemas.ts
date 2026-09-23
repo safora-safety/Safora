@@ -27,6 +27,11 @@ export const updateProfileSchema = z.object({
   phone: z.string().max(25).optional().nullable(),
   blood_group: z.string().max(10).optional().nullable(),
   emergency_notes: z.string().max(500).optional().nullable(),
+  age: z.coerce.number().int().min(1).max(120).optional().nullable(),
+  ageNoticeAck: z.boolean().optional(),
+  age_notice_ack: z.boolean().optional(),
+  termsAcceptedAt: z.string().optional(),
+  terms_accepted_at: z.string().optional(),
 });
 
 export const createReportSchema = z.object({
@@ -70,7 +75,8 @@ export const startJourneySchema = z.object({
 export const updateLocationSchema = z.object({
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),
-  speed: z.number().optional(),
+  speed: z.number().optional().nullable(),
+  battery: z.number().optional().nullable(),
   heading: z.number().optional(),
 });
 

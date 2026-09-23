@@ -57,6 +57,9 @@ export class AuthService {
     phone?: string;
     bloodGroup?: string;
     emergencyNotes?: string;
+    age?: number;
+    ageNoticeAck?: boolean;
+    termsAcceptedAt?: string;
   }): Promise<{ user: User }> {
     try {
       const response = await apiClient.patch<
@@ -67,6 +70,9 @@ export class AuthService {
         phone: data.phone,
         blood_group: data.bloodGroup,
         emergency_notes: data.emergencyNotes,
+        age: data.age,
+        age_notice_ack: data.ageNoticeAck,
+        terms_accepted_at: data.termsAcceptedAt,
       });
       const updatedUser =
         response.data.user || (response.data as any).data?.user;

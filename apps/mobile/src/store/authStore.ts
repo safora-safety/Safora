@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User } from '@safora/shared-types';
 import { AuthService } from '../services/authService';
+import { notificationService } from '../services/notificationService';
+import { connectSocket, disconnectSocket } from '../services/socketService';
 
 export type UserProfile = User;
 
@@ -109,6 +111,11 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
           isHydrated: true,
           savedProfiles: parsedProfiles,
         });
+
+        if (!isGuest && storedToken && storedToken !== 'guest-session-token') {
+          connectSocket(storedToken);
+          notificationService.registerTokenWithBackend().catch(() => {});
+        }
       } else {
         set({
           user: null,
@@ -197,6 +204,9 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
         isLoading: false,
         savedProfiles: updatedProfiles,
       });
+
+      connectSocket(token);
+      notificationService.registerTokenWithBackend().catch(() => {});
       return true;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Authentication failed';
@@ -251,6 +261,9 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
         isLoading: false,
         savedProfiles: updatedProfiles,
       });
+
+      connectSocket(token);
+      notificationService.registerTokenWithBackend().catch(() => {});
       return true;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Registration failed';
@@ -260,6 +273,7 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
   },
 
   logout: async () => {
+    disconnectSocket();
     const currentUser = _get().user;
     let profiles = _get().savedProfiles;
 
@@ -342,6 +356,9 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
           phone: data.phone,
           bloodGroup: data.bloodGroup,
           emergencyNotes: data.emergencyNotes,
+          age: (data as any).age,
+          ageNoticeAck: (data as any).ageNoticeAck,
+          termsAcceptedAt: (data as any).termsAcceptedAt,
         });
         updatedUser = {
           ...currentUser,

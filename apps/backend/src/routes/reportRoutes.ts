@@ -9,7 +9,7 @@ import {
   getAnalyticsSummary,
   getDbscanClusters,
 } from "../controllers/reportController";
-import { authMiddleware, requireStaff } from "../middleware/auth";
+import { authMiddleware, requireStaff, optionalAuth } from "../middleware/auth";
 import { validateBody, validateQuery } from "../middleware/validate";
 import { reportCreateRateLimiter } from "../middleware/rateLimiter";
 import {
@@ -24,8 +24,8 @@ import { AppError } from "../errors/AppError";
 
 const router = Router();
 
-// Public / Authenticated read routes
-router.get("/", getReports);
+// Public / Authenticated read routes (SEC-2: Identity stripped unless staff)
+router.get("/", optionalAuth as any, getReports);
 router.get("/clusters", getDbscanClusters);
 router.get(
   "/analytics/summary",
@@ -35,6 +35,7 @@ router.get(
 );
 router.get(
   "/nearby",
+  optionalAuth as any,
   validateQuery(nearbyReportsQuerySchema),
   getNearbyReports,
 );

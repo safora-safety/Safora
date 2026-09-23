@@ -208,32 +208,21 @@ export class ReportService {
   }
 
   /**
-   * Calculate real-time safety score at coordinates
+   * Calculate real-time safety score at coordinates (V1 SYN-1: No hardcoded fallback)
    */
   static async getSafetyScore(
     lat = 30.3165,
     lng = 78.0322,
   ): Promise<SafetyScoreResponse> {
-    try {
-      const res = await apiClient.get<
-        ApiResponse<SafetyScoreResponse> & SafetyScoreResponse
-      >(`/reports/safety-score?lat=${lat}&lng=${lng}`);
-      return res.data.safetyScore !== undefined
-        ? res.data
-        : (res.data as any).data;
-    } catch {
-      return {
-        latitude: lat,
-        longitude: lng,
-        safetyScore: 84,
-        riskLevel: 'safe',
-        factors: {
-          totalHazardsNearby: 3,
-          highSeverityCount: 0,
-          nearestHazardMeters: 450,
-        },
-      };
+    const res = await apiClient.get<
+      ApiResponse<SafetyScoreResponse> & SafetyScoreResponse
+    >(`/reports/safety-score?lat=${lat}&lng=${lng}`);
+    const data =
+      res.data.safetyScore !== undefined ? res.data : (res.data as any).data;
+    if (!data || typeof data.safetyScore !== 'number') {
+      throw new Error('Invalid safety score response');
     }
+    return data;
   }
 
   /**
@@ -263,6 +252,20 @@ export class ReportService {
       return (res.data as any).photoUrl || (res.data as any).data?.photoUrl;
     } catch {
       return uri; // Return original uri on fallback
+    }
+  }
+
+  /**
+   * Fetch DBSCAN density clusters for heatmap visualization (SYN-2)
+   */
+  static async getClusters(eps = 0.003, minPoints = 2): Promise<any[]> {
+    try {
+      const res = await apiClient.get<
+        ApiResponse<{ clusters: any[] }> & { clusters: any[] }
+      >(`/reports/clusters?eps=${eps}&min_points=${minPoints}`);
+      return res.data.clusters || (res.data as any).data?.clusters || [];
+    } catch {
+      return [];
     }
   }
 }

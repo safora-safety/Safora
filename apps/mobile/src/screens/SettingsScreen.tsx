@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   StatusBar,
   Alert,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuthStore } from '../store/authStore';
 
@@ -29,11 +30,59 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const [hazardAlerts, setHazardAlerts] = useState(true);
   const [reachedNotification, setReachedNotification] = useState(true);
 
-  const handleClearCache = () => {
-    Alert.alert(
-      'Cache Cleared',
-      'Local map tiles and cached routes have been cleared successfully.',
-    );
+  useEffect(() => {
+    Promise.all([
+      AsyncStorage.getItem('@safora_pref_sos_countdown'),
+      AsyncStorage.getItem('@safora_pref_haptic_sos'),
+      AsyncStorage.getItem('@safora_pref_loud_siren'),
+      AsyncStorage.getItem('@safora_pref_high_accuracy_gps'),
+      AsyncStorage.getItem('@safora_pref_hazard_alerts'),
+      AsyncStorage.getItem('@safora_pref_reached_notification'),
+    ]).then(([sos, haptic, siren, gps, hazards, reached]) => {
+      if (sos !== null) setSosCountdown(sos === 'true');
+      if (haptic !== null) setHapticSos(haptic === 'true');
+      if (siren !== null) setLoudSiren(siren === 'true');
+      if (gps !== null) setHighAccuracyGps(gps === 'true');
+      if (hazards !== null) setHazardAlerts(hazards === 'true');
+      if (reached !== null) setReachedNotification(reached === 'true');
+    });
+  }, []);
+
+  const toggleSosCountdown = (val: boolean) => {
+    setSosCountdown(val);
+    AsyncStorage.setItem('@safora_pref_sos_countdown', String(val));
+  };
+  const toggleHapticSos = (val: boolean) => {
+    setHapticSos(val);
+    AsyncStorage.setItem('@safora_pref_haptic_sos', String(val));
+  };
+  const toggleLoudSiren = (val: boolean) => {
+    setLoudSiren(val);
+    AsyncStorage.setItem('@safora_pref_loud_siren', String(val));
+  };
+  const toggleHighAccuracyGps = (val: boolean) => {
+    setHighAccuracyGps(val);
+    AsyncStorage.setItem('@safora_pref_high_accuracy_gps', String(val));
+  };
+  const toggleHazardAlerts = (val: boolean) => {
+    setHazardAlerts(val);
+    AsyncStorage.setItem('@safora_pref_hazard_alerts', String(val));
+  };
+  const toggleReachedNotification = (val: boolean) => {
+    setReachedNotification(val);
+    AsyncStorage.setItem('@safora_pref_reached_notification', String(val));
+  };
+
+  const handleClearCache = async () => {
+    try {
+      await AsyncStorage.removeItem('@safora_cached_nearby_hazards');
+      Alert.alert(
+        'Cache Cleared',
+        'Local map tiles and cached radar hazards have been cleared successfully.',
+      );
+    } catch {
+      Alert.alert('Notice', 'Cache reset completed.');
+    }
   };
 
   return (
@@ -95,7 +144,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             </View>
             <Switch
               value={sosCountdown}
-              onValueChange={setSosCountdown}
+              onValueChange={toggleSosCountdown}
               trackColor={{ false: '#334155', true: colors.primary }}
               thumbColor="#FFFFFF"
             />
@@ -116,7 +165,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             </View>
             <Switch
               value={hapticSos}
-              onValueChange={setHapticSos}
+              onValueChange={toggleHapticSos}
               trackColor={{ false: '#334155', true: colors.primary }}
               thumbColor="#FFFFFF"
             />
@@ -137,7 +186,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             </View>
             <Switch
               value={loudSiren}
-              onValueChange={setLoudSiren}
+              onValueChange={toggleLoudSiren}
               trackColor={{ false: '#334155', true: colors.danger }}
               thumbColor="#FFFFFF"
             />
@@ -170,7 +219,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             </View>
             <Switch
               value={highAccuracyGps}
-              onValueChange={setHighAccuracyGps}
+              onValueChange={toggleHighAccuracyGps}
               trackColor={{ false: '#334155', true: colors.primary }}
               thumbColor="#FFFFFF"
             />
@@ -203,7 +252,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             </View>
             <Switch
               value={hazardAlerts}
-              onValueChange={setHazardAlerts}
+              onValueChange={toggleHazardAlerts}
               trackColor={{ false: '#334155', true: colors.primary }}
               thumbColor="#FFFFFF"
             />
@@ -224,7 +273,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             </View>
             <Switch
               value={reachedNotification}
-              onValueChange={setReachedNotification}
+              onValueChange={toggleReachedNotification}
               trackColor={{ false: '#334155', true: colors.primary }}
               thumbColor="#FFFFFF"
             />

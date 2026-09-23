@@ -41,9 +41,17 @@ export interface MapScreenProps {
     tab: 'Home' | 'Map' | 'SafeWalk' | 'Profile',
     params?: any,
   ) => void;
+  route?: {
+    params?: {
+      showHeatmap?: boolean;
+    };
+  };
 }
 
-export const MapScreen: React.FC<MapScreenProps> = ({ onNavigateTab }) => {
+export const MapScreen: React.FC<MapScreenProps> = ({
+  onNavigateTab,
+  route,
+}) => {
   const navigation = useNavigation<any>();
   const { colors, isDark } = useTheme();
   const { isGuest } = useAuthStore();
@@ -52,6 +60,10 @@ export const MapScreen: React.FC<MapScreenProps> = ({ onNavigateTab }) => {
   const [userLivePos, setUserLivePos] =
     useState<LocationCoordinates>(CAMPUS_COORDINATES);
   const [hazards, setHazards] = useState<HazardReport[]>([]);
+  const [clusters, setClusters] = useState<any[]>([]);
+  const [showHeatmap, setShowHeatmap] = useState(
+    Boolean(route?.params?.showHeatmap),
+  );
   const [selectedHazard, setSelectedHazard] = useState<HazardReport | null>(
     null,
   );
@@ -125,6 +137,12 @@ export const MapScreen: React.FC<MapScreenProps> = ({ onNavigateTab }) => {
     return () => backSub.remove();
   }, [searchResults, searchQuery, selectedHazard, activeRoute]);
 
+  useEffect(() => {
+    if (route?.params?.showHeatmap) {
+      setShowHeatmap(true);
+    }
+  }, [route?.params?.showHeatmap]);
+
   const loadMapData = async () => {
     setLoading(true);
     try {
@@ -137,6 +155,11 @@ export const MapScreen: React.FC<MapScreenProps> = ({ onNavigateTab }) => {
         5000,
       );
       setHazards(data);
+
+      // Fetch DBSCAN density clusters for heatmap (SYN-2)
+      ReportService.getClusters(0.003, 2)
+        .then(setClusters)
+        .catch(() => {});
     } catch {
       // Fallback handled inside services
     } finally {
@@ -408,6 +431,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({ onNavigateTab }) => {
           zoom={15}
           isDark={isDark}
           markers={mapMarkers}
+          clusters={showHeatmap ? clusters : []}
           polyline={activeRoute ? activeRoute.coordinates : undefined}
           polylineColor={
             travelMode === 'car'
@@ -499,6 +523,30 @@ export const MapScreen: React.FC<MapScreenProps> = ({ onNavigateTab }) => {
             </View>
           )}
         </View>
+
+        {/* Heatmap Toggle Floating Button (SYN-2) */}
+        <TouchableOpacity
+          style={[
+            styles.heatmapFab,
+            {
+              backgroundColor: showHeatmap ? '#EF4444' : colors.backgroundCard,
+              borderColor: showHeatmap ? '#DC2626' : colors.border,
+              bottom: activeRoute ? 275 : selectedHazard ? 305 : 84,
+            },
+          ]}
+          onPress={() => setShowHeatmap(prev => !prev)}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.heatmapFabIcon}>🔥</Text>
+          <Text
+            style={[
+              styles.heatmapFabText,
+              { color: showHeatmap ? '#FFFFFF' : colors.textPrimary },
+            ]}
+          >
+            {showHeatmap ? 'Heatmap: ON' : 'Heatmap'}
+          </Text>
+        </TouchableOpacity>
 
         {/* Recenter GPS Floating Button */}
         <TouchableOpacity
@@ -975,6 +1023,24 @@ const styles = StyleSheet.create({
   resultName: { fontSize: 13, fontWeight: '700' },
   resultSub: { fontSize: 11, marginTop: 1 },
 
+  heatmapFab: {
+    position: 'absolute',
+    right: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 6,
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+  },
+  heatmapFabIcon: { fontSize: 16 },
+  heatmapFabText: { fontSize: 12, fontWeight: '800' },
   recenterFab: {
     position: 'absolute',
     bottom: 24,

@@ -203,6 +203,11 @@ export const SosAlertsPage: React.FC = () => {
                           TEST
                         </span>
                       )}
+                      {alert.source === 'watchdog' && (
+                        <span className="text-[10px] font-mono uppercase bg-amber-950/60 border border-amber-500/40 text-amber-300 px-1.5 py-0.5 rounded">
+                          WATCHDOG
+                        </span>
+                      )}
                     </div>
                     <Badge
                       variant={
@@ -222,6 +227,8 @@ export const SosAlertsPage: React.FC = () => {
                   <p className="text-xs text-gray-300 mt-2 line-clamp-2">
                     {alert.isTest
                       ? 'System verification drill (Staff simulated dispatch).'
+                      : alert.source === 'watchdog'
+                      ? 'Automatic watchdog escalation: safe walk route deviation unconfirmed after 60s.'
                       : `Emergency SOS triggered at coordinates ${alert.latitude?.toFixed(4)}, ${alert.longitude?.toFixed(4)}.`}
                   </p>
 
@@ -279,6 +286,9 @@ export const SosAlertsPage: React.FC = () => {
                     </Badge>
                     {selectedAlert.isTest && (
                       <Badge variant="neutral">DRILL / TEST</Badge>
+                    )}
+                    {selectedAlert.source === 'watchdog' && (
+                      <Badge variant="warning">WATCHDOG DEVIATION</Badge>
                     )}
                   </div>
                   <h2 className="text-xl font-black text-white mt-1">

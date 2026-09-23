@@ -12,6 +12,7 @@ export interface CreateAlertData {
   batteryPercentage?: number | null;
   audioUrl?: string | null;
   isTest?: boolean;
+  source?: string | null;
 }
 
 export class SosRepository {
@@ -19,12 +20,12 @@ export class SosRepository {
     const result = await db.query(
       `INSERT INTO sos_alerts (
          user_id, journey_id, latitude, longitude,
-         location, accuracy, battery_percentage, audio_url, is_test, status
+         location, accuracy, battery_percentage, audio_url, is_test, source, status
        )
        VALUES (
          $1, $2, $3, $4,
          ST_SetSRID(ST_MakePoint($4, $3), 4326)::geography,
-         $5, $6, $7, $8, 'dispatched'
+         $5, $6, $7, $8, COALESCE($9, 'user'), 'dispatched'
        )
        RETURNING *;`,
       [
@@ -36,6 +37,7 @@ export class SosRepository {
         data.batteryPercentage || null,
         data.audioUrl || null,
         Boolean(data.isTest),
+        data.source || "user",
       ],
     );
     return result.rows[0];

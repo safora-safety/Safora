@@ -20,8 +20,8 @@ export interface ReportRow {
 }
 
 export interface ReportEntity {
-  id: number;
-  userId?: number | null;
+  id: string | number;
+  userId?: number | string | null;
   reporterName?: string;
   category: HazardCategory;
   title: string;
@@ -32,10 +32,33 @@ export interface ReportEntity {
   photoUrl?: string | null;
   source?: string;
   resolutionNotes?: string;
-  confirmationsCount: number;
+  confirmationsCount?: number;
   status: HazardStatus;
   distanceMeters?: number;
   createdAt: string;
+}
+
+export interface PublicReportDto {
+  id: string | number;
+  category: HazardCategory;
+  title: string;
+  description?: string;
+  severity: number;
+  latitude: number;
+  longitude: number;
+  photoUrl?: string | null;
+  source?: string;
+  resolutionNotes?: string;
+  confirmationsCount?: number;
+  status: HazardStatus;
+  distanceMeters?: number;
+  createdAt: string;
+}
+
+export interface StaffReportDto extends PublicReportDto {
+  userId?: number | string | null;
+  reporterName?: string;
+  reporterEmail?: string;
 }
 
 export class ReportModel {
@@ -64,5 +87,14 @@ export class ReportModel {
           ? row.created_at.toISOString()
           : String(row.created_at),
     };
+  }
+
+  static toPublic(report: ReportEntity | any): PublicReportDto {
+    const { userId, reporterName, reporterEmail, ...publicFields } = report;
+    return publicFields;
+  }
+
+  static toStaff(report: ReportEntity | any): StaffReportDto {
+    return report;
   }
 }
