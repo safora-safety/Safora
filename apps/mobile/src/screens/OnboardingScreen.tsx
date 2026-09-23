@@ -36,7 +36,7 @@ const SLIDES: Slide[] = [
     title: 'Welcome to SAFORA',
     subtitle: 'Your Personal Safety Companion',
     description:
-      'A proactive women & citizen safety network with real-time hazard radar, 256-bit encrypted coordinates, and immediate guardian alerts.',
+      'A proactive women & citizen safety network with real-time hazard radar, live location tracking, and immediate guardian alerts.',
     accentColor: colors.accent,
   },
   {
@@ -66,7 +66,7 @@ const SLIDES: Slide[] = [
     title: 'Instant SOS & Decoy',
     subtitle: 'Zero-Internet Safety Fallbacks',
     description:
-      'Offline SMS SOS with live GPS coordinates targeting 112, high-priority push dispatch, and a stealth working calculator decoy for discreet emergencies.',
+      'Emergency SMS with live GPS coordinates for your trusted contacts, fast 112 calling, and a stealth calculator decoy for discreet emergencies. Safora does not replace calling 112.',
     accentColor: colors.danger,
   },
 ];

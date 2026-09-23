@@ -16,6 +16,11 @@ export interface User {
   emergencyNotes?: string;
   role?: UserRole;
   isActive?: boolean;
+  age?: number | null;
+  ageNoticeAck?: boolean;
+  age_notice_ack?: boolean;
+  termsAcceptedAt?: string | null;
+  terms_accepted_at?: string | null;
   createdAt?: string;
 }
 

@@ -2,6 +2,9 @@ import { AppError } from "../errors/AppError";
 import { Journey } from "@safora/shared-types";
 import { JourneyRepository } from "../repositories/journeyRepository";
 import { JourneyModel } from "../models/Journey";
+import { UserRepository } from "../repositories/userRepository";
+import { WatchdogService } from "./watchdogService";
+import { broadcastJourneyLocation } from "../sockets/journeySocket";
 
 /**
  * Compute metric distance from point P to line segment AB using Equirectangular projection
@@ -65,14 +68,20 @@ export class JourneyService {
       trustedContactIds: data.trustedContactIds || [],
     });
 
+    WatchdogService.registerJourney(Number(row.id));
+
     return JourneyModel.fromRow(row);
   }
 
   static async updateLocation(
     journeyId: string | number,
     coords: { latitude: number; longitude: number },
-    userId?: string | number,
-    userRole?: string,
+    options?: {
+      speed?: number | null;
+      battery?: number | null;
+      userId?: string | number;
+      userRole?: string;
+    },
   ): Promise<{
     status: "active" | "deviated";
     isDeviated: boolean;
@@ -85,6 +94,9 @@ export class JourneyService {
       throw new AppError("Active journey not found", 404);
     }
 
+    const userId = options?.userId;
+    const userRole = options?.userRole;
+
     if (
       userId !== undefined &&
       String(row.user_id) !== String(userId) &&
@@ -93,6 +105,26 @@ export class JourneyService {
     ) {
       throw new AppError("Forbidden: You do not own this journey", 403);
     }
+
+    const jId = Number(journeyId);
+
+    // TRK-1: Persist live breadcrumb record with optional telemetry
+    // TODO(V2): order by recorded_at, not arrival order
+    await JourneyRepository.insertBreadcrumb(
+      jId,
+      coords.latitude,
+      coords.longitude,
+      options?.speed,
+      options?.battery,
+    );
+
+    // Update last known location & timestamp
+    await JourneyRepository.updateLastLocation(
+      jId,
+      coords.latitude,
+      coords.longitude,
+    );
+    WatchdogService.updateLocation(jId, coords.latitude, coords.longitude);
 
     // Haversine distance to destination
     const R = 6371e3;
@@ -147,7 +179,7 @@ export class JourneyService {
           minDistanceToCorridor = d;
         }
       }
-    } else {
+    } else if (row.dest_lat && row.dest_lng) {
       // Direct origin-to-destination corridor line
       minDistanceToCorridor = distanceToSegmentMeters(
         coords.latitude,
@@ -157,18 +189,50 @@ export class JourneyService {
         Number(row.dest_lat),
         Number(row.dest_lng),
       );
+    } else {
+      // Edge case: No planned route or destination set — treat as on-route (architecture.md §7)
+      minDistanceToCorridor = 0;
     }
 
     const deviationMeters = Math.round(minDistanceToCorridor);
     const isDeviated = deviationMeters > CORRIDOR_THRESHOLD_METERS;
     const status: "active" | "deviated" = isDeviated ? "deviated" : "active";
 
-    // Synchronize status in database if altered
-    if (isDeviated && row.status === "active") {
-      await JourneyRepository.setStatus(journeyId, "deviated");
-    } else if (!isDeviated && row.status === "deviated") {
-      await JourneyRepository.setStatus(journeyId, "active");
+    // Synchronize status and watchdog deviation state
+    if (isDeviated) {
+      if (row.status === "active") {
+        await JourneyRepository.setStatus(jId, "deviated");
+      }
+      if (!row.deviated_at) {
+        const now = new Date();
+        await JourneyRepository.setDeviatedAt(jId, now);
+        WatchdogService.setDeviated(jId, now);
+      }
+    } else {
+      if (row.status === "deviated") {
+        await JourneyRepository.setStatus(jId, "active");
+      }
+      if (row.deviated_at) {
+        await JourneyRepository.clearDeviatedAt(jId);
+        WatchdogService.clearDeviated(jId);
+      }
     }
+
+    // Fetch walker name for guardian live view (SYN-4)
+    const walker = await UserRepository.findById(row.user_id);
+
+    // Emit realtime socket event (TRK-2 / SYN-4)
+    broadcastJourneyLocation({
+      journeyId: jId,
+      userId: row.user_id,
+      walkerName: walker?.name || "Companion Walker",
+      latitude: coords.latitude,
+      longitude: coords.longitude,
+      speed: options?.speed,
+      battery: options?.battery,
+      deviated: isDeviated,
+      guardianUserIds: row.trusted_contact_ids,
+    });
 
     return {
       status,
@@ -204,6 +268,8 @@ export class JourneyService {
       "completed",
       true,
     );
+
+    WatchdogService.unregisterJourney(Number(journeyId));
   }
 
   static async cancelJourney(
@@ -231,5 +297,39 @@ export class JourneyService {
       "cancelled",
       true,
     );
+
+    WatchdogService.unregisterJourney(Number(journeyId));
+  }
+
+  static async confirmSafe(
+    journeyId: string | number,
+    userId?: string | number,
+    userRole?: string,
+  ): Promise<{ confirmed: boolean; deviatedAt: null }> {
+    const row = await JourneyRepository.findById(journeyId);
+    if (!row) {
+      throw new AppError("Journey not found", 404);
+    }
+
+    if (
+      userId !== undefined &&
+      String(row.user_id) !== String(userId) &&
+      userRole !== "admin" &&
+      userRole !== "moderator"
+    ) {
+      throw new AppError("Forbidden: You do not own this journey", 403);
+    }
+
+    const jId = Number(journeyId);
+    await JourneyRepository.clearDeviatedAt(jId);
+    if (row.status === "deviated") {
+      await JourneyRepository.setStatus(jId, "active");
+    }
+    WatchdogService.clearDeviated(jId);
+
+    return {
+      confirmed: true,
+      deviatedAt: null,
+    };
   }
 }

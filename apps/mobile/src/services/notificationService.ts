@@ -55,6 +55,7 @@ class NotificationService {
 
   public async registerTokenWithBackend(): Promise<string | null> {
     try {
+      await this.requestUserPermission();
       const token = await this.messaging.getToken();
       if (token) {
         console.log(

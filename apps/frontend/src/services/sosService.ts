@@ -20,6 +20,7 @@ export interface AdminSosAlert {
   accuracy?: number;
   batteryPercentage?: number;
   status: 'dispatched' | 'acknowledged' | 'resolved';
+  source?: 'manual' | 'watchdog' | 'test' | string;
   audioUrl?: string | null;
   isTest?: boolean;
   createdAt?: string;
@@ -46,6 +47,7 @@ export const sosService = {
               ? Number(a.battery_percentage)
               : a.batteryPercentage,
           status: a.status || 'dispatched',
+          source: a.source || 'manual',
           audioUrl: a.audio_url || a.audioUrl,
           isTest: Boolean(a.is_test ?? a.isTest),
           createdAt: a.created_at || a.createdAt,

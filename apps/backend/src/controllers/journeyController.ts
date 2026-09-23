@@ -1,7 +1,8 @@
-import { Response, NextFunction } from "express";
+import { Request, Response, NextFunction } from "express";
 import { AuthenticatedRequest } from "../middleware/auth";
 import { JourneyService } from "../services/journeyService";
 import { JourneyRepository } from "../repositories/journeyRepository";
+import { WatchdogService } from "../services/watchdogService";
 import { AppError } from "../errors/AppError";
 
 export async function getActiveJourneys(
@@ -11,34 +12,47 @@ export async function getActiveJourneys(
 ): Promise<void> {
   try {
     const rows = await JourneyRepository.findActiveJourneys();
-    const journeys = rows.map((r) => ({
-      id: r.id,
-      userId: r.user_id,
-      userName: r.user_name || `User #${r.user_id}`,
-      userPhone: r.user_phone,
-      userEmail: r.user_email,
-      origin: {
-        latitude: Number(r.origin_lat),
-        longitude: Number(r.origin_lng),
-        name: "Origin Checkpoint",
-      },
-      destination: {
-        latitude: Number(r.dest_lat),
-        longitude: Number(r.dest_lng),
-        name: "Target Destination",
-      },
-      currentLocation: {
-        latitude: Number(r.origin_lat),
-        longitude: Number(r.origin_lng),
-      },
-      status: r.status,
-      startedAt:
-        r.started_at instanceof Date
-          ? r.started_at.toISOString()
-          : String(r.started_at),
-      expectedArrivalAt: r.expected_arrival_at,
-      expectedDurationMins: 15,
-    }));
+    const journeys = rows.map((r) => {
+      const realLat =
+        r.last_lat != null ? Number(r.last_lat) : Number(r.origin_lat);
+      const realLng =
+        r.last_lng != null ? Number(r.last_lng) : Number(r.origin_lng);
+
+      return {
+        id: r.id,
+        userId: r.user_id,
+        userName: r.user_name || `User #${r.user_id}`,
+        userPhone: r.user_phone,
+        userEmail: r.user_email,
+        origin: {
+          latitude: Number(r.origin_lat),
+          longitude: Number(r.origin_lng),
+          name: "Origin Checkpoint",
+        },
+        destination: {
+          latitude: Number(r.dest_lat),
+          longitude: Number(r.dest_lng),
+          name: "Target Destination",
+        },
+        currentLocation: {
+          latitude: realLat,
+          longitude: realLng,
+        },
+        lastLocation: {
+          latitude: realLat,
+          longitude: realLng,
+        },
+        lastSeenAt: r.last_seen_at || r.started_at,
+        deviatedAt: r.deviated_at || null,
+        status: r.status,
+        startedAt:
+          r.started_at instanceof Date
+            ? r.started_at.toISOString()
+            : String(r.started_at),
+        expectedArrivalAt: r.expected_arrival_at,
+        expectedDurationMins: 15,
+      };
+    });
 
     res.status(200).json({
       success: true,
@@ -127,14 +141,55 @@ export async function updateLocation(
         latitude: req.body.latitude,
         longitude: req.body.longitude,
       },
-      req.user?.id,
-      req.user?.role,
+      {
+        speed: req.body.speed,
+        battery: req.body.battery,
+        userId: req.user?.id,
+        userRole: req.user?.role,
+      },
     );
 
     res.status(200).json({
       success: true,
       ...result,
     });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function confirmSafe(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const result = await JourneyService.confirmSafe(
+      req.params.id as string,
+      req.user?.id,
+      req.user?.role,
+    );
+    res.status(200).json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function internalTick(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const secret = req.header("X-Internal-Secret");
+  const expectedSecret = process.env.INTERNAL_TICK_SECRET;
+  if (!expectedSecret || !secret || secret !== expectedSecret) {
+    res.status(401).end();
+    return;
+  }
+
+  try {
+    const result = await WatchdogService.scan();
+    res.status(200).json(result);
   } catch (err) {
     next(err);
   }

@@ -14,19 +14,20 @@ import {
 
 export const SafeWalksPage: React.FC = () => {
   const [journeys, setJourneys] = useState<ActiveJourney[]>([]);
-  const [isLiveStream, setIsLiveStream] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState<string>('');
 
   const loadJourneys = async () => {
     setIsLoading(true);
+    setLoadError(null);
     try {
       const result = await journeyService.getActiveJourneys();
-      setJourneys(result.journeys);
-      setIsLiveStream(result.isLive);
+      setJourneys(result);
       setLastRefreshed(new Date().toLocaleTimeString());
     } catch (err) {
       console.error('Failed to load active journeys:', err);
+      setLoadError("Couldn't load active Safe Walks. Please verify connection to the server.");
     } finally {
       setIsLoading(false);
     }
@@ -60,9 +61,9 @@ export const SafeWalksPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3">
-          <Badge variant={isLiveStream ? 'success' : 'purple'} pulse>
+          <Badge variant="success" pulse>
             <Radio className="w-3 h-3 mr-1 inline" />
-            {isLiveStream ? 'LIVE DISPATCH STREAM' : 'RADAR SIMULATION'}
+            LIVE DISPATCH RADAR
           </Badge>
 
           <Badge variant="purple">
@@ -80,16 +81,28 @@ export const SafeWalksPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Grid of Active Safe Walks */}
+      {/* Grid of Active Safe Walks — 3 Explicit States (SEC-9) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {isLoading && journeys.length === 0 ? (
+        {isLoading ? (
           <div className="col-span-full py-16 text-center text-gray-400 font-mono text-xs">
             <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-indigo-400" />
             Scanning corridor geofences and active campus escorts...
           </div>
+        ) : loadError ? (
+          <div className="col-span-full py-16 text-center text-red-400 font-mono text-xs bg-red-950/20 border border-red-900/50 rounded-2xl p-6">
+            <AlertTriangle className="w-6 h-6 mx-auto mb-2 text-red-400" />
+            <p className="font-semibold">{loadError}</p>
+            <button
+              onClick={loadJourneys}
+              className="mt-4 px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold transition-colors"
+            >
+              Retry Connection
+            </button>
+          </div>
         ) : journeys.length === 0 ? (
-          <div className="col-span-full py-16 text-center text-gray-500 font-mono text-xs">
-            No active walks or companion sessions currently in progress.
+          <div className="col-span-full py-16 text-center text-gray-500 font-mono text-xs bg-gray-900/40 border border-gray-800 rounded-2xl p-6">
+            <ShieldCheck className="w-6 h-6 mx-auto mb-2 text-gray-500" />
+            No active Safe Walks right now.
           </div>
         ) : (
           journeys.map((journey) => {

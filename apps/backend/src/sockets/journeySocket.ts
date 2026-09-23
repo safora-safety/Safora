@@ -16,6 +16,7 @@ export function broadcastSosAlert(data: {
   batteryPercentage?: number;
   audioUrl?: string | null;
   isTest?: boolean;
+  source?: string;
   timestamp?: string;
   guardianUserIds?: (string | number)[];
 }): void {
@@ -71,6 +72,43 @@ export function broadcastSosAudio(data: {
     console.log(
       `[Socket.IO] Verified SOS audio attachment broadcast for alert ${data.alertId}`,
     );
+  }
+}
+
+export function broadcastJourneyLocation(data: {
+  journeyId: string | number;
+  userId?: string | number;
+  walkerName?: string;
+  latitude: number;
+  longitude: number;
+  speed?: number | null;
+  battery?: number | null;
+  deviated?: boolean;
+  timestamp?: string;
+  guardianUserIds?: (string | number)[];
+}): void {
+  if (socketServerInstance) {
+    const payload = {
+      ...data,
+      timestamp: data.timestamp || new Date().toISOString(),
+    };
+
+    // 1. Broadcast to journey-scoped room (for walker & subscribed guardians)
+    socketServerInstance
+      .to(`journey:${data.journeyId}`)
+      .emit("journey:location", payload);
+
+    // 2. Broadcast to staff operations radar
+    socketServerInstance.to("staff").emit("journey:location", payload);
+
+    // 3. Broadcast to all registered trusted contact guardian channels
+    if (data.guardianUserIds && data.guardianUserIds.length > 0) {
+      for (const gid of data.guardianUserIds) {
+        socketServerInstance
+          .to(`user:${gid}`)
+          .emit("journey:location", payload);
+      }
+    }
   }
 }
 
@@ -153,8 +191,11 @@ export function setupJourneySockets(io: Server): void {
 
         const isOwner = String(journey.user_id) === String(user.id);
         const isStaff = user.role === "admin" || user.role === "moderator";
+        const isGuardian =
+          Array.isArray(journey.trusted_contact_ids) &&
+          journey.trusted_contact_ids.map(String).includes(String(user.id));
 
-        if (!isOwner && !isStaff) {
+        if (!isOwner && !isStaff && !isGuardian) {
           socket.emit("error", {
             message: "Forbidden: Not authorized to join this journey channel",
           });

@@ -4,6 +4,7 @@ import { app } from "./app";
 import { initDatabase } from "./config/database";
 import { runSystemDiagnostics } from "./config/diagnostics";
 import { setupJourneySockets } from "./sockets/journeySocket";
+import { WatchdogService } from "./services/watchdogService";
 
 const PORT = process.env.PORT || 5000;
 
@@ -64,12 +65,21 @@ async function startServer(): Promise<void> {
     } catch (diagErr) {
       console.warn("[WARN] Background system diagnostics deferred:", diagErr);
     }
+
+    // Initialize server-side deviation watchdog (SYN-5)
+    try {
+      await WatchdogService.initialize();
+      WatchdogService.startTick();
+    } catch (watchdogErr) {
+      console.warn("[WARN] Watchdog initialization deferred:", watchdogErr);
+    }
   });
 }
 
 // Graceful Shutdown
 function handleShutdown(signal: string): void {
   console.log(`[INFO] Received ${signal}. Gracefully closing server...`);
+  WatchdogService.stopTick();
   server.close(() => {
     console.log("[INFO] HTTP server closed.");
     process.exit(0);

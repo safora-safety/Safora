@@ -5,10 +5,12 @@ on:
     branches:
       - main
       - master
+      - update
   pull_request:
     branches:
       - main
       - master
+      - update
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -73,6 +75,7 @@ jobs:
         run: npm run test --workspace=apps/backend -- --passWithNoTests
         env:
           JWT_SECRET: "ci-test-secret-citizens-as-sensors-2026"
+          INTERNAL_TICK_SECRET: "ci-test-internal-tick-secret-2026"
 
   # ── 3. Validate Web Operations Command Frontend ───────────────────────────
   frontend:

@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { ReportService } from "../services/reportService";
 import { ReportRepository } from "../repositories/reportRepository";
 import { AuthenticatedRequest } from "../middleware/auth";
+import { ReportModel } from "../models/Report";
 
 export async function createReport(
   req: AuthenticatedRequest,
@@ -25,10 +26,16 @@ export async function createReport(
           : "community_crowdsource"),
     });
 
+    const isStaff =
+      req.user && (req.user.role === "admin" || req.user.role === "moderator");
+    const formatted = isStaff
+      ? ReportModel.toStaff(report)
+      : ReportModel.toPublic(report);
+
     res.status(201).json({
       success: true,
       message: "Hazard report published",
-      report,
+      report: formatted,
     });
   } catch (err) {
     next(err);
@@ -44,10 +51,18 @@ export async function getReports(
     const limit = parseInt(req.query.limit as string, 10) || 50;
     const reports = await ReportService.getReports(limit);
 
+    const authReq = req as AuthenticatedRequest;
+    const isStaff =
+      authReq.user &&
+      (authReq.user.role === "admin" || authReq.user.role === "moderator");
+    const formatted = isStaff
+      ? reports.map(ReportModel.toStaff)
+      : reports.map(ReportModel.toPublic);
+
     res.status(200).json({
       success: true,
-      count: reports.length,
-      reports,
+      count: formatted.length,
+      reports: formatted,
     });
   } catch (err) {
     next(err);
@@ -70,13 +85,21 @@ export async function getNearbyReports(
       radiusMeters,
     );
 
+    const authReq = req as AuthenticatedRequest;
+    const isStaff =
+      authReq.user &&
+      (authReq.user.role === "admin" || authReq.user.role === "moderator");
+    const formatted = isStaff
+      ? reports.map(ReportModel.toStaff)
+      : reports.map(ReportModel.toPublic);
+
     res.status(200).json({
       success: true,
       source,
       center: { lat, lng },
       radiusMeters,
-      count: reports.length,
-      reports,
+      count: formatted.length,
+      reports: formatted,
     });
   } catch (err) {
     next(err);

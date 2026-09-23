@@ -24,6 +24,7 @@ export class SosService {
     journeyId?: string | number | null;
     audioUrl?: string | null;
     isTest?: boolean;
+    source?: string | null;
   }): Promise<{ alert: SosAlert; contactsNotified: number }> {
     const finalAudioUrl = data.audioUrl || null;
     const isTest = Boolean(data.isTest);
@@ -37,6 +38,7 @@ export class SosService {
       batteryPercentage: data.batteryPercentage,
       audioUrl: finalAudioUrl,
       isTest,
+      source: data.source || "user",
     });
 
     // Fetch user details for notification message
@@ -56,6 +58,7 @@ export class SosService {
         batteryPercentage: data.batteryPercentage,
         audioUrl: finalAudioUrl,
         isTest: true,
+        source: "test",
       });
 
       return {
@@ -165,6 +168,7 @@ export class SosService {
       batteryPercentage: data.batteryPercentage,
       audioUrl: finalAudioUrl,
       isTest: false,
+      source: row.source || data.source || "user",
       guardianUserIds,
     });
 

@@ -13,6 +13,10 @@ export interface JourneyRow {
   started_at: Date | string;
   expected_arrival_at?: Date | string | null;
   ended_at?: Date | string | null;
+  // V1 watchdog columns
+  last_seen_at?: Date | string | null;
+  deviated_at?: Date | string | null;
+  escalated_at?: Date | string | null;
 }
 
 export interface JourneyEntity {

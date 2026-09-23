@@ -13,6 +13,8 @@ import {
   Modal,
   ActivityIndicator,
   BackHandler,
+  Platform,
+  NativeModules,
 } from 'react-native';
 import {
   OpenMapView,
@@ -35,6 +37,7 @@ import {
 } from '../services/routingService';
 import { SosService } from '../services/sosService';
 import { AudioRecorderService } from '../services/audioRecorderService';
+import { joinJourneyRoom } from '../services/socketService';
 
 export interface SafeWalkScreenProps {
   initialDestination?: {
@@ -138,6 +141,13 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
 
       // Stream live coordinates to backend during active walk
       if (journeyId) {
+        if (Platform.OS === 'android' && NativeModules.SafeWalkService) {
+          NativeModules.SafeWalkService.updateLocation(
+            updatedCoords.latitude,
+            updatedCoords.longitude,
+          ).catch(() => {});
+        }
+
         JourneyService.updateLocation(journeyId, {
           latitude: updatedCoords.latitude,
           longitude: updatedCoords.longitude,
@@ -260,7 +270,12 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
       setIsDeviated(false);
       Vibration.vibrate([0, 1000, 500, 1000]);
 
-      // Start real 30s ambient audio evidence recording
+      // Start lock-screen native audio evidence + JS ambient recording (TRG-6-lite)
+      if (Platform.OS === 'android' && NativeModules.SafeWalkService) {
+        NativeModules.SafeWalkService.recordSosAudio(
+          String(journeyId || 'auto_sos'),
+        ).catch(() => {});
+      }
       AudioRecorderService.startRecording().catch(() => {});
 
       SosService.triggerSOS({
@@ -317,6 +332,17 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
         expected_duration_minutes: etaMins,
       });
       setJourneyId(journey.id);
+      joinJourneyRoom(journey.id);
+
+      // Start native foreground service (TRG-2-lite / NAV-1)
+      if (Platform.OS === 'android' && NativeModules.SafeWalkService) {
+        NativeModules.SafeWalkService.start(
+          String(journey.id),
+          destPos.latitude,
+          destPos.longitude,
+        ).catch(() => {});
+      }
+
       setSecondsRemaining(routeDurationSeconds || 600);
       setIsActive(true);
       setIsDeviated(false);
@@ -337,6 +363,9 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
   const handleCompleteWalk = async () => {
     if (journeyId) {
       await JourneyService.completeJourney(journeyId);
+    }
+    if (Platform.OS === 'android' && NativeModules.SafeWalkService) {
+      NativeModules.SafeWalkService.stop().catch(() => {});
     }
     setIsActive(false);
     setIsDeviated(false);
@@ -369,6 +398,9 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
           onPress: () => {
             setIsDeviated(false);
             setDeviationCountdown(null);
+            if (journeyId) {
+              JourneyService.confirmSafe(journeyId);
+            }
           },
         },
         {
@@ -378,7 +410,12 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
             setDeviationCountdown(null);
             Vibration.vibrate([0, 800, 300, 800]);
 
-            // Start real 30s ambient audio evidence recording
+            // Start lock-screen native audio evidence + JS ambient recording (TRG-6-lite)
+            if (Platform.OS === 'android' && NativeModules.SafeWalkService) {
+              NativeModules.SafeWalkService.recordSosAudio(
+                String(journeyId || 'manual_sos'),
+              ).catch(() => {});
+            }
             AudioRecorderService.startRecording().catch(() => {});
 
             try {

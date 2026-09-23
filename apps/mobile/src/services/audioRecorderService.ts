@@ -94,7 +94,7 @@ export class AudioRecorderService {
       const hasPermission = await this.isPermissionGranted();
       if (!hasPermission) {
         console.warn(
-          '[AudioRecorder] Microphone permission not granted — skipping audio evidence without blocking SOS dispatch',
+          '[AudioRecorder] audioAttempted: true, audioSucceeded: false — Microphone permission not granted, proceeding with immediate SOS dispatch',
         );
         return false;
       }
@@ -103,7 +103,10 @@ export class AudioRecorderService {
       isRecording = true;
       return true;
     } catch (err) {
-      console.warn('[AudioRecorder] Failed to start audio recording:', err);
+      console.warn(
+        '[AudioRecorder] audioAttempted: true, audioSucceeded: false — Background restriction or recorder error, proceeding with immediate SOS:',
+        err,
+      );
       isRecording = false;
       return false;
     }

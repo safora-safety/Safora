@@ -28,6 +28,15 @@ export interface MapMarkerItem {
   isUser?: boolean;
 }
 
+export interface MapClusterItem {
+  clusterId: number;
+  pointCount: number;
+  avgSeverity: number;
+  centerLatitude: number;
+  centerLongitude: number;
+  reportIds?: number[];
+}
+
 export interface OpenMapViewProps {
   center: { latitude: number; longitude: number };
   zoom?: number;
@@ -37,6 +46,7 @@ export interface OpenMapViewProps {
   layerSwitcherTop?: number;
   onLayerChange?: (layer: MapLayerType) => void;
   markers?: MapMarkerItem[];
+  clusters?: MapClusterItem[];
   polyline?: Array<{ latitude: number; longitude: number }>;
   polylineColor?: string;
   polylineDash?: boolean;
@@ -424,6 +434,39 @@ const generateHtml = (
       }).addTo(map);
     };
 
+    var clustersLayer = null;
+    window.renderClusters = function(clustersList) {
+      if (!map) return;
+      if (clustersLayer) {
+        map.removeLayer(clustersLayer);
+        clustersLayer = null;
+      }
+      if (!clustersList || !clustersList.length) return;
+
+      clustersLayer = L.layerGroup();
+      clustersList.forEach(function(c) {
+        var radius = Math.min(600, 150 + ((c.pointCount || 2) - 2) * 50);
+        var sev = Number(c.avgSeverity || 3);
+        var color = sev >= 3.5 ? '#EF4444' : (sev >= 2.5 ? '#F59E0B' : '#10B981');
+
+        var circle = L.circle([c.centerLatitude, c.centerLongitude], {
+          radius: radius,
+          color: color,
+          fillColor: color,
+          fillOpacity: 0.35,
+          weight: 2
+        });
+
+        circle.bindTooltip('<b>Hazard Hotspot</b><br/>' + (c.pointCount || 1) + ' reports (Avg Severity ' + sev + ')', {
+          permanent: false,
+          direction: 'top'
+        });
+
+        clustersLayer.addLayer(circle);
+      });
+      clustersLayer.addTo(map);
+    };
+
     function startMap() {
       if (document.readyState === 'complete' || document.readyState === 'interactive') {
         initMap();
@@ -450,6 +493,7 @@ export const OpenMapView = forwardRef<OpenMapViewRef, OpenMapViewProps>(
       layerSwitcherTop,
       onLayerChange,
       markers = [],
+      clusters = [],
       polyline,
       polylineColor = '#4F46E5',
       polylineDash = false,
@@ -500,6 +544,13 @@ export const OpenMapView = forwardRef<OpenMapViewRef, OpenMapViewProps>(
       webViewRef.current?.injectJavaScript(script);
     }, [markers, isMapLoaded]);
 
+    // Send clusters update whenever clusters prop changes
+    useEffect(() => {
+      if (!isMapLoaded) return;
+      const script = `if (window.renderClusters) { window.renderClusters(${JSON.stringify(clusters || [])}); }; true;`;
+      webViewRef.current?.injectJavaScript(script);
+    }, [clusters, isMapLoaded]);
+
     // Send polyline update whenever polyline changes
     useEffect(() => {
       if (!isMapLoaded) return;
@@ -521,6 +572,7 @@ export const OpenMapView = forwardRef<OpenMapViewRef, OpenMapViewProps>(
           setIsMapLoaded(true);
           const initScript = `
             if (window.renderMarkers) { window.renderMarkers(${JSON.stringify(markers)}); }
+            if (window.renderClusters) { window.renderClusters(${JSON.stringify(clusters || [])}); }
             if (window.renderPolyline) { window.renderPolyline(${JSON.stringify(polyline || [])}, "${polylineColor}", ${polylineDash}); }
             if (window.setMapLayer) { window.setMapLayer('${activeLayer}'); }
             true;

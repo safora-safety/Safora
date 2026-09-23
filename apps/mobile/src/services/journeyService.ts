@@ -88,4 +88,15 @@ export class JourneyService {
       // Offline fallback
     }
   }
+
+  /**
+   * Confirm walker is safe following a deviation alert (V1 Task 2.5 / 3.8)
+   */
+  static async confirmSafe(journeyId: string | number): Promise<void> {
+    try {
+      await apiClient.post(`/journeys/${journeyId}/confirm-safe`);
+    } catch (err) {
+      console.warn('[JourneyService] confirmSafe failed:', err);
+    }
+  }
 }

@@ -10,6 +10,9 @@ export interface UserRow {
   password?: string;
   role: UserRole;
   is_active?: boolean;
+  age?: number | null;
+  age_notice_ack?: boolean | null;
+  terms_accepted_at?: Date | string | null;
   created_at: Date | string;
 }
 
@@ -22,6 +25,9 @@ export interface UserEntity {
   emergencyNotes?: string;
   role: UserRole;
   isActive?: boolean;
+  age?: number | null;
+  ageNoticeAck?: boolean;
+  termsAcceptedAt?: string | null;
   createdAt: string;
 }
 
@@ -36,6 +42,14 @@ export class UserModel {
       emergencyNotes: row.emergency_notes || undefined,
       role: row.role || "user",
       isActive: row.is_active !== undefined ? Boolean(row.is_active) : true,
+      age: row.age != null ? Number(row.age) : undefined,
+      ageNoticeAck: Boolean(row.age_notice_ack),
+      termsAcceptedAt:
+        row.terms_accepted_at instanceof Date
+          ? row.terms_accepted_at.toISOString()
+          : row.terms_accepted_at != null
+            ? String(row.terms_accepted_at)
+            : undefined,
       createdAt:
         row.created_at instanceof Date
           ? row.created_at.toISOString()

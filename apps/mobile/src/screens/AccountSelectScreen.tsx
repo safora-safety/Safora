@@ -149,7 +149,7 @@ export const AccountSelectScreen: React.FC<AccountSelectScreenProps> = ({
         </TouchableOpacity>
 
         <Text style={styles.footerCaption}>
-          Universal Community Safety Network • Encrypted Coordinates
+          Universal Community Safety Network • Real-Time Safety Radar
         </Text>
       </View>
     </View>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { reportService } from '../services/reportService';
 import { sosService } from '../services/sosService';
-import { journeyService } from '../services/journeyService';
+import { journeyService, ActiveJourney } from '../services/journeyService';
 import { useSocket } from '../context/SocketContext';
 import { HazardReport, SosNotification } from '@safora/shared-types';
 import { StatCard } from '../components/common/StatCard';
@@ -23,7 +23,7 @@ import { useNavigate } from 'react-router-dom';
 export const DashboardPage: React.FC = () => {
   const [hazards, setHazards] = useState<HazardReport[]>([]);
   const [sosAlerts, setSosAlerts] = useState<SosNotification[]>([]);
-  const [activeJourneys, setActiveJourneys] = useState(journeyService.getMockActiveJourneys());
+  const [activeJourneys, setActiveJourneys] = useState<ActiveJourney[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [inspectedPhoto, setInspectedPhoto] = useState<string | null>(null);
   const { activeEmergency, broadcastTestSos } = useSocket();
@@ -39,9 +39,7 @@ export const DashboardPage: React.FC = () => {
       ]);
       setHazards(fetchedHazards);
       setSosAlerts(fetchedSos);
-      if (journeysRes?.journeys) {
-        setActiveJourneys(journeysRes.journeys);
-      }
+      setActiveJourneys(Array.isArray(journeysRes) ? journeysRes : []);
     } catch (err) {
       console.warn('Could not load operational data:', err);
     } finally {

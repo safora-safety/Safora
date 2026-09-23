@@ -9,6 +9,7 @@ import {
   Alert,
   Vibration,
   Linking,
+  ActivityIndicator,
 } from 'react-native';
 import { useAuthStore } from '../store/authStore';
 import { useTheme } from '../theme/ThemeContext';
@@ -24,9 +25,14 @@ import { FakeCallModal } from '../components/FakeCallModal';
 import { CalculatorDecoyModal } from '../components/CalculatorDecoyModal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AudioRecorderService } from '../services/audioRecorderService';
+import { onJourneyLocation } from '../services/socketService';
+import { navigationRef } from '../navigation/RootNavigator';
 
 interface HomeScreenProps {
-  onNavigateTab?: (tab: 'Home' | 'Map' | 'SafeWalk' | 'Profile') => void;
+  onNavigateTab?: (
+    tab: 'Home' | 'Map' | 'SafeWalk' | 'Profile',
+    params?: any,
+  ) => void;
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
@@ -36,17 +42,60 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
   const [safetyScore, setSafetyScore] = useState<SafetyScoreResponse | null>(
     null,
   );
+  const [scoreStatus, setScoreStatus] = useState<
+    'loading' | 'success' | 'error'
+  >('loading');
   const [sosCountdown, setSosCountdown] = useState<number | null>(null);
   const [showFakeCall, setShowFakeCall] = useState(false);
   const [fakeCallDelay, setFakeCallDelay] = useState<number | null>(null);
   const [showDecoyCalculator, setShowDecoyCalculator] = useState(false);
+  const [activeTrackedWalker, setActiveTrackedWalker] = useState<{
+    journeyId: string | number;
+    walkerName: string;
+    latitude: number;
+    longitude: number;
+    deviated?: boolean;
+    lastSeen: Date;
+  } | null>(null);
+
+  // Realtime guardian tracking listener (SYN-4)
+  useEffect(() => {
+    const unsub = onJourneyLocation((payload: any) => {
+      if (!payload || !payload.latitude || !payload.longitude) return;
+      if (payload.walkerName) {
+        setActiveTrackedWalker({
+          journeyId: payload.journeyId,
+          walkerName: payload.walkerName,
+          latitude: Number(payload.latitude),
+          longitude: Number(payload.longitude),
+          deviated: payload.deviated,
+          lastSeen: new Date(),
+        });
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  const loadSafetyScore = (lat: number, lng: number) => {
+    setScoreStatus('loading');
+    ReportService.getSafetyScore(lat, lng)
+      .then(res => {
+        if (res && typeof res.safetyScore === 'number') {
+          setSafetyScore(res);
+          setScoreStatus('success');
+        } else {
+          setScoreStatus('error');
+        }
+      })
+      .catch(() => {
+        setScoreStatus('error');
+      });
+  };
 
   useEffect(() => {
     getCurrentCoordinates().then(c => {
       setCoords(c);
-      ReportService.getSafetyScore(c.latitude, c.longitude).then(
-        setSafetyScore,
-      );
+      loadSafetyScore(c.latitude, c.longitude);
     });
   }, []);
 
@@ -226,14 +275,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
     return colors.danger;
   };
 
-  const currentScore = safetyScore?.safetyScore || 86;
-  const riskLevelText =
-    currentScore >= 80
-      ? 'CALM & WELL-LIT'
-      : currentScore >= 50
-        ? 'MODERATE VIGILANCE'
-        : 'HIGH RISK AREA';
-
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
@@ -303,71 +344,216 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Live Community Safety Index Widget */}
-        <View
-          style={[
-            styles.scoreCard,
-            {
-              backgroundColor: colors.backgroundCard,
-              borderColor: colors.border,
-            },
-          ]}
-        >
-          <View style={styles.scoreHeader}>
-            <View style={styles.scoreTitleGroup}>
-              <Text
-                style={[styles.scoreCardTitle, { color: colors.textPrimary }]}
-              >
-                Community Safety Index
-              </Text>
-              <Text
-                style={[styles.scoreCardSub, { color: colors.textSecondary }]}
-              >
-                Real-time active street & lighting reports
-              </Text>
+        {/* Active Guardian Live Escort Banner (SYN-4) */}
+        {activeTrackedWalker && (
+          <TouchableOpacity
+            style={[
+              styles.guardianLiveBanner,
+              {
+                backgroundColor: activeTrackedWalker.deviated
+                  ? 'rgba(239, 68, 68, 0.15)'
+                  : 'rgba(16, 185, 129, 0.15)',
+                borderColor: activeTrackedWalker.deviated
+                  ? '#EF4444'
+                  : '#10B981',
+              },
+            ]}
+            activeOpacity={0.8}
+            onPress={() => {
+              if (navigationRef.isReady()) {
+                (navigationRef as any).navigate('GuardianLive', {
+                  journeyId: activeTrackedWalker.journeyId,
+                  walkerName: activeTrackedWalker.walkerName,
+                  initialLocation: {
+                    latitude: activeTrackedWalker.latitude,
+                    longitude: activeTrackedWalker.longitude,
+                  },
+                });
+              }
+            }}
+          >
+            <View style={styles.guardianLiveIconCircle}>
+              <Text style={{ fontSize: 20 }}>🚶‍♀️</Text>
             </View>
-            <View
-              style={[
-                styles.scoreNumberCircle,
-                {
-                  backgroundColor: colors.backgroundInput,
-                  borderColor: getScoreColor(currentScore),
-                },
-              ]}
-            >
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <View
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+              >
+                <View
+                  style={[
+                    styles.pulseDot,
+                    {
+                      backgroundColor: activeTrackedWalker.deviated
+                        ? '#EF4444'
+                        : '#10B981',
+                    },
+                  ]}
+                />
+                <Text
+                  style={[
+                    styles.guardianLiveTitle,
+                    { color: colors.textPrimary },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {activeTrackedWalker.walkerName} is on a Safe Walk
+                </Text>
+              </View>
               <Text
                 style={[
-                  styles.scoreNumberText,
-                  { color: getScoreColor(currentScore) },
+                  styles.guardianLiveSub,
+                  { color: colors.textSecondary },
                 ]}
               >
-                {currentScore}
+                {activeTrackedWalker.deviated
+                  ? '⚠️ Off safe route — Tap to track live'
+                  : 'Live GPS escort active — Tap to view map'}
               </Text>
             </View>
-          </View>
+            <Text style={[styles.guardianLiveArrow, { color: colors.primary }]}>
+              →
+            </Text>
+          </TouchableOpacity>
+        )}
 
-          <View style={styles.scoreFooterRow}>
-            <View
-              style={[
-                styles.riskPill,
-                { backgroundColor: getScoreColor(currentScore) + '20' },
-              ]}
+        {/* Live Community Safety Index Widget — 3 Render States (V1 SYN-1) */}
+        {scoreStatus === 'loading' && (
+          <View
+            style={[
+              styles.scoreCard,
+              {
+                backgroundColor: colors.backgroundCard,
+                borderColor: colors.border,
+                alignItems: 'center',
+                justifyContent: 'center',
+                paddingVertical: 24,
+                gap: 8,
+              },
+            ]}
+          >
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text
+              style={[styles.scoreCardSub, { color: colors.textSecondary }]}
             >
-              <Text
-                style={[
-                  styles.riskPillText,
-                  { color: getScoreColor(currentScore) },
-                ]}
-              >
-                {riskLevelText}
-              </Text>
-            </View>
-            <Text style={styles.scoreNearbyText}>
-              {safetyScore?.factors.totalHazardsNearby || 0} active community
-              hazards nearby
+              Calculating community safety index for your location...
             </Text>
           </View>
-        </View>
+        )}
+
+        {scoreStatus === 'error' && (
+          <View
+            style={[
+              styles.scoreCard,
+              {
+                backgroundColor: colors.backgroundCard,
+                borderColor: colors.border,
+              },
+            ]}
+          >
+            <View style={styles.scoreHeader}>
+              <View style={styles.scoreTitleGroup}>
+                <Text
+                  style={[styles.scoreCardTitle, { color: colors.textPrimary }]}
+                >
+                  Community Safety Index
+                </Text>
+                <Text style={[styles.scoreCardSub, { color: colors.danger }]}>
+                  Couldn't load your safety score
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[
+                  styles.retryBtn,
+                  {
+                    backgroundColor: colors.surfaceHover,
+                    borderColor: colors.border,
+                  },
+                ]}
+                onPress={() =>
+                  loadSafetyScore(coords.latitude, coords.longitude)
+                }
+              >
+                <Text style={[styles.retryBtnText, { color: colors.primary }]}>
+                  🔄 Retry
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {scoreStatus === 'success' && safetyScore && (
+          <View
+            style={[
+              styles.scoreCard,
+              {
+                backgroundColor: colors.backgroundCard,
+                borderColor: colors.border,
+              },
+            ]}
+          >
+            <View style={styles.scoreHeader}>
+              <View style={styles.scoreTitleGroup}>
+                <Text
+                  style={[styles.scoreCardTitle, { color: colors.textPrimary }]}
+                >
+                  Community Safety Index
+                </Text>
+                <Text
+                  style={[styles.scoreCardSub, { color: colors.textSecondary }]}
+                >
+                  Real-time active street & lighting reports
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.scoreNumberCircle,
+                  {
+                    backgroundColor: colors.backgroundInput,
+                    borderColor: getScoreColor(safetyScore.safetyScore),
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.scoreNumberText,
+                    { color: getScoreColor(safetyScore.safetyScore) },
+                  ]}
+                >
+                  {safetyScore.safetyScore}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.scoreFooterRow}>
+              <View
+                style={[
+                  styles.riskPill,
+                  {
+                    backgroundColor:
+                      getScoreColor(safetyScore.safetyScore) + '20',
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.riskPillText,
+                    { color: getScoreColor(safetyScore.safetyScore) },
+                  ]}
+                >
+                  {safetyScore.safetyScore >= 80
+                    ? 'CALM & WELL-LIT'
+                    : safetyScore.safetyScore >= 50
+                      ? 'MODERATE VIGILANCE'
+                      : 'HIGH RISK AREA'}
+                </Text>
+              </View>
+              <Text style={styles.scoreNearbyText}>
+                {safetyScore.factors?.totalHazardsNearby || 0} active community
+                hazards nearby
+              </Text>
+            </View>
+          </View>
+        )}
 
         {/* SOS Emergency Action Card */}
         <View
@@ -423,7 +609,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
           </TouchableOpacity>
 
           <Text style={[styles.sosFooterNote, { color: colors.textMuted }]}>
-            Dispatches live coordinates to Family Guardians & Police 112
+            Sends live coordinates and audio to your guardians. Quick-dial 112
+            is one tap away.
           </Text>
         </View>
 
@@ -525,7 +712,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
                   borderColor: colors.border,
                 },
               ]}
-              onPress={() => onNavigateTab?.(item.tab)}
+              onPress={() =>
+                onNavigateTab?.(
+                  item.tab,
+                  item.title === 'Live Heatmap'
+                    ? { showHeatmap: true }
+                    : undefined,
+                )
+              }
             >
               <Text style={styles.cardEmoji}>{item.emoji}</Text>
               <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
@@ -539,6 +733,22 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
               </Text>
             </TouchableOpacity>
           ))}
+        </View>
+
+        {/* Persistent Legal & Safety Disclaimer (SEC-4) */}
+        <View style={styles.persistentSafetyNote}>
+          <Text
+            style={[
+              styles.persistentSafetyNoteText,
+              { color: colors.textMuted },
+            ]}
+          >
+            ℹ️ Safora is a companion safety and virtual escort network.{' '}
+            <Text style={{ fontWeight: '700', color: colors.textSecondary }}>
+              Safora does not replace calling 112.
+            </Text>{' '}
+            In any immediate emergency, always dial 112 directly.
+          </Text>
         </View>
       </ScrollView>
 
@@ -671,6 +881,16 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   scoreCardSub: { fontSize: 11, marginTop: 2 },
+  retryBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  retryBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
   scoreNumberCircle: {
     width: 52,
     height: 52,
@@ -880,4 +1100,49 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   cardAction: { fontSize: 11, fontWeight: '700' },
+  guardianLiveBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    marginBottom: 16,
+  },
+  guardianLiveIconCircle: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  guardianLiveTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    flex: 1,
+  },
+  guardianLiveSub: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  guardianLiveArrow: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginLeft: 8,
+  },
+  persistentSafetyNote: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    marginTop: 8,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  persistentSafetyNoteText: {
+    fontSize: 11,
+    lineHeight: 16,
+    textAlign: 'center',
+  },
 });

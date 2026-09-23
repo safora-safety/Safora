@@ -34,6 +34,8 @@ services:
         sync: false
       - key: FIREBASE_PRIVATE_KEY
         sync: false
+      - key: INTERNAL_TICK_SECRET
+        sync: false
 
   - type: static
     name: safora-admin

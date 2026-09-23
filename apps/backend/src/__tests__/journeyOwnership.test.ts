@@ -4,6 +4,7 @@ import {
   distanceToSegmentMeters,
 } from "../services/journeyService";
 import { JourneyRepository } from "../repositories/journeyRepository";
+import { UserRepository } from "../repositories/userRepository";
 import { AppError } from "../errors/AppError";
 
 describe("Journey Corridor Deviation & Ownership Authorization", () => {
@@ -163,12 +164,19 @@ describe("Journey Corridor Deviation & Ownership Authorization", () => {
       jest
         .spyOn(JourneyRepository, "setStatus")
         .mockResolvedValueOnce({} as any);
+      jest.spyOn(JourneyRepository, "insertBreadcrumb").mockResolvedValueOnce();
+      jest
+        .spyOn(JourneyRepository, "updateLastLocation")
+        .mockResolvedValueOnce();
+      jest.spyOn(JourneyRepository, "setDeviatedAt").mockResolvedValueOnce();
+      jest
+        .spyOn(UserRepository, "findById")
+        .mockResolvedValueOnce({ id: 10, name: "Test Walker" } as any);
 
       const result = await JourneyService.updateLocation(
         101,
         { latitude: 30.305, longitude: 78.003 }, // ~290m away
-        10,
-        "user",
+        { userId: 10, userRole: "user" },
       );
 
       expect(result.isDeviated).toBe(true);

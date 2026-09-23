@@ -91,6 +91,11 @@ export class AuthService {
       phone?: string | null;
       blood_group?: string | null;
       emergency_notes?: string | null;
+      age?: number | null;
+      age_notice_ack?: boolean | null;
+      ageNoticeAck?: boolean | null;
+      terms_accepted_at?: string | null;
+      termsAcceptedAt?: string | null;
     },
   ): Promise<User> {
     if (data.email) {
@@ -104,7 +109,24 @@ export class AuthService {
       }
     }
 
-    const updatedRow = await UserRepository.updateUser(userId, data);
+    const payload: Parameters<typeof UserRepository.updateUser>[1] = {
+      name: data.name,
+      email: data.email,
+      phone: data.phone,
+      blood_group: data.blood_group,
+      emergency_notes: data.emergency_notes,
+      age: data.age,
+      age_notice_ack:
+        data.ageNoticeAck !== undefined
+          ? data.ageNoticeAck
+          : data.age_notice_ack,
+      terms_accepted_at:
+        data.termsAcceptedAt !== undefined
+          ? data.termsAcceptedAt
+          : data.terms_accepted_at,
+    };
+
+    const updatedRow = await UserRepository.updateUser(userId, payload);
     if (!updatedRow) {
       throw new AppError("User not found", 404);
     }

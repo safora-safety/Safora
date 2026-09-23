@@ -12,7 +12,7 @@ export class UserRepository {
 
   static async findById(id: string | number): Promise<UserRow | null> {
     const result = await db.query(
-      "SELECT id, name, email, phone, blood_group, emergency_notes, role, is_active, created_at FROM users WHERE id = $1 LIMIT 1;",
+      "SELECT id, name, email, phone, blood_group, emergency_notes, role, is_active, age, age_notice_ack, terms_accepted_at, created_at FROM users WHERE id = $1 LIMIT 1;",
       [id],
     );
     return result.rows[0] || null;
@@ -27,7 +27,7 @@ export class UserRepository {
     const result = await db.query(
       `INSERT INTO users (name, email, phone, password)
        VALUES ($1, $2, $3, $4)
-       RETURNING id, name, email, phone, blood_group, emergency_notes, role, created_at;`,
+       RETURNING id, name, email, phone, blood_group, emergency_notes, role, age, age_notice_ack, terms_accepted_at, created_at;`,
       [
         data.name.trim(),
         data.email.toLowerCase().trim(),
@@ -47,6 +47,9 @@ export class UserRepository {
       blood_group?: string | null;
       emergency_notes?: string | null;
       fcm_token?: string | null;
+      age?: number | null;
+      age_notice_ack?: boolean | null;
+      terms_accepted_at?: Date | string | null;
     },
   ): Promise<UserRow | null> {
     const fields: string[] = [];
@@ -77,6 +80,20 @@ export class UserRepository {
       fields.push(`fcm_token = $${idx++}`);
       values.push(data.fcm_token ? data.fcm_token.trim() : null);
     }
+    if (data.age !== undefined) {
+      fields.push(`age = $${idx++}`);
+      values.push(data.age != null ? Number(data.age) : null);
+    }
+    if (data.age_notice_ack !== undefined) {
+      fields.push(`age_notice_ack = $${idx++}`);
+      values.push(Boolean(data.age_notice_ack));
+    }
+    if (data.terms_accepted_at !== undefined) {
+      fields.push(`terms_accepted_at = $${idx++}`);
+      values.push(
+        data.terms_accepted_at ? new Date(data.terms_accepted_at) : null,
+      );
+    }
 
     if (fields.length === 0) {
       return this.findById(id);
@@ -87,7 +104,7 @@ export class UserRepository {
       UPDATE users
       SET ${fields.join(", ")}
       WHERE id = $${idx}
-      RETURNING id, name, email, phone, blood_group, emergency_notes, role, created_at;
+      RETURNING id, name, email, phone, blood_group, emergency_notes, role, age, age_notice_ack, terms_accepted_at, created_at;
     `;
 
     const result = await db.query(query, values);
