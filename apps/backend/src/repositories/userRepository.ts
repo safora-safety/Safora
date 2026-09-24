@@ -146,7 +146,7 @@ export class UserRepository {
     const offsetParam = `$${idx++}`;
 
     const query = `
-      SELECT id, name, email, phone, blood_group, emergency_notes, role, is_active, created_at
+      SELECT id, name, email, phone, blood_group, emergency_notes, role, is_active, age, age_notice_ack, terms_accepted_at, created_at
       FROM users
       ${whereClause}
       ORDER BY created_at DESC

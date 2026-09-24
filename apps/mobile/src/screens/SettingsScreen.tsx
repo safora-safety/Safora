@@ -385,7 +385,49 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
           </TouchableOpacity>
         </View>
 
-        {/* Section 6: Data & Actions */}
+        {/* Section 6: Legal & Safety Policies */}
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+          LEGAL & SAFETY POLICIES
+        </Text>
+        <View
+          style={[
+            styles.card,
+            {
+              backgroundColor: colors.backgroundCard,
+              borderColor: colors.border,
+            },
+          ]}
+        >
+          <TouchableOpacity
+            style={styles.actionItem}
+            onPress={() => navigation.navigate('Terms')}
+          >
+            <View
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <Text
+                style={[styles.actionItemText, { color: colors.textPrimary }]}
+              >
+                🛡️ Safety Terms & Privacy Policy
+              </Text>
+              <Text
+                style={{
+                  color: colors.primary,
+                  fontSize: 13,
+                  fontWeight: '700',
+                }}
+              >
+                View ›
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        {/* Section 7: Data & Actions */}
         <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
           STORAGE & DATA
         </Text>

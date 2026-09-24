@@ -27,10 +27,12 @@ interface AuthState {
   isHydrated: boolean;
   isLoading: boolean;
   error: string | null;
+  hasSeenTermsPrompt: boolean;
   savedProfiles: SavedProfile[];
 
   // Actions
   hydrateAuth: () => Promise<void>;
+  markTermsPromptSeen: () => Promise<void>;
   completeOnboarding: () => Promise<void>;
   enterAsGuest: () => Promise<void>;
   login: (email: string, pass: string) => Promise<boolean>;
@@ -52,6 +54,7 @@ const STORAGE_KEYS = {
   IS_GUEST: '@safora_is_guest',
   ONBOARDING_SEEN: '@safora_onboarding_seen',
   SAVED_PROFILES: '@safora_saved_profiles',
+  TERMS_PROMPTED_PREFIX: '@safora_terms_prompted_',
 };
 
 function normalizeUser(u: User): User {
@@ -85,6 +88,7 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
   isHydrated: false,
   isLoading: false,
   error: null,
+  hasSeenTermsPrompt: false,
   savedProfiles: [],
 
   hydrateAuth: async () => {
@@ -128,12 +132,23 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
 
         parsedUser = normalizeUser(parsedUser);
 
+        let hasSeenTermsPrompt = false;
+        try {
+          const promptSeen = await AsyncStorage.getItem(
+            `${STORAGE_KEYS.TERMS_PROMPTED_PREFIX}${parsedUser.id}`,
+          );
+          hasSeenTermsPrompt = promptSeen === 'true';
+        } catch {
+          // Fallback
+        }
+
         set({
           user: parsedUser,
           token: storedToken || 'guest-session-token',
           isAuthenticated: true,
           isGuest,
           hasSeenOnboarding: true,
+          hasSeenTermsPrompt,
           isHydrated: true,
           savedProfiles: parsedProfiles,
         });
@@ -150,12 +165,28 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
           isGuest: false,
           isHydrated: true,
           hasSeenOnboarding,
+          hasSeenTermsPrompt: false,
           savedProfiles: parsedProfiles,
         });
       }
     } catch {
       set({ isHydrated: true });
     }
+  },
+
+  markTermsPromptSeen: async () => {
+    const user = _get().user;
+    if (user?.id) {
+      try {
+        await AsyncStorage.setItem(
+          `${STORAGE_KEYS.TERMS_PROMPTED_PREFIX}${user.id}`,
+          'true',
+        );
+      } catch {
+        // Fallback
+      }
+    }
+    set({ hasSeenTermsPrompt: true });
   },
 
   completeOnboarding: async () => {
@@ -223,12 +254,23 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
         JSON.stringify(updatedProfiles),
       );
 
+      let hasSeenTermsPrompt = false;
+      try {
+        const promptSeen = await AsyncStorage.getItem(
+          `${STORAGE_KEYS.TERMS_PROMPTED_PREFIX}${user.id}`,
+        );
+        hasSeenTermsPrompt = promptSeen === 'true';
+      } catch {
+        // Fallback
+      }
+
       set({
         user,
         token,
         isAuthenticated: true,
         isGuest: false,
         hasSeenOnboarding: true,
+        hasSeenTermsPrompt,
         isLoading: false,
         savedProfiles: updatedProfiles,
       });
@@ -342,6 +384,7 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
       token: null,
       isAuthenticated: false,
       isGuest: false,
+      hasSeenTermsPrompt: false,
       error: null,
       savedProfiles: profiles,
     });
@@ -416,7 +459,13 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
         STORAGE_KEYS.USER,
         JSON.stringify(updatedUser),
       );
-      set({ user: updatedUser, isLoading: false });
+      if (currentUser?.id) {
+        AsyncStorage.setItem(
+          `${STORAGE_KEYS.TERMS_PROMPTED_PREFIX}${currentUser.id}`,
+          'true',
+        ).catch(() => {});
+      }
+      set({ user: updatedUser, hasSeenTermsPrompt: true, isLoading: false });
       return true;
     } catch (err: unknown) {
       const msg =

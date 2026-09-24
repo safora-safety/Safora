@@ -16,10 +16,17 @@ import { colors } from '../theme/colors';
 
 interface TermsScreenProps {
   navigation: any;
+  route?: any;
 }
 
-export const TermsScreen: React.FC<TermsScreenProps> = ({ navigation }) => {
-  const { user, updateProfile, isLoading } = useAuthStore();
+export const TermsScreen: React.FC<TermsScreenProps> = ({
+  navigation,
+  route,
+}) => {
+  const { user, updateProfile, markTermsPromptSeen, isLoading } =
+    useAuthStore();
+  const isFirstTime = Boolean(route?.params?.isFirstTime);
+
   const [ageText, setAgeText] = useState(user?.age ? String(user.age) : '');
   const [guardianAck, setGuardianAck] = useState(
     Boolean(user?.age_notice_ack || user?.ageNoticeAck),
@@ -31,6 +38,18 @@ export const TermsScreen: React.FC<TermsScreenProps> = ({ navigation }) => {
 
   const numAge = parseInt(ageText, 10);
   const isUnder18 = !isNaN(numAge) && numAge < 18 && numAge > 0;
+
+  const handleSkip = async () => {
+    await markTermsPromptSeen();
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'MainTabs' }],
+      });
+    }
+  };
 
   const handleSubmit = async () => {
     setErrorMsg(null);
@@ -51,6 +70,7 @@ export const TermsScreen: React.FC<TermsScreenProps> = ({ navigation }) => {
     }
 
     try {
+      await markTermsPromptSeen();
       const success = await updateProfile({
         age: numAge,
         ageNoticeAck: true,
@@ -58,10 +78,14 @@ export const TermsScreen: React.FC<TermsScreenProps> = ({ navigation }) => {
       } as any);
 
       if (success) {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'MainTabs' }],
-        });
+        if (navigation.canGoBack()) {
+          navigation.goBack();
+        } else {
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'MainTabs' }],
+          });
+        }
       } else {
         setErrorMsg('Unable to save settings. Please check your connection.');
       }
@@ -73,10 +97,41 @@ export const TermsScreen: React.FC<TermsScreenProps> = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
+
+      {/* Top Action Bar */}
+      <View style={styles.topBar}>
+        {navigation.canGoBack() ? (
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => navigation.goBack()}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
+            <Text style={styles.backBtnText}>← Back</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 60 }} />
+        )}
+        <TouchableOpacity
+          style={styles.skipTopBtn}
+          onPress={handleSkip}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <Text style={styles.skipTopBtnText}>Skip for now ›</Text>
+        </TouchableOpacity>
+      </View>
+
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {isFirstTime && (
+          <View style={styles.firstTimeBadge}>
+            <Text style={styles.firstTimeBadgeText}>
+              🎉 Welcome to SAFORA! Complete your safety profile
+            </Text>
+          </View>
+        )}
+
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.shieldEmoji}>🛡️</Text>
@@ -213,6 +268,19 @@ export const TermsScreen: React.FC<TermsScreenProps> = ({ navigation }) => {
             <Text style={styles.submitButtonText}>Accept & Continue →</Text>
           )}
         </TouchableOpacity>
+
+        {/* Skip for now Button */}
+        <TouchableOpacity
+          style={styles.skipBottomBtn}
+          onPress={handleSkip}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.skipBottomBtnText}>
+            {isFirstTime
+              ? 'Skip for now & explore →'
+              : 'Skip & continue to app'}
+          </Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -222,6 +290,50 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#070A11',
+  },
+  topBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  backBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: '#1E293B',
+  },
+  backBtnText: {
+    color: '#94A3B8',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  skipTopBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  skipTopBtnText: {
+    color: '#94A3B8',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  firstTimeBadge: {
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    borderColor: '#38BDF8',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  firstTimeBadgeText: {
+    color: '#BAE6FD',
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   scrollContent: {
     padding: 20,
@@ -365,5 +477,17 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
+  },
+  skipBottomBtn: {
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 6,
+  },
+  skipBottomBtnText: {
+    color: '#94A3B8',
+    fontSize: 14,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
 });
