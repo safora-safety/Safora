@@ -152,7 +152,7 @@ export class JourneyRepository {
     Array<{ id: number; deviated_at: Date | null }>
   > {
     const result = await db.query(
-      `SELECT id, deviated_at FROM journeys WHERE status IN ('active', 'deviated');`,
+      `SELECT id, deviated_at FROM journeys WHERE status IN ('active', 'deviated') AND escalated_at IS NULL;`,
     );
     return result.rows;
   }

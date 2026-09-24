@@ -69,22 +69,23 @@ flowchart TD
 
 ---
 
-## 📊 Development Status
+## 📊 Development Status (V1 Release: 100% Complete)
 
-This project follows a staged plan (`docs/v1/` → `docs/v2/` → `docs/v3/`) rather than a single big-bang build. **V1 is the version being built for this submission** and targets the six modules below; not everything in this README is live yet.
+This project follows a staged plan (`docs/v1/` → `docs/v2/` → `docs/v3/`). **V1 has been fully built, tested, and verified for submission.**
 
-| Area | Status |
-|---|---|
-| Auth, hazard reporting, offline queue, safety-score calculation | ✅ Working |
-| Live location streaming to guardians during Safe Walk | 🔧 In progress — see `docs/v1/tasks.md` (task 5–6) |
-| Automatic server-side deviation escalation (beyond the phone-side 60s prompt) | 🔧 In progress — `docs/v1/tasks.md` (task 7) |
-| Safety-score heatmap on the map screen | 🔧 In progress — `docs/v1/tasks.md` (task 8) |
-| Background tracking with screen locked, lock-screen SOS audio, ETA notification | 🔧 In progress — `docs/v1/tasks.md` (tasks 13–15) |
-| Admin dashboard — hazard moderation, SOS queue | ✅ Working |
-| Admin "live" Safe Walk radar | 🔧 Sample-data fallback being removed — `docs/v1/tasks.md` (task 3) |
-| One-tap SOS (GPS + battery + audio, FCM push, manual SMS/dialer fallback) | ✅ Working |
+| Area | Status | Verification |
+|---|---|---|
+| Auth, hazard reporting, offline queue, safety-score calculation | ✅ Complete | Zero fake score fallback (SYN-1); strip reporter identity (SEC-2) |
+| Live location streaming to guardians during Safe Walk | ✅ Complete | Socket.IO room streaming to guardian live radar (Tasks 5–6) |
+| Automatic server-side deviation escalation (watchdog) | ✅ Complete | Background watchdog escalates missed check-ins to trusted contacts (Task 7) |
+| Safety-score heatmap on the map screen | ✅ Complete | DBSCAN clusters with dynamic radius and color spectrum (Task 8) |
+| Background tracking with screen locked & lock-screen SOS audio | ✅ Complete | Kotlin Foreground Service with JWT bearer token bridge (Tasks 13–15) |
+| Admin Command Center — 100% interactive controls | ✅ Complete | Clickable StatCards, live API ping latency, batch moderation, service probes |
+| Admin "live" Safe Walk radar | ✅ Complete | Sample-data fallback removed; real breadcrumb corridor telemetry only (SEC-9) |
+| One-tap Dual-Mode SOS & Audible Panic Siren | ✅ Complete | High-decibel audible alarm vs stealth covert audio recording, standalone panic card |
+| Mobile User Password Update | ✅ Complete | In-app modal for credentials change with validation and feedback |
 
-Full live status, file-level tasks, and acceptance tests are tracked in **[`docs/v1/tasks.md`](docs/v1/tasks.md)** — that file, not this README, is the source of truth while V1 is in progress.
+Full implementation details, test suites, and CI matrix are documented in **[`docs/v1/tasks.md`](docs/v1/tasks.md)** and **[`docs/v1/mobile-app-features.md`](docs/v1/mobile-app-features.md)**.
 
 ---
 

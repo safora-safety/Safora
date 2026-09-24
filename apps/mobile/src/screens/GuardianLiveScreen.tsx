@@ -14,7 +14,11 @@ import {
   OpenMapViewRef,
   MapMarkerItem,
 } from '../components/OpenMapView';
-import { onJourneyLocation } from '../services/socketService';
+import {
+  onJourneyLocation,
+  joinJourneyRoom,
+  leaveJourneyRoom,
+} from '../services/socketService';
 import { colors } from '../theme/colors';
 
 interface GuardianLiveScreenProps {
@@ -49,6 +53,10 @@ export const GuardianLiveScreen: React.FC<GuardianLiveScreenProps> = ({
   const [battery, setBattery] = useState<number | null>(null);
 
   useEffect(() => {
+    if (initialJourneyId) {
+      joinJourneyRoom(initialJourneyId);
+    }
+
     const unsub = onJourneyLocation((payload: any) => {
       if (!payload) return;
       // If we filtered by journeyId or if we accept active location
@@ -93,6 +101,9 @@ export const GuardianLiveScreen: React.FC<GuardianLiveScreenProps> = ({
     });
 
     return () => {
+      if (initialJourneyId) {
+        leaveJourneyRoom(initialJourneyId);
+      }
       unsub();
     };
   }, [initialJourneyId]);

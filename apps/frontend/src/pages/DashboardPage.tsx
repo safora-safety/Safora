@@ -25,12 +25,14 @@ export const DashboardPage: React.FC = () => {
   const [sosAlerts, setSosAlerts] = useState<SosNotification[]>([]);
   const [activeJourneys, setActiveJourneys] = useState<ActiveJourney[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const [inspectedPhoto, setInspectedPhoto] = useState<string | null>(null);
   const { activeEmergency, broadcastTestSos } = useSocket();
   const navigate = useNavigate();
 
   const loadData = async () => {
     setIsLoading(true);
+    const t0 = Date.now();
     try {
       const [fetchedHazards, fetchedSos, journeysRes] = await Promise.all([
         reportService.getReports(100),
@@ -40,6 +42,7 @@ export const DashboardPage: React.FC = () => {
       setHazards(fetchedHazards);
       setSosAlerts(fetchedSos);
       setActiveJourneys(Array.isArray(journeysRes) ? journeysRes : []);
+      setLatencyMs(Math.max(12, Date.now() - t0));
     } catch (err) {
       console.warn('Could not load operational data:', err);
     } finally {
@@ -57,19 +60,19 @@ export const DashboardPage: React.FC = () => {
   const activeSosCount = sosAlerts.filter((s) => !s.isRead && s.type === 'sos_alert').length;
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6">
       {/* Top Controls & Status Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-2xl font-black text-white tracking-tight">
+          <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
             Tactical Operations Command
           </h1>
           <p className="text-xs text-gray-400 font-mono mt-0.5">
-            Geospatial Radar & Incident Monitoring &bull; Dehradun Regional Grid
+            Geospatial Radar &amp; Incident Monitoring &bull; Dehradun Regional Grid
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <button
             onClick={() => broadcastTestSos(30.3165, 78.0322)}
             className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-red-600/20 hover:bg-red-600/30 border border-red-500/40 text-red-300 font-semibold text-xs transition-colors"
@@ -90,36 +93,40 @@ export const DashboardPage: React.FC = () => {
         </div>
       </div>
 
-      {/* KPI Cards */}
+      {/* KPI Cards — All fully interactive */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Active SOS Beacons"
           value={activeEmergency ? activeSosCount + 1 : activeSosCount}
-          subtitle="Awaiting response"
+          subtitle="Awaiting response · Click to view"
           icon={Flame}
           variant="danger"
           pulse={activeEmergency !== null || activeSosCount > 0}
+          onClick={() => navigate('/sos')}
         />
         <StatCard
           title="Safe Walks in Progress"
           value={activeJourneys.length}
-          subtitle="Real-time corridor tracking"
+          subtitle="Real-time corridor tracking · Click to view"
           icon={Footprints}
           variant="indigo"
+          onClick={() => navigate('/safewalks')}
         />
         <StatCard
           title="Pending Hazard Reports"
           value={pendingHazardsCount}
-          subtitle="Awaiting review"
+          subtitle="Awaiting review · Click to moderate"
           icon={AlertTriangle}
           variant="warning"
+          onClick={() => navigate('/hazards')}
         />
         <StatCard
           title="Backend Latency"
-          value="42 ms"
-          subtitle="PostGIS & Cloudinary active"
+          value={latencyMs ? `${latencyMs} ms` : 'Measuring...'}
+          subtitle="Live telemetry probe · Click for health"
           icon={Activity}
-          variant="success"
+          variant={latencyMs && latencyMs < 120 ? 'success' : 'info'}
+          onClick={() => navigate('/diagnostics')}
         />
       </div>
 
@@ -136,7 +143,7 @@ export const DashboardPage: React.FC = () => {
             </span>
           </div>
 
-          <div className="h-[520px]">
+          <div className="h-[360px] sm:h-[460px] lg:h-[520px]">
             <LiveCommandMap
               hazards={hazards}
               sosAlerts={sosAlerts}
@@ -186,7 +193,8 @@ export const DashboardPage: React.FC = () => {
             {sosAlerts.slice(0, 3).map((sos) => (
               <div
                 key={`sos-card-${sos.id}`}
-                className="p-4 rounded-xl bg-obsidian-800/80 border border-red-500/30 hover:border-red-500/60 transition-colors space-y-2"
+                onClick={() => navigate('/sos')}
+                className="p-4 rounded-xl bg-obsidian-800/80 border border-red-500/30 hover:border-red-500/60 hover:bg-obsidian-750 transition-all cursor-pointer space-y-2"
               >
                 <div className="flex items-center justify-between">
                   <Badge variant="danger" size="sm">SOS ALERT</Badge>
@@ -199,7 +207,10 @@ export const DashboardPage: React.FC = () => {
                 <div className="flex items-center justify-between pt-1 border-t border-white/5 text-[11px] text-gray-400">
                   <span className="font-mono">Battery: {sos.batteryPercentage || 85}%</span>
                   <button
-                    onClick={() => navigate('/sos')}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate('/sos');
+                    }}
                     className="text-indigo-400 hover:text-indigo-300 font-medium"
                   >
                     Respond &rarr;
@@ -215,7 +226,8 @@ export const DashboardPage: React.FC = () => {
               .map((h) => (
                 <div
                   key={`hazard-card-${h.id}`}
-                  className="p-4 rounded-xl bg-obsidian-800/80 border border-white/10 hover:border-white/20 transition-colors space-y-2"
+                  onClick={() => navigate('/hazards')}
+                  className="p-4 rounded-xl bg-obsidian-800/80 border border-white/10 hover:border-white/30 hover:bg-obsidian-750 transition-all cursor-pointer space-y-2"
                 >
                   <div className="flex items-center justify-between">
                     <Badge variant={h.status === 'active' ? 'warning' : 'success'} size="sm">

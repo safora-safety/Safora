@@ -8,12 +8,14 @@ import {
   StatusBar,
   Alert,
   Linking,
+  RefreshControl,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { useAuthStore } from '../store/authStore';
 import { EditProfileModal } from '../components/EditProfileModal';
 import { ContactModal, EditableContact } from '../components/ContactModal';
+import { ChangePasswordModal } from '../components/ChangePasswordModal';
 import { useTheme } from '../theme/ThemeContext';
 
 import { SosService } from '../services/sosService';
@@ -73,11 +75,43 @@ export const ProfileScreen: React.FC = () => {
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [editingContact, setEditingContact] = useState<EditableContact | null>(
     null,
   );
   const [customContacts, setCustomContacts] = useState<Contact[]>([]);
   const [unreadNotifications, setUnreadNotifications] = useState<number>(0);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const notifs = await SosService.getNotifications();
+      setUnreadNotifications(notifs.filter(n => !n.isRead).length);
+      if (!isGuest && user) {
+        const dbContacts = await SosService.getContacts();
+        if (dbContacts.length > 0) {
+          const mapped = dbContacts.map(c => ({
+            id: String(c.id),
+            name: c.name,
+            phone: c.phone,
+            email: c.email,
+            hasSaforaAccount: c.hasSaforaAccount,
+            relationship: c.relationship || 'Guardian',
+            isHelpline: false,
+          }));
+          setCustomContacts(mapped);
+          await AsyncStorage.setItem(
+            CONTACTS_STORAGE_KEY,
+            JSON.stringify(mapped),
+          );
+        }
+      }
+    } catch {
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   // Monitor unread safety notifications for bell counter badge
   useEffect(() => {
@@ -504,6 +538,13 @@ export const ProfileScreen: React.FC = () => {
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+          />
+        }
       >
         {/* Profile Card */}
         <View
@@ -896,6 +937,63 @@ export const ProfileScreen: React.FC = () => {
           </Text>
         </TouchableOpacity>
 
+        {/* Account Password & Security Card */}
+        <TouchableOpacity
+          style={[
+            styles.settingsShortcutCard,
+            {
+              backgroundColor: colors.backgroundCard,
+              borderColor: colors.border,
+            },
+          ]}
+          onPress={() => {
+            if (isGuest) {
+              Alert.alert(
+                'Guest Mode',
+                'Guest explorers do not have a password. Please register a verified citizen account.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Create Account',
+                    onPress: () =>
+                      (navigation as any).navigate('Auth', {
+                        initialTab: 'register',
+                      }),
+                  },
+                ],
+              );
+            } else {
+              setShowPasswordModal(true);
+            }
+          }}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.settingsShortcutEmoji}>🔐</Text>
+          <View style={{ flex: 1 }}>
+            <Text
+              style={[
+                styles.settingsShortcutTitle,
+                { color: colors.textPrimary },
+              ]}
+            >
+              Account Password & Security
+            </Text>
+            <Text
+              style={[
+                styles.settingsShortcutDesc,
+                { color: colors.textSecondary },
+              ]}
+            >
+              Update your encrypted citizen login credentials
+            </Text>
+          </View>
+          <Text
+            style={[styles.settingsShortcutArrow, { color: colors.textMuted }]}
+          >
+            ›
+          </Text>
+        </TouchableOpacity>
+
         {/* Quick Settings Shortcut */}
         <TouchableOpacity
           style={[
@@ -954,6 +1052,12 @@ export const ProfileScreen: React.FC = () => {
       <EditProfileModal
         visible={showEditModal}
         onClose={() => setShowEditModal(false)}
+      />
+
+      {/* Change Password Modal */}
+      <ChangePasswordModal
+        visible={showPasswordModal}
+        onClose={() => setShowPasswordModal(false)}
       />
 
       {/* Add / Edit Real Emergency Contact Modal */}

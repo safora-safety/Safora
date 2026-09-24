@@ -110,3 +110,8 @@ body {
 .dark-matrix-layer .leaflet-tile {
   filter: invert(100%) hue-rotate(180deg) brightness(88%) contrast(95%) !important;
 }
+
+/* Isolate Leaflet stacking context so it never bleeds through modals or mobile navigation drawers */
+.leaflet-container {
+  z-index: 0 !important;
+}

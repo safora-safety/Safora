@@ -90,7 +90,8 @@ export async function changePassword(
       throw new AppError("Unauthorized", 401);
     }
 
-    const { oldPassword, newPassword } = req.body;
+    const oldPassword = req.body.oldPassword || req.body.old_password;
+    const newPassword = req.body.newPassword || req.body.new_password;
     if (!oldPassword || !newPassword) {
       throw new AppError(
         "Both current password and new password are required",

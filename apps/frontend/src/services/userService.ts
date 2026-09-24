@@ -43,4 +43,18 @@ export const userService = {
     const res = await apiClient.patch<{ success: boolean; user: User }>(`/users/${id}/status`, { isActive });
     return res.data.user;
   },
+
+  async createUser(data: { name: string; email: string; phone?: string; password: string; role?: UserRole }): Promise<User> {
+    const res = await apiClient.post<{ success: boolean; user: User; token: string }>('/auth/register', {
+      name: data.name,
+      email: data.email,
+      phone: data.phone || '+91 98765 00000',
+      password: data.password,
+    });
+    const createdUser = res.data.user;
+    if (data.role && data.role !== 'user') {
+      return await this.updateUserRole(createdUser.id, data.role);
+    }
+    return createdUser;
+  },
 };

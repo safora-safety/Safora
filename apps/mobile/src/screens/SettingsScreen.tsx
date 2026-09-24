@@ -12,6 +12,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuthStore } from '../store/authStore';
+import { ChangePasswordModal } from '../components/ChangePasswordModal';
 
 interface SettingsScreenProps {
   navigation: any;
@@ -23,6 +24,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const { colors, isDark, themeMode, setThemeMode } = useTheme();
   const { isGuest, logout } = useAuthStore();
 
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [hapticSos, setHapticSos] = useState(true);
   const [loudSiren, setLoudSiren] = useState(false);
   const [sosCountdown, setSosCountdown] = useState(true);
@@ -332,7 +334,58 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
           </View>
         </View>
 
-        {/* Section 5: Data & Actions */}
+        {/* Section 5: Security & Credentials */}
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+          SECURITY & CREDENTIALS
+        </Text>
+        <View
+          style={[
+            styles.card,
+            {
+              backgroundColor: colors.backgroundCard,
+              borderColor: colors.border,
+            },
+          ]}
+        >
+          <TouchableOpacity
+            style={styles.actionItem}
+            onPress={() => {
+              if (isGuest) {
+                Alert.alert(
+                  'Guest Mode',
+                  'Guest explorers do not have a password. Please register an account to set a password.',
+                );
+              } else {
+                setShowPasswordModal(true);
+              }
+            }}
+          >
+            <View
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <Text
+                style={[styles.actionItemText, { color: colors.textPrimary }]}
+              >
+                🔐 Change Account Password
+              </Text>
+              <Text
+                style={{
+                  color: colors.primary,
+                  fontSize: 13,
+                  fontWeight: '700',
+                }}
+              >
+                Update ›
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        {/* Section 6: Data & Actions */}
         <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
           STORAGE & DATA
         </Text>
@@ -368,6 +421,12 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
           SAFORA Community Safety Network • v1.0.0
         </Text>
       </ScrollView>
+
+      {/* Change Password Modal */}
+      <ChangePasswordModal
+        visible={showPasswordModal}
+        onClose={() => setShowPasswordModal(false)}
+      />
     </View>
   );
 };

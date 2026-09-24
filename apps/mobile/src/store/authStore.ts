@@ -1,9 +1,11 @@
 import { create } from 'zustand';
+import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User } from '@safora/shared-types';
 import { AuthService } from '../services/authService';
 import { notificationService } from '../services/notificationService';
 import { connectSocket, disconnectSocket } from '../services/socketService';
+import { setUnauthorizedHandler } from '../services/apiClient';
 
 export type UserProfile = User;
 
@@ -51,6 +53,28 @@ const STORAGE_KEYS = {
   ONBOARDING_SEEN: '@safora_onboarding_seen',
   SAVED_PROFILES: '@safora_saved_profiles',
 };
+
+function normalizeUser(u: User): User {
+  const termsAt =
+    u.termsAcceptedAt ||
+    u.terms_accepted_at ||
+    (u as any).terms_accepted_at ||
+    null;
+  const ageAck =
+    u.ageNoticeAck !== undefined
+      ? Boolean(u.ageNoticeAck)
+      : u.age_notice_ack !== undefined
+        ? Boolean(u.age_notice_ack)
+        : undefined;
+
+  return {
+    ...u,
+    termsAcceptedAt: termsAt,
+    terms_accepted_at: termsAt,
+    ageNoticeAck: ageAck,
+    age_notice_ack: ageAck,
+  };
+}
 
 export const useAuthStore = create<AuthState>((set, _get) => ({
   user: null,
@@ -101,6 +125,8 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
             role: 'user',
           };
         }
+
+        parsedUser = normalizeUser(parsedUser);
 
         set({
           user: parsedUser,
@@ -171,7 +197,9 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
   login: async (email: string, pass: string) => {
     set({ isLoading: true, error: null });
     try {
-      const { user, token } = await AuthService.login(email, pass);
+      const rawUser = await AuthService.login(email, pass);
+      const user = normalizeUser(rawUser.user);
+      const token = rawUser.token;
 
       await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
       await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, token);
@@ -223,12 +251,9 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
   ) => {
     set({ isLoading: true, error: null });
     try {
-      const { user, token } = await AuthService.register(
-        name,
-        email,
-        phone,
-        pass,
-      );
+      const rawUser = await AuthService.register(name, email, phone, pass);
+      const user = normalizeUser(rawUser.user);
+      const token = rawUser.token;
 
       await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
       await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, token);
@@ -360,11 +385,31 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
           ageNoticeAck: (data as any).ageNoticeAck,
           termsAcceptedAt: (data as any).termsAcceptedAt,
         });
-        updatedUser = {
+        updatedUser = normalizeUser({
           ...currentUser,
           ...res.user,
           ...data,
-        };
+          termsAcceptedAt:
+            (data as any).termsAcceptedAt ||
+            (data as any).terms_accepted_at ||
+            (res.user as any)?.termsAcceptedAt ||
+            (res.user as any)?.terms_accepted_at,
+          terms_accepted_at:
+            (data as any).terms_accepted_at ||
+            (data as any).termsAcceptedAt ||
+            (res.user as any)?.terms_accepted_at ||
+            (res.user as any)?.termsAcceptedAt,
+          ageNoticeAck:
+            (data as any).ageNoticeAck ??
+            (data as any).age_notice_ack ??
+            (res.user as any)?.ageNoticeAck ??
+            (res.user as any)?.age_notice_ack,
+          age_notice_ack:
+            (data as any).age_notice_ack ??
+            (data as any).ageNoticeAck ??
+            (res.user as any)?.age_notice_ack ??
+            (res.user as any)?.ageNoticeAck,
+        });
       }
 
       await AsyncStorage.setItem(
@@ -383,3 +428,18 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
 
   clearError: () => set({ error: null }),
 }));
+
+setUnauthorizedHandler(() => {
+  disconnectSocket();
+  useAuthStore.setState({
+    user: null,
+    token: null,
+    isAuthenticated: false,
+    isGuest: false,
+  });
+  Alert.alert(
+    'Session Expired',
+    'Your security session has expired. Please log in again to continue.',
+    [{ text: 'OK' }],
+  );
+});

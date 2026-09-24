@@ -85,13 +85,21 @@ export class ErrorBoundary extends React.Component<
 
 // Layout wrapper for authenticated command views
 const AdminLayout: React.FC = () => {
+  const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+
   return (
     <div className="min-h-screen bg-obsidian-900 text-gray-100 flex flex-col">
-      <Navbar />
+      <Navbar
+        onToggleMobileMenu={() => setMobileMenuOpen(!mobileMenuOpen)}
+        isMobileMenuOpen={mobileMenuOpen}
+      />
       <SosBannerAlert />
-      <div className="flex-1 flex">
-        <Sidebar />
-        <main className="flex-1 overflow-x-hidden min-h-[calc(100vh-4rem)]">
+      <div className="flex-1 flex relative">
+        <Sidebar
+          isOpenMobile={mobileMenuOpen}
+          onCloseMobile={() => setMobileMenuOpen(false)}
+        />
+        <main className="flex-1 overflow-x-hidden min-h-[calc(100vh-4rem)] w-full max-w-full">
           <Suspense
             fallback={
               <div className="min-h-[400px] flex items-center justify-center text-indigo-400 font-mono text-xs">

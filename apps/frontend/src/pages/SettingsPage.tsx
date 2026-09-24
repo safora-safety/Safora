@@ -12,6 +12,7 @@ import {
   Lock,
   Server,
   RefreshCw,
+  Volume2,
 } from 'lucide-react';
 
 export const SettingsPage: React.FC = () => {
@@ -37,6 +38,29 @@ export const SettingsPage: React.FC = () => {
   const [autoRefreshInterval, setAutoRefreshInterval] = useState<number>(() => {
     return parseInt(localStorage.getItem('safora_refresh_interval') || '15', 10);
   });
+  const [playingChime, setPlayingChime] = useState(false);
+
+  const handleTestChime = () => {
+    try {
+      setPlayingChime(true);
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(880, audioCtx.currentTime); // A5 note
+      osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.8);
+      gain.gain.setValueAtTime(0.35, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.8);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.8);
+      setTimeout(() => setPlayingChime(false), 850);
+    } catch (err) {
+      console.warn('Audio test failed:', err);
+      setPlayingChime(false);
+    }
+  };
 
   const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -259,17 +283,29 @@ export const SettingsPage: React.FC = () => {
                   <span className="text-white font-bold block">Audible SOS Alarm</span>
                   <span className="text-gray-400 text-[11px] block">Play sound on incoming emergency distress broadcasts</span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleSoundToggle(!soundAlerts)}
-                  className={`px-3 py-1.5 rounded-lg font-bold text-xs transition-colors ${
-                    soundAlerts
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-obsidian-700 text-gray-400'
-                  }`}
-                >
-                  {soundAlerts ? 'ENABLED' : 'MUTED'}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleTestChime}
+                    disabled={playingChime}
+                    className="px-3 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 font-bold text-xs transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                    title="Test audible emergency chime in browser"
+                  >
+                    <Volume2 className={`w-3.5 h-3.5 ${playingChime ? 'animate-bounce text-indigo-400' : ''}`} />
+                    <span>{playingChime ? 'Playing...' : 'Test Chime'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSoundToggle(!soundAlerts)}
+                    className={`px-3 py-1.5 rounded-lg font-bold text-xs transition-colors ${
+                      soundAlerts
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-obsidian-700 text-gray-400'
+                    }`}
+                  >
+                    {soundAlerts ? 'ENABLED' : 'MUTED'}
+                  </button>
+                </div>
               </div>
 
               <div className="flex items-center justify-between p-3 rounded-xl bg-obsidian-900 border border-white/5">

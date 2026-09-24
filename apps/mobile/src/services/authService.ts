@@ -85,4 +85,29 @@ export class AuthService {
       throw new Error(message);
     }
   }
+
+  static async changePassword(
+    oldPassword: string,
+    newPassword: string,
+  ): Promise<{ success: boolean; message: string }> {
+    try {
+      const response = await apiClient.post<{
+        success: boolean;
+        message: string;
+      }>('/auth/change-password', {
+        oldPassword,
+        newPassword,
+        old_password: oldPassword,
+        new_password: newPassword,
+      });
+      return response.data;
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        'Failed to change password. Please check your current password.';
+      throw new Error(message);
+    }
+  }
 }
