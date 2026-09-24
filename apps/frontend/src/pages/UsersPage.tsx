@@ -336,9 +336,20 @@ export const UsersPage: React.FC = () => {
 
                       {/* Status */}
                       <td className="py-4 px-6">
-                        <Badge variant={isActive ? 'success' : 'danger'} size="sm">
-                          {isActive ? 'ACTIVE' : 'SUSPENDED'}
-                        </Badge>
+                        <div className="flex flex-col gap-1 items-start">
+                          <Badge variant={isActive ? 'success' : 'danger'} size="sm">
+                            {isActive ? 'ACTIVE' : 'SUSPENDED'}
+                          </Badge>
+                          {user.termsAcceptedAt || user.terms_accepted_at ? (
+                            <span className="text-[10px] font-mono font-bold text-emerald-400">
+                              ✓ Terms Signed
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-mono text-amber-400">
+                              ⚠️ Terms Pending
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Created At */}
@@ -453,6 +464,32 @@ export const UsersPage: React.FC = () => {
                   {selectedUser.createdAt ? new Date(selectedUser.createdAt).toLocaleString() : '—'}
                 </span>
               </div>
+
+              <div className="p-3 rounded-xl bg-obsidian-900/60 border border-white/5 flex items-center justify-between">
+                <span className="text-gray-400 flex items-center gap-2">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Safety Terms & Privacy:
+                </span>
+                {selectedUser.termsAcceptedAt || selectedUser.terms_accepted_at ? (
+                  <span className="text-emerald-400 font-mono text-[11px] font-bold flex items-center gap-1">
+                    ✓ Signed ({new Date(selectedUser.termsAcceptedAt || selectedUser.terms_accepted_at!).toLocaleDateString()})
+                  </span>
+                ) : (
+                  <span className="text-amber-400 font-mono text-[11px] font-bold">
+                    ⚠️ Pending / Not Signed
+                  </span>
+                )}
+              </div>
+
+              {selectedUser.age != null && (
+                <div className="p-3 rounded-xl bg-obsidian-900/60 border border-white/5 flex items-center justify-between">
+                  <span className="text-gray-400 flex items-center gap-2">
+                    <UserCheck className="w-3.5 h-3.5 text-indigo-400" /> Confirmed Age:
+                  </span>
+                  <span className="text-white font-mono font-bold">
+                    {selectedUser.age} years old {selectedUser.age < 18 ? '(Under 18)' : ''}
+                  </span>
+                </div>
+              )}
             </div>
 
             {selectedUser.emergencyNotes && (

@@ -59,8 +59,30 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       const ok = await login(email.trim(), password);
       if (ok) {
         try {
+          const user = useAuthStore.getState().user;
+          const hasSeenPrompt = useAuthStore.getState().hasSeenTermsPrompt;
+          const hasAccepted = Boolean(
+            user?.terms_accepted_at || (user as any)?.termsAcceptedAt,
+          );
+          const hasAck = Boolean(
+            user?.age_notice_ack || (user as any)?.ageNoticeAck,
+          );
+
+          if ((!hasAccepted || !hasAck) && !hasSeenPrompt) {
+            useAuthStore.getState().markTermsPromptSeen();
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'Terms', params: { isFirstTime: false } }],
+            });
+          } else {
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'MainTabs' }],
+            });
+          }
+        } catch {
           navigation.navigate('MainTabs');
-        } catch {}
+        }
       }
     } else {
       if (!name.trim()) {
@@ -83,8 +105,14 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       );
       if (ok) {
         try {
-          navigation.navigate('MainTabs');
-        } catch {}
+          // First time user: direct to Safety Terms & Privacy immediately after signup
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'Terms', params: { isFirstTime: true } }],
+          });
+        } catch {
+          navigation.navigate('Terms', { isFirstTime: true });
+        }
       }
     }
   };

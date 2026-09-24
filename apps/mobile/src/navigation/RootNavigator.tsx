@@ -36,7 +36,7 @@ export type RootStackParamList = {
         initialLocation?: { latitude: number; longitude: number };
       }
     | undefined;
-  Terms: undefined;
+  Terms: { isFirstTime?: boolean } | undefined;
 };
 
 export const navigationRef = createNavigationContainerRef<RootStackParamList>();
@@ -50,6 +50,8 @@ export const RootNavigator: React.FC = () => {
     isGuest,
     isHydrated,
     hasSeenOnboarding,
+    hasSeenTermsPrompt,
+    markTermsPromptSeen,
     hydrateAuth,
   } = useAuthStore();
 
@@ -64,8 +66,14 @@ export const RootNavigator: React.FC = () => {
     user?.age_notice_ack || (user as any)?.ageNoticeAck,
   );
 
+  // For already registered users who have not signed this:
+  // Ask ONLY ONCE when opening the app, not every time they open the app.
   const needsTerms =
-    isAuthenticated && !isGuest && user && (!hasAcceptedTerms || !hasAckAge);
+    isAuthenticated &&
+    !isGuest &&
+    user &&
+    (!hasAcceptedTerms || !hasAckAge) &&
+    !hasSeenTermsPrompt;
 
   // When authentication state changes dynamically (e.g. Guest mode tapped), switch immediately
   useEffect(() => {
@@ -73,9 +81,11 @@ export const RootNavigator: React.FC = () => {
     if (navigationRef.isReady()) {
       if (isAuthenticated) {
         if (needsTerms) {
+          // Mark as prompted once so it will not ask again on next app launch
+          markTermsPromptSeen();
           navigationRef.reset({
             index: 0,
-            routes: [{ name: 'Terms' }],
+            routes: [{ name: 'Terms', params: { isFirstTime: false } }],
           });
         } else {
           navigationRef.reset({
@@ -85,7 +95,7 @@ export const RootNavigator: React.FC = () => {
         }
       }
     }
-  }, [isAuthenticated, isHydrated, needsTerms]);
+  }, [isAuthenticated, isHydrated, needsTerms, markTermsPromptSeen]);
 
   // Show dark splash loader while rehydrating stored login session
   if (!isHydrated) {
