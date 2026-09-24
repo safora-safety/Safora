@@ -183,6 +183,13 @@ async function testDbConnection(
   }
 }
 
+// In-memory cache for Nominatim to respect OSM's 1 req/sec policy and avoid 429
+let cachedNominatimStatus: {
+  timestamp: number;
+  reachable: boolean;
+  message: string;
+} | null = null;
+
 // Diagnostic Runner
 export async function runSystemDiagnostics(): Promise<ServiceStatus> {
   const status: ServiceStatus = {
@@ -309,23 +316,49 @@ export async function runSystemDiagnostics(): Promise<ServiceStatus> {
   }
 
   // ── 5. Nominatim (Geocoding) ──
-  try {
-    const nominatimUrl =
-      "https://nominatim.openstreetmap.org/reverse?lat=30.3165&lon=78.0322&format=json";
-    const res = await httpsGet(nominatimUrl);
-    if (res.statusCode === 200) {
-      const data = JSON.parse(res.body) as { display_name?: string };
-      status.nominatim.reachable = true;
-      const place = data.display_name
-        ? data.display_name.substring(0, 50) + "..."
-        : "OK";
-      status.nominatim.message = `Reachable (test: ${place})`;
-    } else {
-      status.nominatim.message = `HTTP ${res.statusCode}`;
+  // OpenStreetMap Nominatim enforces a strict max 1 request/sec rate limit.
+  // We cache results for 2 minutes to prevent HTTP 429 from rapid diagnostic runs.
+  const NOMINATIM_CACHE_TTL = 120_000; // 2 minutes
+  if (
+    cachedNominatimStatus &&
+    Date.now() - cachedNominatimStatus.timestamp < NOMINATIM_CACHE_TTL
+  ) {
+    status.nominatim.reachable = cachedNominatimStatus.reachable;
+    status.nominatim.message = `${cachedNominatimStatus.message} (cached)`;
+  } else {
+    try {
+      const nominatimUrl =
+        "https://nominatim.openstreetmap.org/reverse?lat=30.3165&lon=78.0322&format=json";
+      const res = await httpsGet(nominatimUrl);
+      if (res.statusCode === 200) {
+        const data = JSON.parse(res.body) as { display_name?: string };
+        status.nominatim.reachable = true;
+        const place = data.display_name
+          ? data.display_name.substring(0, 50) + "..."
+          : "OK";
+        status.nominatim.message = `Reachable (test: ${place})`;
+        cachedNominatimStatus = {
+          timestamp: Date.now(),
+          reachable: true,
+          message: status.nominatim.message,
+        };
+      } else if (res.statusCode === 429) {
+        // 429 indicates Nominatim server is reachable and active, but throttled by OSM rate limit
+        status.nominatim.reachable = true;
+        status.nominatim.message =
+          "Reachable (Active - Throttled: 1 req/sec OSM limit)";
+        cachedNominatimStatus = {
+          timestamp: Date.now(),
+          reachable: true,
+          message: status.nominatim.message,
+        };
+      } else {
+        status.nominatim.message = `HTTP ${res.statusCode}`;
+      }
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      status.nominatim.message = `Unreachable: ${errorMsg}`;
     }
-  } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : String(err);
-    status.nominatim.message = `Unreachable: ${errorMsg}`;
   }
 
   // ── Print Terminal Summary ──
