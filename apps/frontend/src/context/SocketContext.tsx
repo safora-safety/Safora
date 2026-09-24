@@ -49,22 +49,25 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       console.log('[Socket] LIVE EMERGENCY RECEIVED:', data);
       setActiveEmergency(data);
 
-      // Play audio chime if browser allows
-      try {
-        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(880, audioCtx.currentTime); // A5 note
-        osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.8);
-        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.8);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.8);
-      } catch {
-        // Audio playback prevented by autoplay policies until interaction
+      // Play audio chime if dispatcher has enabled sound alerts
+      const soundEnabled = localStorage.getItem('safora_sound_alerts') !== 'false';
+      if (soundEnabled) {
+        try {
+          const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(880, audioCtx.currentTime); // A5 note
+          osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.8);
+          gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.8);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.8);
+        } catch {
+          // Audio playback prevented by autoplay policies until interaction
+        }
       }
     });
 

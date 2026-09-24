@@ -6,6 +6,8 @@ let socket: Socket | null = null;
 // Socket host is origin of API_BASE_URL (stripping trailing /api)
 const SOCKET_URL = API_BASE_URL.replace(/\/api\/?$/, '');
 
+const activeRooms = new Set<string | number>();
+
 export function connectSocket(jwt: string): Socket {
   if (socket?.connected) {
     return socket;
@@ -25,6 +27,10 @@ export function connectSocket(jwt: string): Socket {
 
   socket.on('connect', () => {
     console.log('[Socket.IO Mobile] Connected to server:', socket?.id);
+    // Auto-rejoin rooms on reconnection
+    activeRooms.forEach(id => {
+      socket?.emit('journey:join', { journeyId: id });
+    });
   });
 
   socket.on('connect_error', err => {
@@ -39,8 +45,16 @@ export function connectSocket(jwt: string): Socket {
 }
 
 export function joinJourneyRoom(journeyId: number | string): void {
+  activeRooms.add(journeyId);
   if (socket) {
     socket.emit('journey:join', { journeyId });
+  }
+}
+
+export function leaveJourneyRoom(journeyId: number | string): void {
+  activeRooms.delete(journeyId);
+  if (socket) {
+    socket.emit('journey:leave', { journeyId });
   }
 }
 
@@ -63,6 +77,7 @@ export function onSosAlert(cb: (payload: any) => void): () => void {
 }
 
 export function disconnectSocket(): void {
+  activeRooms.clear();
   if (socket) {
     socket.disconnect();
     socket = null;

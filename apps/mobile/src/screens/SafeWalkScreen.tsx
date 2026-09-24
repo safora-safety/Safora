@@ -37,7 +37,11 @@ import {
 } from '../services/routingService';
 import { SosService } from '../services/sosService';
 import { AudioRecorderService } from '../services/audioRecorderService';
+import { SirenService } from '../services/sirenService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { joinJourneyRoom } from '../services/socketService';
+import { useAuthStore } from '../store/authStore';
+import { navigationRef } from '../navigation/RootNavigator';
 
 export interface SafeWalkScreenProps {
   initialDestination?: {
@@ -72,6 +76,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
   initialDestination,
 }) => {
   const { colors, isDark } = useTheme();
+  const { isGuest, token } = useAuthStore();
   const mapRef = useRef<OpenMapViewRef | null>(null);
   const [userPos, setUserPos] =
     useState<LocationCoordinates>(CAMPUS_COORDINATES);
@@ -270,13 +275,16 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
       setIsDeviated(false);
       Vibration.vibrate([0, 1000, 500, 1000]);
 
-      // Start lock-screen native audio evidence + JS ambient recording (TRG-6-lite)
+      // Audio Recording (TRG-6-lite) — Prioritize lock-screen native recorder when foreground service is active
       if (Platform.OS === 'android' && NativeModules.SafeWalkService) {
         NativeModules.SafeWalkService.recordSosAudio(
           String(journeyId || 'auto_sos'),
-        ).catch(() => {});
+        ).catch(() => {
+          AudioRecorderService.startRecording().catch(() => {});
+        });
+      } else {
+        AudioRecorderService.startRecording().catch(() => {});
       }
-      AudioRecorderService.startRecording().catch(() => {});
 
       SosService.triggerSOS({
         latitude: userPos.latitude,
@@ -297,8 +305,26 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
         })
         .catch(() => {
           Alert.alert(
-            '🚨 Auto-Escalation: Network Dispatch Failed',
-            `60-second deviation window expired. Unable to transmit online alert. Please dial 112 immediately with coordinates (${userPos.latitude.toFixed(4)}, ${userPos.longitude.toFixed(4)}).`,
+            '🚨 Emergency Dispatch Offline',
+            `60s deviation window expired. Network unreachable.\n\nCoordinates: ${userPos.latitude.toFixed(4)}, ${userPos.longitude.toFixed(4)}\n\nLaunch emergency dialer or carrier SMS now?`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: '📞 Call 112',
+                style: 'destructive',
+                onPress: () => Linking.openURL('tel:112'),
+              },
+              {
+                text: '📱 Send SMS',
+                onPress: () => {
+                  const mapsLink = `https://maps.google.com/?q=${userPos.latitude.toFixed(5)},${userPos.longitude.toFixed(5)}`;
+                  const body = encodeURIComponent(
+                    `🚨 EMERGENCY SOS! I need immediate help. My live GPS coordinates: ${mapsLink} - Sent via SAFORA Safe Walk`,
+                  );
+                  Linking.openURL(`sms:?body=${body}`).catch(() => {});
+                },
+              },
+            ],
           );
         });
     }
@@ -319,6 +345,25 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
   };
 
   const handleStartWalk = async () => {
+    if (isGuest) {
+      Alert.alert(
+        'Account Required for Safe Walk',
+        'Virtual escort and emergency guardian tracking require a registered account with emergency contacts. Would you like to sign in or register?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Sign In / Register',
+            onPress: () => {
+              if (navigationRef.isReady()) {
+                navigationRef.navigate('Auth');
+              }
+            },
+          },
+        ],
+      );
+      return;
+    }
+
     const etaMins = Math.ceil(routeDurationSeconds / 60) || 10;
     try {
       const plannedRoute = downsampleRouteCoords(routeCoords);
@@ -334,13 +379,24 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
       setJourneyId(journey.id);
       joinJourneyRoom(journey.id);
 
-      // Start native foreground service (TRG-2-lite / NAV-1)
+      // Start native foreground service (TRG-2-lite / NAV-1 with Google Maps notification)
       if (Platform.OS === 'android' && NativeModules.SafeWalkService) {
-        NativeModules.SafeWalkService.start(
-          String(journey.id),
-          destPos.latitude,
-          destPos.longitude,
-        ).catch(() => {});
+        if (NativeModules.SafeWalkService.startWithDetails) {
+          NativeModules.SafeWalkService.startWithDetails(
+            String(journey.id),
+            destPos.latitude,
+            destPos.longitude,
+            destPos.name,
+            routeDistanceMeters || 0,
+            token || '',
+          ).catch(() => {});
+        } else {
+          NativeModules.SafeWalkService.start(
+            String(journey.id),
+            destPos.latitude,
+            destPos.longitude,
+          ).catch(() => {});
+        }
       }
 
       setSecondsRemaining(routeDurationSeconds || 600);
@@ -398,6 +454,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
           onPress: () => {
             setIsDeviated(false);
             setDeviationCountdown(null);
+            SirenService.stopSiren().catch(() => {});
             if (journeyId) {
               JourneyService.confirmSafe(journeyId);
             }
@@ -410,13 +467,22 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
             setDeviationCountdown(null);
             Vibration.vibrate([0, 800, 300, 800]);
 
-            // Start lock-screen native audio evidence + JS ambient recording (TRG-6-lite)
+            AsyncStorage.getItem('@safora_pref_loud_siren').then(pref => {
+              if (pref === 'true') {
+                SirenService.startSiren().catch(() => {});
+              }
+            });
+
+            // Audio Recording (TRG-6-lite) — Prioritize lock-screen native recorder when foreground service is active
             if (Platform.OS === 'android' && NativeModules.SafeWalkService) {
               NativeModules.SafeWalkService.recordSosAudio(
                 String(journeyId || 'manual_sos'),
-              ).catch(() => {});
+              ).catch(() => {
+                AudioRecorderService.startRecording().catch(() => {});
+              });
+            } else {
+              AudioRecorderService.startRecording().catch(() => {});
             }
-            AudioRecorderService.startRecording().catch(() => {});
 
             try {
               const res = await SosService.triggerSOS({
@@ -438,8 +504,26 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
               }
             } catch {
               Alert.alert(
-                '🚨 Emergency Dispatch Failed',
-                `Unable to send network SOS. Please dial 112 immediately with coordinates (${userPos.latitude.toFixed(4)}, ${userPos.longitude.toFixed(4)}).`,
+                '🚨 Emergency Dispatch Offline',
+                `Network unavailable to transmit online alert.\n\nCoordinates: ${userPos.latitude.toFixed(4)}, ${userPos.longitude.toFixed(4)}\n\nLaunch emergency dialer or carrier SMS now?`,
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: '📞 Call 112',
+                    style: 'destructive',
+                    onPress: () => Linking.openURL('tel:112'),
+                  },
+                  {
+                    text: '📱 Send SMS',
+                    onPress: () => {
+                      const mapsLink = `https://maps.google.com/?q=${userPos.latitude.toFixed(5)},${userPos.longitude.toFixed(5)}`;
+                      const body = encodeURIComponent(
+                        `🚨 EMERGENCY SOS! I need immediate help. My live GPS coordinates: ${mapsLink} - Sent via SAFORA Safe Walk`,
+                      );
+                      Linking.openURL(`sms:?body=${body}`).catch(() => {});
+                    },
+                  },
+                ],
               );
             }
           },

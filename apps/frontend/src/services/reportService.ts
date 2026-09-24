@@ -34,8 +34,8 @@ export const reportService = {
     return response.data;
   },
 
-  async moderateReport(id: string | number, status: HazardStatus): Promise<void> {
-    await apiClient.patch(`/reports/${id}/moderate`, { status });
+  async moderateReport(id: string | number, status: HazardStatus, resolutionNotes?: string): Promise<void> {
+    await apiClient.patch(`/reports/${id}/moderate`, { status, resolutionNotes });
   },
 
   async confirmReport(id: string | number): Promise<number> {

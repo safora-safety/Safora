@@ -1,9 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
-import { Shield, LogOut, Clock } from 'lucide-react';
+import { Shield, LogOut, Clock, Menu, X } from 'lucide-react';
 
-export const Navbar: React.FC = () => {
+interface NavbarProps {
+  onToggleMobileMenu?: () => void;
+  isMobileMenuOpen?: boolean;
+}
+
+export const Navbar: React.FC<NavbarProps> = ({
+  onToggleMobileMenu,
+  isMobileMenuOpen = false,
+}) => {
   const { user, logout } = useAuth();
   const { isConnected } = useSocket();
   const [currentTime, setCurrentTime] = useState<string>('');
@@ -38,9 +46,24 @@ export const Navbar: React.FC = () => {
   }, [timeZone]);
 
   return (
-    <header className="h-16 border-b border-white/10 bg-obsidian-850/90 backdrop-blur-xl px-6 flex items-center justify-between sticky top-0 z-30">
+    <header className="h-16 border-b border-white/10 bg-obsidian-850/90 backdrop-blur-xl px-4 sm:px-6 flex items-center justify-between sticky top-0 z-30">
       {/* Brand & Command Level */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3 sm:gap-4">
+        {onToggleMobileMenu && (
+          <button
+            type="button"
+            onClick={onToggleMobileMenu}
+            className="p-2 -ml-1 rounded-xl bg-obsidian-750/80 hover:bg-obsidian-700 border border-white/10 text-gray-300 hover:text-white transition-colors md:hidden focus:outline-none"
+            aria-label="Toggle Navigation Drawer"
+          >
+            {isMobileMenuOpen ? (
+              <X className="w-5 h-5 text-indigo-400" />
+            ) : (
+              <Menu className="w-5 h-5" />
+            )}
+          </button>
+        )}
+
         <div className="flex items-center gap-2.5">
           <div className="p-2 rounded-xl bg-indigo-600/20 border border-indigo-500/40 text-indigo-400 shadow-indigo-950/50 shadow-md">
             <Shield className="w-5 h-5 text-indigo-400" />

@@ -57,11 +57,15 @@ export const RootNavigator: React.FC = () => {
     hydrateAuth();
   }, [hydrateAuth]);
 
+  const hasAcceptedTerms = Boolean(
+    user?.terms_accepted_at || (user as any)?.termsAcceptedAt,
+  );
+  const hasAckAge = Boolean(
+    user?.age_notice_ack || (user as any)?.ageNoticeAck,
+  );
+
   const needsTerms =
-    isAuthenticated &&
-    !isGuest &&
-    user &&
-    (!user.terms_accepted_at || !user.age_notice_ack);
+    isAuthenticated && !isGuest && user && (!hasAcceptedTerms || !hasAckAge);
 
   // When authentication state changes dynamically (e.g. Guest mode tapped), switch immediately
   useEffect(() => {

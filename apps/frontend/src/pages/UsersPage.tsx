@@ -21,6 +21,7 @@ import {
   Calendar,
   AlertCircle,
   CheckCircle2,
+  UserPlus,
 } from 'lucide-react';
 
 export const UsersPage: React.FC = () => {
@@ -37,9 +38,44 @@ export const UsersPage: React.FC = () => {
   const [newSelectedRole, setNewSelectedRole] = useState<UserRole>('user');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Create User state
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    password: '',
+    role: 'user' as UserRole,
+  });
+  const [createLoading, setCreateLoading] = useState(false);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 4000);
+  };
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!createForm.name || !createForm.email || !createForm.password) {
+      showToast('Name, Email, and Password are required');
+      return;
+    }
+    if (createForm.password.length < 8) {
+      showToast('Password must be at least 8 characters');
+      return;
+    }
+    setCreateLoading(true);
+    try {
+      await userService.createUser(createForm);
+      showToast(`User ${createForm.name} registered successfully!`);
+      setShowCreateModal(false);
+      setCreateForm({ name: '', email: '', phone: '', password: '', role: 'user' });
+      loadData();
+    } catch (err: any) {
+      showToast(err.response?.data?.message || 'Failed to create user');
+    } finally {
+      setCreateLoading(false);
+    }
   };
 
   const loadData = useCallback(async () => {
@@ -139,45 +175,59 @@ export const UsersPage: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={loadData}
-          disabled={isLoading}
-          className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-colors disabled:opacity-50"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-          <span>Refresh Directory</span>
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-colors shadow-lg shadow-indigo-950/40"
+          >
+            <UserPlus className="w-3.5 h-3.5" />
+            <span>Add Staff / Citizen</span>
+          </button>
+
+          <button
+            onClick={loadData}
+            disabled={isLoading}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-obsidian-800 hover:bg-obsidian-700 border border-white/10 text-gray-300 font-semibold text-xs transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+            <span>Refresh Directory</span>
+          </button>
+        </div>
       </div>
 
-      {/* KPI Stats */}
+      {/* KPI Stats — Click to Filter Table */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Total Registered Users"
           value={stats?.total ?? users.length}
-          subtitle="Mobile App & Community"
+          subtitle={roleFilter === 'all' ? 'Active filter (All users)' : 'Click to show all'}
           icon={Users}
           variant="indigo"
+          onClick={() => setRoleFilter('all')}
         />
         <StatCard
           title="Security Administrators"
           value={stats?.admins ?? users.filter((u) => u.role === 'admin').length}
-          subtitle="Full System Clearance"
+          subtitle={roleFilter === 'admin' ? 'Active filter (Admins)' : 'Click to filter admins'}
           icon={ShieldAlert}
           variant="danger"
+          onClick={() => setRoleFilter('admin')}
         />
         <StatCard
           title="Field Moderators"
           value={stats?.moderators ?? users.filter((u) => u.role === 'moderator').length}
-          subtitle="Hazard & Report Reviewers"
+          subtitle={roleFilter === 'moderator' ? 'Active filter (Moderators)' : 'Click to filter moderators'}
           icon={ShieldCheck}
           variant="warning"
+          onClick={() => setRoleFilter('moderator')}
         />
         <StatCard
           title="Standard Users"
           value={stats?.users ?? users.filter((u) => u.role === 'user' || !u.role).length}
-          subtitle="Campus Escort Members"
+          subtitle={roleFilter === 'user' ? 'Active filter (Users)' : 'Click to filter standard users'}
           icon={UserCheck}
           variant="success"
+          onClick={() => setRoleFilter('user')}
         />
       </div>
 
@@ -498,6 +548,107 @@ export const UsersPage: React.FC = () => {
               </button>
             </div>
           </div>
+        </Modal>
+      )}
+
+      {/* Add New Citizen / Staff Modal */}
+      {showCreateModal && (
+        <Modal
+          isOpen={showCreateModal}
+          onClose={() => setShowCreateModal(false)}
+          title="Register New Citizen or Staff Member"
+          maxWidth="md"
+        >
+          <form onSubmit={handleCreateUser} className="space-y-4">
+            <div>
+              <label className="block text-xs font-mono font-medium text-gray-300 mb-1">
+                Full Name *
+              </label>
+              <input
+                type="text"
+                required
+                value={createForm.name}
+                onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+                placeholder="Citizen or Staff Name"
+                className="w-full px-3.5 py-2 rounded-xl bg-obsidian-900 border border-white/10 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-mono font-medium text-gray-300 mb-1">
+                Email Address *
+              </label>
+              <input
+                type="email"
+                required
+                value={createForm.email}
+                onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
+                placeholder="user@safora.app"
+                className="w-full px-3.5 py-2 rounded-xl bg-obsidian-900 border border-white/10 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-mono font-medium text-gray-300 mb-1">
+                Phone Number
+              </label>
+              <input
+                type="tel"
+                value={createForm.phone}
+                onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })}
+                placeholder="+91 98765 43210"
+                className="w-full px-3.5 py-2 rounded-xl bg-obsidian-900 border border-white/10 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-mono font-medium text-gray-300 mb-1">
+                Password * (min. 8 characters)
+              </label>
+              <input
+                type="password"
+                required
+                minLength={8}
+                value={createForm.password}
+                onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
+                placeholder="Initial secure password"
+                className="w-full px-3.5 py-2 rounded-xl bg-obsidian-900 border border-white/10 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-mono font-medium text-gray-300 mb-1">
+                Role & Clearance
+              </label>
+              <select
+                value={createForm.role}
+                onChange={(e) => setCreateForm({ ...createForm, role: e.target.value as UserRole })}
+                className="w-full px-3.5 py-2 rounded-xl bg-obsidian-900 border border-white/10 text-xs text-white focus:outline-none focus:border-indigo-500"
+              >
+                <option value="user">Standard Citizen (Mobile App Escort)</option>
+                <option value="moderator">Field Moderator (Hazard Reviewer)</option>
+                <option value="admin">Security Administrator (Full Access)</option>
+              </select>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/10">
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(false)}
+                className="px-3.5 py-2 rounded-xl bg-obsidian-700 hover:bg-obsidian-600 text-white text-xs font-semibold transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={createLoading}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {createLoading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                <span>Create Account</span>
+              </button>
+            </div>
+          </form>
         </Modal>
       )}
     </div>

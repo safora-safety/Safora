@@ -1,8 +1,8 @@
 import { Request, Response, NextFunction } from "express";
-import { AnyZodObject, ZodError } from "zod";
+import { ZodTypeAny, ZodError } from "zod";
 import { AppError } from "../errors/AppError";
 
-export function validateBody(schema: AnyZodObject) {
+export function validateBody(schema: ZodTypeAny) {
   return async (
     req: Request,
     _res: Response,
@@ -25,7 +25,7 @@ export function validateBody(schema: AnyZodObject) {
   };
 }
 
-export function validateQuery(schema: AnyZodObject) {
+export function validateQuery(schema: ZodTypeAny) {
   return async (
     req: Request,
     _res: Response,

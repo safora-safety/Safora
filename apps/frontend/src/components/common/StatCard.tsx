@@ -5,19 +5,36 @@ interface StatCardProps {
   title: string;
   value: string | number;
   subtitle?: string;
-  icon: LucideIcon;
-  variant?: 'danger' | 'warning' | 'info' | 'success' | 'indigo';
+  icon: LucideIcon | React.ReactNode;
+  variant?: 'danger' | 'warning' | 'info' | 'success' | 'indigo' | 'purple';
+  color?: string;
   pulse?: boolean;
+  onClick?: () => void;
 }
 
 export const StatCard: React.FC<StatCardProps> = ({
   title,
   value,
   subtitle,
-  icon: Icon,
-  variant = 'indigo',
+  icon,
+  variant,
+  color,
   pulse = false,
+  onClick,
 }) => {
+  const resolvedVariant: 'danger' | 'warning' | 'info' | 'success' | 'indigo' =
+    variant === 'danger' || variant === 'warning' || variant === 'info' || variant === 'success' || variant === 'indigo'
+      ? variant
+      : color === 'red' || color === 'danger'
+      ? 'danger'
+      : color === 'amber' || color === 'warning'
+      ? 'warning'
+      : color === 'emerald' || color === 'success'
+      ? 'success'
+      : color === 'purple' || color === 'cyan' || color === 'info'
+      ? 'info'
+      : 'indigo';
+
   const borderVariants = {
     danger: 'border-red-500/30 hover:border-red-500/60 shadow-red-950/20',
     warning: 'border-amber-500/30 hover:border-amber-500/60 shadow-amber-950/20',
@@ -34,18 +51,32 @@ export const StatCard: React.FC<StatCardProps> = ({
     indigo: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
   };
 
+  const renderIcon = () => {
+    if (React.isValidElement(icon)) {
+      return icon;
+    }
+    if (typeof icon === 'function' || (typeof icon === 'object' && icon !== null && 'render' in icon)) {
+      const IconComponent = icon as LucideIcon;
+      return <IconComponent className="w-5 h-5" />;
+    }
+    return null;
+  };
+
   return (
     <div
+      onClick={onClick}
       className={`relative p-5 rounded-2xl bg-obsidian-800/80 backdrop-blur-md border transition-all duration-300 shadow-lg ${
-        borderVariants[variant]
-      } ${pulse ? 'ring-2 ring-red-500/40 animate-pulse-slow' : ''}`}
+        borderVariants[resolvedVariant]
+      } ${pulse ? 'ring-2 ring-red-500/40 animate-pulse-slow' : ''} ${
+        onClick ? 'cursor-pointer hover:scale-[1.02] active:scale-[0.98]' : ''
+      }`}
     >
       <div className="flex items-center justify-between">
         <span className="text-xs uppercase tracking-wider font-semibold text-gray-400">
           {title}
         </span>
-        <div className={`p-2.5 rounded-xl border ${iconVariants[variant]}`}>
-          <Icon className="w-5 h-5" />
+        <div className={`p-2.5 rounded-xl border ${iconVariants[resolvedVariant]}`}>
+          {renderIcon()}
         </div>
       </div>
       <div className="mt-4 flex items-baseline gap-2">

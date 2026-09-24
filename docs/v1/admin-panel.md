@@ -5,14 +5,15 @@
 | Page | Status |
 |---|---|
 | Login | Existing |
-| Dashboard (map + KPIs) | Existing |
-| SOS Alerts (queue, status, audio playback) | **Changed** — now also shows watchdog-triggered alerts (`source='watchdog'`) alongside manually triggered ones, with no separate UI needed since they use the same `sos_alerts` table and endpoints |
-| Hazards (filters, moderation) | Existing — reporter identity still visible here (staff endpoint, unchanged) |
-| Safe Walks radar | **Changed** — previously fell back to hard-coded sample journeys when no real data existed; **V1 removes that fallback**. If there are genuinely no active walks, the radar shows an empty state, not fabricated ones. Real positions now come from `journey_breadcrumbs` via `GET /api/journeys/active` |
+| Dashboard (map + KPIs) | **Interactive (V1)** — all StatCards clickable with module navigation; live API latency ping measured in ms; priority queue click-through |
+| SOS Alerts (queue, status, audio playback) | **Changed** — shows watchdog-triggered alerts (`source='watchdog'`) alongside manual triggers; real-time audio playback |
+| Hazards (filters, moderation) | **Interactive (V1)** — KPI StatCards filter table; "Add Resolution Notes" modal dialog with quick municipal preset chips; batch checkboxes with floating action bar |
+| Safe Walks radar | **Interactive (V1)** — sample-data fallback removed (SEC-9); KPI StatCards and filter pills; "🗺️ View Corridor" modal with direct Google Maps/OSM navigation links; direct "📞 Call Walker" callback |
 | Analytics | Existing |
-| Users (role/status) | Existing |
-| Diagnostics | Existing |
-| Settings | Existing |
+| Users (role/status) | **Interactive (V1)** — clickable role StatCards (`Admins`, `Moderators`, `Citizens`); "+ Add Staff / Citizen" modal connected to `userService.createUser` |
+| Diagnostics | **Interactive (V1)** — top KPI StatCards; individual "Test Service" action buttons for PostGIS, Cloudinary, Firebase, MapTiler, Nominatim, and Express with live measured latency ms |
+| Settings | **Interactive (V1)** — credentials change; audible SOS alarm toggle with Web Audio API "🔔 Test Chime" preview button |
+| Navigation Sidebar | **Live (V1)** — auto-updating badge counters for active SOS alerts and pending community hazards |
 
 ## Why the sample-data fix matters for the submission
 An evaluator who opens the admin panel during a demo and sees moving "journeys" that don't correspond to anything real is an easy, damaging thing to notice. This is a small code change (delete the fallback function, show an empty state) with a large credibility payoff — it's in the V1 must-do list (`tasks.md`, SEC-9) for that reason, not because it's technically hard.

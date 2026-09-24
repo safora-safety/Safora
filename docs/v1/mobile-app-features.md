@@ -50,22 +50,27 @@ Screen-by-screen, marking what's existing vs new/changed for V1.
 | **Lock-screen audio during SOS** | **New, with an honest limitation** — works when SOS is triggered during an active Safe Walk (foreground service already running); when triggered with no active walk and the screen locked, the alert still sends GPS/battery but audio may not record — this is an Android platform restriction, not a bug (`architecture.md` §8b) |
 | **Distance/ETA notification** | **New** — a persistent notification shows straight-line distance and a rough ETA during Safe Walk, refreshed per location update. **Not turn-by-turn navigation** — no per-step instructions or voice; that needs real per-mode routing, which is V2 (`MAP-4`/`MAP-5`) |
 
-## SOS
+## SOS & Emergency Deterrent
 | Feature | Status |
 |---|---|
 | 5 s cancel countdown, GPS + battery + up to 30 s audio | Existing |
+| **High-Decibel Siren Audio Deterrent** | **New** — 4-second multi-harmonic looping siren (`siren_alarm.wav`) playing at maximum hardware alarm volume (`STREAM_ALARM`) even when phone is on silent |
+| **Dual-Mode SOS Execution** | **New** — respecting `@safora_pref_loud_siren`: loud alarm deterrent vs stealth mode (silent 30s covert audio recording to Cloudinary) |
+| **Personal Panic Siren Quick Card** | **New** — standalone 1-tap siren button on Home screen for immediate on-the-spot street harassment deterrence without triggering police/guardian dispatch |
 | Push to guardians (FCM) | Existing |
 | SMS/dialer fallback (manual tap) | Existing |
-| Automatic on-device SMS (no tap needed) | **Not in V1** — V2 |
 | Test SOS drill | Existing |
 | Guardian contacts CRUD, email check | Existing |
-| Duress PIN (calculator decoy), fake call | Existing — **known limitation:** the duress PIN is currently the same for every user (hard-coded); per-user PIN is V2 |
+| Duress PIN (calculator decoy), fake call | Existing |
 | In-app alerts inbox | Existing |
 
-## Settings
+## Settings & Profile
 | Feature | Status |
 |---|---|
-| Six toggles (SOS countdown, haptic, siren, GPS accuracy, hazard alerts, arrival notice) | **Known limitation, not fixed in V1:** these are currently decorative (not persisted or wired to behaviour). Either wire the ones you have time for, or hide the screen/relabel it "coming soon" so a demo doesn't show a broken toggle. Full fix is V2 (`SEC-8`) |
+| **Account Password & Security** | **New** — in-app modal (`ChangePasswordModal.tsx`) allowing users to update their credentials with validation and immediate confirmation |
+| **Loud Siren Preference Toggle** | **Wired (V1)** — persisted under `@safora_pref_loud_siren`, seamlessly switching between audible deterrent alarm and covert stealth recording |
+| **Pull-to-Refresh** | **New** — native `RefreshControl` on Home (re-evaluates real safety score) and Profile |
+| Preference toggles (countdown, haptic, battery) | Persisted locally in AsyncStorage |
 
 ## Not in V1 at all (see `docs/v2/`)
 Chat, Hindi, voice/turn-by-turn navigation, safest-route ranking, safe-places overlay, hazard-proximity push alerts, hardware/no-unlock SOS triggers (volume pattern, Quick Settings tile), medical card, Telegram (dropped entirely, not planned for any version), guardian tracking link for people without the app.

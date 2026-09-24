@@ -98,6 +98,13 @@ function createDatabasePool(): InstanceType<typeof Pool> {
 
 export const db = createDatabasePool();
 
+// Handle idle connection drops gracefully (Neon serverless scales down to 0)
+db.on("error", (err: any) => {
+  console.warn(
+    `[WARN] Neon database idle client disconnected: ${err?.message || err}`,
+  );
+});
+
 export async function initDatabase(): Promise<void> {
   let client;
   try {

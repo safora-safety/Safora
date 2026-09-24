@@ -11,13 +11,27 @@ import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.media.MediaRecorder
+import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
+import org.json.JSONObject
 import java.io.File
+import java.io.IOException
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 class SafeWalkService : Service(), LocationListener {
 
@@ -29,10 +43,14 @@ class SafeWalkService : Service(), LocationListener {
         const val ACTION_START = "com.mobile.action.START_SAFE_WALK"
         const val ACTION_STOP = "com.mobile.action.STOP_SAFE_WALK"
         const val ACTION_RECORD_AUDIO = "com.mobile.action.RECORD_AUDIO"
+        const val ACTION_TRIGGER_SOS = "com.mobile.action.TRIGGER_SOS"
 
         const val EXTRA_JOURNEY_ID = "journey_id"
         const val EXTRA_DEST_LAT = "dest_lat"
         const val EXTRA_DEST_LNG = "dest_lng"
+        const val EXTRA_DEST_NAME = "dest_name"
+        const val EXTRA_TOTAL_DISTANCE = "total_distance"
+        const val EXTRA_AUTH_TOKEN = "auth_token"
         const val EXTRA_ALERT_ID = "alert_id"
 
         var isServiceRunning = false
@@ -42,6 +60,12 @@ class SafeWalkService : Service(), LocationListener {
     private var journeyId: String = ""
     private var destLat: Double = 0.0
     private var destLng: Double = 0.0
+    private var destName: String = "Destination"
+    private var totalDistanceMeters: Double = 0.0
+    private var authToken: String = ""
+
+    private var lastLat: Double = 0.0
+    private var lastLng: Double = 0.0
 
     private var wakeLock: PowerManager.WakeLock? = null
     private var locationManager: LocationManager? = null
@@ -49,6 +73,13 @@ class SafeWalkService : Service(), LocationListener {
 
     private var mediaRecorder: MediaRecorder? = null
     private var currentAudioFile: File? = null
+
+    private val httpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .build()
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -64,6 +95,9 @@ class SafeWalkService : Service(), LocationListener {
                 journeyId = intent.getStringExtra(EXTRA_JOURNEY_ID) ?: ""
                 destLat = intent.getDoubleExtra(EXTRA_DEST_LAT, 0.0)
                 destLng = intent.getDoubleExtra(EXTRA_DEST_LNG, 0.0)
+                destName = intent.getStringExtra(EXTRA_DEST_NAME) ?: "Destination"
+                totalDistanceMeters = intent.getDoubleExtra(EXTRA_TOTAL_DISTANCE, 0.0)
+                authToken = intent.getStringExtra(EXTRA_AUTH_TOKEN) ?: ""
                 startSafeWalkForeground()
             }
             ACTION_STOP -> {
@@ -72,6 +106,9 @@ class SafeWalkService : Service(), LocationListener {
             ACTION_RECORD_AUDIO -> {
                 val alertId = intent.getStringExtra(EXTRA_ALERT_ID) ?: "emergency"
                 startLockScreenAudio(alertId)
+            }
+            ACTION_TRIGGER_SOS -> {
+                triggerEmergencySosNatively()
             }
         }
 
@@ -96,7 +133,7 @@ class SafeWalkService : Service(), LocationListener {
     private fun startSafeWalkForeground() {
         isServiceRunning = true
 
-        // 1. Acquire partial wake lock to keep GPS/thread alive when screen is locked (TRG-2-lite)
+        // 1. Acquire partial wake lock to keep GPS/OkHttp alive when screen is locked (TRG-2-lite)
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = powerManager.newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK,
@@ -106,11 +143,15 @@ class SafeWalkService : Service(), LocationListener {
             acquire(60 * 60 * 1000L) // 1 hour max safety timeout
         }
 
-        // 2. Start initial foreground notification
-        val notification = buildNotification("Safe Walk Activated — monitoring corridor route")
+        // 2. Start initial Google Maps-style foreground notification
+        val notification = buildNotification(
+            "Connecting live GPS...",
+            "Safe Escort Active",
+            0
+        )
         startForeground(NOTIFICATION_ID, notification)
 
-        // 3. Register native location updates
+        // 3. Register native location updates (4s interval or 3 meters distance)
         try {
             locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
             if (locationManager?.isProviderEnabled(LocationManager.GPS_PROVIDER) == true) {
@@ -133,9 +174,20 @@ class SafeWalkService : Service(), LocationListener {
         }
     }
 
-    private fun buildNotification(contentText: String): Notification {
+    /**
+     * Google Maps-style Navigation Notification:
+     * - Live progress bar showing route percentage
+     * - Estimated time of arrival (e.g., Arrive 7:25 PM)
+     * - Distance to destination
+     * - Lock-screen action buttons: [🚨 SOS] and [Exit Safe Walk]
+     */
+    private fun buildNotification(
+        distText: String,
+        etaText: String,
+        progressPercent: Int
+    ): Notification {
         val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
-        val pendingIntent = PendingIntent.getActivity(
+        val contentIntent = PendingIntent.getActivity(
             this,
             0,
             launchIntent,
@@ -146,38 +198,187 @@ class SafeWalkService : Service(), LocationListener {
             }
         )
 
+        // Action 1: Exit navigation / Stop walk directly from notification
+        val stopIntent = Intent(this, SafeWalkService::class.java).apply {
+            action = ACTION_STOP
+        }
+        val stopPending = PendingIntent.getService(
+            this,
+            1,
+            stopIntent,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            } else {
+                PendingIntent.FLAG_UPDATE_CURRENT
+            }
+        )
+
+        // Action 2: Trigger Emergency SOS directly from lock screen
+        val sosIntent = Intent(this, SafeWalkService::class.java).apply {
+            action = ACTION_TRIGGER_SOS
+        }
+        val sosPending = PendingIntent.getService(
+            this,
+            2,
+            sosIntent,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            } else {
+                PendingIntent.FLAG_UPDATE_CURRENT
+            }
+        )
+
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("🚶‍♀️ SAFORA Safe Walk Active")
-            .setContentText(contentText)
+            .setContentTitle("🚶‍♀️ SAFORA · $etaText")
+            .setContentText("$distText · Route to $destName")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setContentIntent(pendingIntent)
+            .setContentIntent(contentIntent)
+            .setProgress(100, Math.min(100, Math.max(0, progressPercent)), false)
+            .addAction(android.R.drawable.ic_dialog_alert, "🚨 SOS", sosPending)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Exit Safe Walk", stopPending)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .build()
     }
 
-    // Called on location update to recalculate straight-line distance and ETA (NAV-1)
+    // Called on location update to recalculate straight-line distance, ETA, and progress bar
     fun updateProgress(currentLat: Double, currentLng: Double) {
-        if (destLat == 0.0 && destLng == 0.0) return
+        lastLat = currentLat
+        lastLng = currentLng
+
+        if (destLat == 0.0 && destLng == 0.0) {
+            val notification = buildNotification("Monitoring active corridor", "Escort Active", 0)
+            notificationManager?.notify(NOTIFICATION_ID, notification)
+            return
+        }
 
         val results = FloatArray(1)
         Location.distanceBetween(currentLat, currentLng, destLat, destLng, results)
         val distMeters = results[0]
 
+        if (totalDistanceMeters <= 0.0) {
+            totalDistanceMeters = distMeters.toDouble()
+        }
+
+        val progressPercent = if (totalDistanceMeters > 0.0) {
+            Math.round(((totalDistanceMeters - distMeters) / totalDistanceMeters) * 100).toInt()
+        } else {
+            0
+        }
+
         // Calibrated walking speed = 1.60 m/s
         val walkSpeed = 1.60
         val etaSecs = distMeters / walkSpeed
-        val etaMins = Math.max(1, Math.ceil(etaSecs / 60.0).toInt())
+        val etaMillis = System.currentTimeMillis() + (etaSecs * 1000).toLong()
+        val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
+        val etaTimeStr = "Arrive ${timeFormat.format(Date(etaMillis))}"
 
         val distText = if (distMeters >= 1000) {
-            String.format("%.1f km", distMeters / 1000.0)
+            String.format(Locale.getDefault(), "%.1f km", distMeters / 1000.0)
         } else {
             "${distMeters.toInt()}m"
         }
 
-        val contentText = "$distText to go — about $etaMins min"
-        val notification = buildNotification(contentText)
+        val notification = buildNotification(distText, etaTimeStr, progressPercent)
         notificationManager?.notify(NOTIFICATION_ID, notification)
+    }
+
+    /**
+     * Native OkHttp Location Streamer (Task 13 — TRG-2-lite):
+     * Runs 100% natively in Kotlin inside the foreground service.
+     * Guarantees location breadcrumbs keep reaching Render and Neon DB
+     * even when the phone is locked and Android suspends the JS thread.
+     */
+    private fun postLocationNatively(lat: Double, lng: Double, speed: Float?, battery: Int?) {
+        if (journeyId.isEmpty()) return
+
+        try {
+            val json = JSONObject().apply {
+                put("latitude", lat)
+                put("longitude", lng)
+                if (speed != null && speed >= 0) put("speed", speed)
+                if (battery != null && battery >= 0) put("battery", battery)
+            }
+
+            val body = json.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+            val reqBuilder = Request.Builder()
+                .url("https://safora-backend.onrender.com/api/journeys/$journeyId/location")
+                .patch(body)
+
+            if (authToken.isNotEmpty()) {
+                reqBuilder.header("Authorization", "Bearer $authToken")
+            }
+
+            httpClient.newCall(reqBuilder.build()).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    Log.w(TAG, "Native location stream error: ${e.message}")
+                }
+                override fun onResponse(call: Call, response: Response) {
+                    response.close()
+                }
+            })
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to schedule native location update: ${e.message}")
+        }
+    }
+
+    private fun getBatteryPercentage(): Int? {
+        return try {
+            val bm = getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
+            bm?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Lock-Screen SOS Trigger:
+     * When user presses [🚨 SOS] on the lock-screen notification,
+     * immediately starts audio recording and posts emergency alert.
+     */
+    private fun triggerEmergencySosNatively() {
+        startLockScreenAudio(if (journeyId.isNotEmpty()) journeyId else "emergency")
+
+        try {
+            val json = JSONObject().apply {
+                put("latitude", lastLat)
+                put("longitude", lastLng)
+                if (journeyId.isNotEmpty()) put("journey_id", journeyId)
+                put("source", "lockscreen_notification")
+            }
+
+            val body = json.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+            val reqBuilder = Request.Builder()
+                .url("https://safora-backend.onrender.com/api/sos")
+                .post(body)
+
+            if (authToken.isNotEmpty()) {
+                reqBuilder.header("Authorization", "Bearer $authToken")
+            }
+
+            httpClient.newCall(reqBuilder.build()).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    Log.w(TAG, "Native SOS dispatch network failed: ${e.message}")
+                }
+                override fun onResponse(call: Call, response: Response) {
+                    response.close()
+                }
+            })
+
+            // Update notification to Red Emergency Alert state
+            val alertNotification = NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle("🚨 SAFORA · EMERGENCY SOS TRANSMITTED")
+                .setContentText("Emergency contacts alerted with live GPS. Audio recording.")
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setOngoing(true)
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .build()
+            notificationManager?.notify(NOTIFICATION_ID, alertNotification)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to trigger SOS natively: ${e.message}")
+        }
     }
 
     // Task 5.2 TRG-6-lite: Start 30s audio recording using the active foreground service's microphone access
@@ -231,6 +432,24 @@ class SafeWalkService : Service(), LocationListener {
         isServiceRunning = false
         stopAudioRecording()
 
+        // Inform backend natively that journey is completed/stopped
+        if (journeyId.isNotEmpty()) {
+            try {
+                val reqBuilder = Request.Builder()
+                    .url("https://safora-backend.onrender.com/api/journeys/$journeyId/complete")
+                    .patch("{}".toRequestBody("application/json; charset=utf-8".toMediaType()))
+                if (authToken.isNotEmpty()) {
+                    reqBuilder.header("Authorization", "Bearer $authToken")
+                }
+                httpClient.newCall(reqBuilder.build()).enqueue(object : Callback {
+                    override fun onFailure(call: Call, e: IOException) {}
+                    override fun onResponse(call: Call, response: Response) { response.close() }
+                })
+            } catch (e: Exception) {
+                Log.w(TAG, "Error notifying journey completion: ${e.message}")
+            }
+        }
+
         try {
             locationManager?.removeUpdates(this)
         } catch (e: Exception) {
@@ -252,6 +471,12 @@ class SafeWalkService : Service(), LocationListener {
 
     override fun onLocationChanged(location: Location) {
         updateProgress(location.latitude, location.longitude)
+        postLocationNatively(
+            location.latitude,
+            location.longitude,
+            if (location.hasSpeed()) location.speed else null,
+            getBatteryPercentage()
+        )
     }
 
     override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}

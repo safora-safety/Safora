@@ -12,10 +12,24 @@ export const loginSchema = z.object({
   password: z.string().min(1, "Password is required"),
 });
 
-export const changePasswordSchema = z.object({
-  oldPassword: z.string().min(1, "Current password is required"),
-  newPassword: z.string().min(8, "New password must be at least 8 characters"),
-});
+export const changePasswordSchema = z
+  .object({
+    oldPassword: z.string().optional(),
+    old_password: z.string().optional(),
+    newPassword: z.string().optional(),
+    new_password: z.string().optional(),
+  })
+  .refine(
+    (data) => {
+      const current = data.oldPassword || data.old_password;
+      const next = data.newPassword || data.new_password;
+      return Boolean(current && next && next.length >= 8);
+    },
+    {
+      message:
+        "Both current password and new password (min 8 characters) are required",
+    },
+  );
 
 export const updateProfileSchema = z.object({
   name: z

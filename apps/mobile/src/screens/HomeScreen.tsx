@@ -10,9 +10,11 @@ import {
   Vibration,
   Linking,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { useAuthStore } from '../store/authStore';
 import { useTheme } from '../theme/ThemeContext';
+import { SirenService } from '../services/sirenService';
 import {
   getCurrentCoordinates,
   LocationCoordinates,
@@ -57,6 +59,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
     deviated?: boolean;
     lastSeen: Date;
   } | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [isSirenActive, setIsSirenActive] = useState(false);
 
   // Realtime guardian tracking listener (SYN-4)
   useEffect(() => {
@@ -90,6 +94,35 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
       .catch(() => {
         setScoreStatus('error');
       });
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const c = await getCurrentCoordinates();
+      setCoords(c);
+      loadSafetyScore(c.latitude, c.longitude);
+    } catch {
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const togglePanicSiren = async () => {
+    if (isSirenActive) {
+      await SirenService.stopSiren();
+      setIsSirenActive(false);
+      Alert.alert(
+        'Siren Silenced',
+        'Emergency siren alarm has been deactivated.',
+      );
+    } else {
+      Vibration.vibrate([0, 500, 200, 500]);
+      const started = await SirenService.startSiren();
+      if (started) {
+        setIsSirenActive(true);
+      }
+    }
   };
 
   useEffect(() => {
@@ -133,6 +166,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
   const cancelSos = () => {
     setSosCountdown(null);
     Vibration.cancel();
+    SirenService.stopSiren().catch(() => {});
+    setIsSirenActive(false);
     AudioRecorderService.stopSilent().catch(() => {});
     Alert.alert('SOS Cancelled', 'Emergency broadcast was safely aborted.');
   };
@@ -140,8 +175,19 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
   const dispatchRealSos = async () => {
     Vibration.vibrate([0, 800, 300, 800]);
 
-    // Start real 30-second ambient audio evidence recording
-    AudioRecorderService.startRecording().catch(() => {});
+    let isLoudSiren = false;
+    try {
+      const loudPref = await AsyncStorage.getItem('@safora_pref_loud_siren');
+      isLoudSiren = loudPref === 'true';
+    } catch {}
+
+    if (isLoudSiren) {
+      SirenService.startSiren().catch(() => {});
+      setIsSirenActive(true);
+    } else {
+      // Start real 30-second ambient audio evidence recording (Stealth mode)
+      AudioRecorderService.startRecording().catch(() => {});
+    }
 
     let onlineSuccess = false;
     let contactsCount = 0;
@@ -162,8 +208,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
       onlineSuccess = false;
     }
 
-    // After 30 seconds, stop recording and upload audio evidence to Cloudinary
-    if (alertId) {
+    // After 30 seconds, stop recording and upload audio evidence to Cloudinary (if stealth audio was recorded)
+    if (alertId && !isLoudSiren) {
       setTimeout(() => {
         AudioRecorderService.stopAndUpload(alertId).catch(() => {});
       }, 30000);
@@ -343,6 +389,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+          />
+        }
       >
         {/* Active Guardian Live Escort Banner (SYN-4) */}
         {activeTrackedWalker && (
@@ -667,6 +720,67 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* Personal Panic Siren Deterrent Card */}
+        <TouchableOpacity
+          style={[
+            styles.panicSirenCard,
+            isSirenActive && styles.panicSirenCardActive,
+            {
+              backgroundColor: isSirenActive
+                ? 'rgba(239, 68, 68, 0.2)'
+                : colors.backgroundCard,
+              borderColor: isSirenActive ? '#EF4444' : colors.border,
+            },
+          ]}
+          onPress={togglePanicSiren}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.panicSirenEmoji}>
+            {isSirenActive ? '🛑' : '📢'}
+          </Text>
+          <View style={{ flex: 1 }}>
+            <Text
+              style={[
+                styles.panicSirenTitle,
+                { color: isSirenActive ? '#EF4444' : colors.textPrimary },
+              ]}
+            >
+              {isSirenActive
+                ? 'SIREN ACTIVE — TAP TO STOP'
+                : 'Personal Panic Siren'}
+            </Text>
+            <Text
+              style={[
+                styles.panicSirenSubtitle,
+                { color: colors.textSecondary },
+              ]}
+            >
+              {isSirenActive
+                ? 'Blasting high-decibel alarm through device speakers'
+                : 'High-decibel audible deterrent to scare attackers'}
+            </Text>
+          </View>
+          <View
+            style={[
+              styles.panicSirenBadge,
+              {
+                backgroundColor: isSirenActive
+                  ? '#EF4444'
+                  : 'rgba(239, 68, 68, 0.15)',
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.panicSirenBadgeText,
+                { color: isSirenActive ? '#FFFFFF' : '#EF4444' },
+              ]}
+            >
+              {isSirenActive ? 'SILENCE' : 'SOUND ALARM'}
+            </Text>
+          </View>
+        </TouchableOpacity>
 
         {/* Core Services Grid */}
         <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
@@ -1144,5 +1258,38 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
     textAlign: 'center',
+  },
+  panicSirenCard: {
+    borderWidth: 1.5,
+    borderRadius: 18,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  panicSirenCardActive: {
+    borderColor: '#EF4444',
+  },
+  panicSirenEmoji: {
+    fontSize: 26,
+  },
+  panicSirenTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  panicSirenSubtitle: {
+    fontSize: 11,
+    marginTop: 2,
+    lineHeight: 15,
+  },
+  panicSirenBadge: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+  },
+  panicSirenBadgeText: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.5,
   },
 });
