@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   StatusBar,
   ActivityIndicator,
   Alert,
+  BackHandler,
 } from 'react-native';
 import { useAuthStore } from '../store/authStore';
 import { colors } from '../theme/colors';
@@ -21,11 +22,12 @@ interface TermsScreenProps {
 
 export const TermsScreen: React.FC<TermsScreenProps> = ({
   navigation,
-  route,
+  route: _route,
 }) => {
-  const { user, updateProfile, markTermsPromptSeen, isLoading } =
-    useAuthStore();
-  const isFirstTime = Boolean(route?.params?.isFirstTime);
+  const { user, updateProfile, isLoading } = useAuthStore();
+
+  // Determine if we're in a mandatory flow (no back stack) vs opened from Settings
+  const canGoBack = navigation.canGoBack();
 
   const [ageText, setAgeText] = useState(user?.age ? String(user.age) : '');
   const [guardianAck, setGuardianAck] = useState(
@@ -39,17 +41,17 @@ export const TermsScreen: React.FC<TermsScreenProps> = ({
   const numAge = parseInt(ageText, 10);
   const isUnder18 = !isNaN(numAge) && numAge < 18 && numAge > 0;
 
-  const handleSkip = async () => {
-    await markTermsPromptSeen();
-    if (navigation.canGoBack()) {
-      navigation.goBack();
-    } else {
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'MainTabs' }],
-      });
-    }
-  };
+  // Block hardware back button when Terms is mandatory (no back stack)
+  // so the user cannot bypass the consent screen
+  useEffect(() => {
+    if (canGoBack) return; // Allow back when opened from Settings
+
+    const handler = BackHandler.addEventListener('hardwareBackPress', () => {
+      // Return true to prevent default back behavior
+      return true;
+    });
+    return () => handler.remove();
+  }, [canGoBack]);
 
   const handleSubmit = async () => {
     setErrorMsg(null);
@@ -70,7 +72,6 @@ export const TermsScreen: React.FC<TermsScreenProps> = ({
     }
 
     try {
-      await markTermsPromptSeen();
       const success = await updateProfile({
         age: numAge,
         ageNoticeAck: true,
@@ -78,7 +79,10 @@ export const TermsScreen: React.FC<TermsScreenProps> = ({
       } as any);
 
       if (success) {
-        if (navigation.canGoBack()) {
+        // After successful submission, navigate away.
+        // RootNavigator's needsTerms will now be false (termsAcceptedAt is set),
+        // so navigating to MainTabs is safe and permanent.
+        if (canGoBack) {
           navigation.goBack();
         } else {
           navigation.reset({
@@ -98,9 +102,9 @@ export const TermsScreen: React.FC<TermsScreenProps> = ({
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
 
-      {/* Top Action Bar */}
-      <View style={styles.topBar}>
-        {navigation.canGoBack() ? (
+      {/* Top Action Bar — only show Back when navigated from Settings */}
+      {canGoBack && (
+        <View style={styles.topBar}>
           <TouchableOpacity
             style={styles.backBtn}
             onPress={() => navigation.goBack()}
@@ -108,30 +112,13 @@ export const TermsScreen: React.FC<TermsScreenProps> = ({
           >
             <Text style={styles.backBtnText}>← Back</Text>
           </TouchableOpacity>
-        ) : (
-          <View style={{ width: 60 }} />
-        )}
-        <TouchableOpacity
-          style={styles.skipTopBtn}
-          onPress={handleSkip}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-        >
-          <Text style={styles.skipTopBtnText}>Skip for now ›</Text>
-        </TouchableOpacity>
-      </View>
+        </View>
+      )}
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {isFirstTime && (
-          <View style={styles.firstTimeBadge}>
-            <Text style={styles.firstTimeBadgeText}>
-              🎉 Welcome to SAFORA! Complete your safety profile
-            </Text>
-          </View>
-        )}
-
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.shieldEmoji}>🛡️</Text>
@@ -267,19 +254,6 @@ export const TermsScreen: React.FC<TermsScreenProps> = ({
           ) : (
             <Text style={styles.submitButtonText}>Accept & Continue →</Text>
           )}
-        </TouchableOpacity>
-
-        {/* Skip for now Button */}
-        <TouchableOpacity
-          style={styles.skipBottomBtn}
-          onPress={handleSkip}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.skipBottomBtnText}>
-            {isFirstTime
-              ? 'Skip for now & explore →'
-              : 'Skip & continue to app'}
-          </Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -477,17 +451,5 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
-  },
-  skipBottomBtn: {
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 6,
-  },
-  skipBottomBtnText: {
-    color: '#94A3B8',
-    fontSize: 14,
-    fontWeight: '600',
-    textDecorationLine: 'underline',
   },
 });

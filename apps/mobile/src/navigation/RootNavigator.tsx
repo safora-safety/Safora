@@ -36,7 +36,7 @@ export type RootStackParamList = {
         initialLocation?: { latitude: number; longitude: number };
       }
     | undefined;
-  Terms: { isFirstTime?: boolean } | undefined;
+  Terms: undefined;
 };
 
 export const navigationRef = createNavigationContainerRef<RootStackParamList>();
@@ -50,8 +50,6 @@ export const RootNavigator: React.FC = () => {
     isGuest,
     isHydrated,
     hasSeenOnboarding,
-    hasSeenTermsPrompt,
-    markTermsPromptSeen,
     hydrateAuth,
   } = useAuthStore();
 
@@ -66,14 +64,11 @@ export const RootNavigator: React.FC = () => {
     user?.age_notice_ack || (user as any)?.ageNoticeAck,
   );
 
-  // For already registered users who have not signed this:
-  // Ask ONLY ONCE when opening the app, not every time they open the app.
+  // Show the Terms screen until the user actually submits it.
+  // Once submitted, the DB updates termsAcceptedAt/ageNoticeAck,
+  // which makes needsTerms permanently false — no extra flag needed.
   const needsTerms =
-    isAuthenticated &&
-    !isGuest &&
-    user &&
-    (!hasAcceptedTerms || !hasAckAge) &&
-    !hasSeenTermsPrompt;
+    isAuthenticated && !isGuest && user && (!hasAcceptedTerms || !hasAckAge);
 
   // When authentication state changes dynamically (e.g. Guest mode tapped), switch immediately
   useEffect(() => {
@@ -81,11 +76,9 @@ export const RootNavigator: React.FC = () => {
     if (navigationRef.isReady()) {
       if (isAuthenticated) {
         if (needsTerms) {
-          // Mark as prompted once so it will not ask again on next app launch
-          markTermsPromptSeen();
           navigationRef.reset({
             index: 0,
-            routes: [{ name: 'Terms', params: { isFirstTime: false } }],
+            routes: [{ name: 'Terms' }],
           });
         } else {
           navigationRef.reset({
@@ -95,7 +88,7 @@ export const RootNavigator: React.FC = () => {
         }
       }
     }
-  }, [isAuthenticated, isHydrated, needsTerms, markTermsPromptSeen]);
+  }, [isAuthenticated, isHydrated, needsTerms]);
 
   // Show dark splash loader while rehydrating stored login session
   if (!isHydrated) {
