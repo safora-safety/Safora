@@ -58,9 +58,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     if (activeTab === 'login') {
       const ok = await login(email.trim(), password);
       if (ok) {
+        // RootNavigator's needsTerms effect will automatically redirect
+        // to Terms if the user hasn't accepted yet, or MainTabs if they have.
+        // We just need to trigger any navigation to let the effect run.
         try {
           const user = useAuthStore.getState().user;
-          const hasSeenPrompt = useAuthStore.getState().hasSeenTermsPrompt;
           const hasAccepted = Boolean(
             user?.terms_accepted_at || (user as any)?.termsAcceptedAt,
           );
@@ -68,11 +70,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             user?.age_notice_ack || (user as any)?.ageNoticeAck,
           );
 
-          if ((!hasAccepted || !hasAck) && !hasSeenPrompt) {
-            useAuthStore.getState().markTermsPromptSeen();
+          if (!hasAccepted || !hasAck) {
             navigation.reset({
               index: 0,
-              routes: [{ name: 'Terms', params: { isFirstTime: false } }],
+              routes: [{ name: 'Terms' }],
             });
           } else {
             navigation.reset({
@@ -104,14 +105,14 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         password,
       );
       if (ok) {
+        // New users always need to accept terms
         try {
-          // First time user: direct to Safety Terms & Privacy immediately after signup
           navigation.reset({
             index: 0,
-            routes: [{ name: 'Terms', params: { isFirstTime: true } }],
+            routes: [{ name: 'Terms' }],
           });
         } catch {
-          navigation.navigate('Terms', { isFirstTime: true });
+          navigation.navigate('Terms');
         }
       }
     }
