@@ -15,11 +15,8 @@ import { useNavigation } from '@react-navigation/native';
 import { useAuthStore } from '../store/authStore';
 import { EditProfileModal } from '../components/EditProfileModal';
 import { ContactModal, EditableContact } from '../components/ContactModal';
-import { ChangePasswordModal } from '../components/ChangePasswordModal';
 import { useTheme } from '../theme/ThemeContext';
-
 import { SosService } from '../services/sosService';
-import { AudioRecorderService } from '../services/audioRecorderService';
 
 interface Contact {
   id: string;
@@ -77,7 +74,6 @@ export const ProfileScreen: React.FC = () => {
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
-  const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [editingContact, setEditingContact] = useState<EditableContact | null>(
     null,
@@ -156,6 +152,14 @@ export const ProfileScreen: React.FC = () => {
   // Load custom contacts from persistent storage and sync from database
   useEffect(() => {
     const loadAndSyncContacts = async () => {
+      if (isGuest || !user) {
+        setCustomContacts([]);
+        setPendingRequests([]);
+        setEscortWards([]);
+        setIsContactsLoaded(true);
+        return;
+      }
+
       try {
         const stored = await AsyncStorage.getItem(CONTACTS_STORAGE_KEY);
         if (stored !== null) {
@@ -164,11 +168,10 @@ export const ProfileScreen: React.FC = () => {
             setCustomContacts(parsed);
           }
         } else {
-          // First-time fresh install: provide sample contact
-          setCustomContacts(INITIAL_FAMILY_CONTACTS);
+          setCustomContacts([]);
         }
       } catch {
-        setCustomContacts(INITIAL_FAMILY_CONTACTS);
+        setCustomContacts([]);
       } finally {
         setIsContactsLoaded(true);
       }
@@ -1201,112 +1204,6 @@ export const ProfileScreen: React.FC = () => {
           ))}
         </View>
 
-        {/* Microphone Safety Evidence Card */}
-        <TouchableOpacity
-          style={[
-            styles.settingsShortcutCard,
-            {
-              backgroundColor: colors.backgroundCard,
-              borderColor: colors.border,
-            },
-          ]}
-          onPress={async () => {
-            const granted = await AudioRecorderService.isPermissionGranted();
-            if (!granted) {
-              const req = await AudioRecorderService.requestPermission();
-              if (!req) {
-                Linking.openSettings();
-              }
-            } else {
-              Linking.openSettings();
-            }
-          }}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.settingsShortcutEmoji}>🎙️</Text>
-          <View style={{ flex: 1 }}>
-            <Text
-              style={[
-                styles.settingsShortcutTitle,
-                { color: colors.textPrimary },
-              ]}
-            >
-              Microphone Safety Evidence
-            </Text>
-            <Text
-              style={[
-                styles.settingsShortcutDesc,
-                { color: colors.textSecondary },
-              ]}
-            >
-              Captures 30s ambient audio on SOS. Tap to manage system
-              permission.
-            </Text>
-          </View>
-          <Text
-            style={[styles.settingsShortcutArrow, { color: colors.primary }]}
-          >
-            Manage ›
-          </Text>
-        </TouchableOpacity>
-
-        {/* Account Password & Security Card */}
-        <TouchableOpacity
-          style={[
-            styles.settingsShortcutCard,
-            {
-              backgroundColor: colors.backgroundCard,
-              borderColor: colors.border,
-            },
-          ]}
-          onPress={() => {
-            if (isGuest) {
-              Alert.alert(
-                'Guest Mode',
-                'Guest explorers do not have a password. Please register a verified citizen account.',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  {
-                    text: 'Create Account',
-                    onPress: () =>
-                      (navigation as any).navigate('Auth', {
-                        initialTab: 'register',
-                      }),
-                  },
-                ],
-              );
-            } else {
-              setShowPasswordModal(true);
-            }
-          }}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.settingsShortcutEmoji}>🔐</Text>
-          <View style={{ flex: 1 }}>
-            <Text
-              style={[
-                styles.settingsShortcutTitle,
-                { color: colors.textPrimary },
-              ]}
-            >
-              Account Password & Security
-            </Text>
-            <Text
-              style={[
-                styles.settingsShortcutDesc,
-                { color: colors.textSecondary },
-              ]}
-            >
-              Update your encrypted citizen login credentials
-            </Text>
-          </View>
-          <Text
-            style={[styles.settingsShortcutArrow, { color: colors.textMuted }]}
-          >
-            ›
-          </Text>
-        </TouchableOpacity>
-
         {/* Quick Settings Shortcut */}
         <TouchableOpacity
           style={[
@@ -1365,12 +1262,6 @@ export const ProfileScreen: React.FC = () => {
       <EditProfileModal
         visible={showEditModal}
         onClose={() => setShowEditModal(false)}
-      />
-
-      {/* Change Password Modal */}
-      <ChangePasswordModal
-        visible={showPasswordModal}
-        onClose={() => setShowPasswordModal(false)}
       />
 
       {/* Add / Edit Real Emergency Contact Modal */}

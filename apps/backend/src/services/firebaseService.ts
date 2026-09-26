@@ -146,4 +146,128 @@ export class FirebaseService {
       );
     }
   }
+
+  /**
+   * Safe Walk Started Alert: sent to guardians when a user begins a Safe Walk escort session
+   */
+  static async sendSafeWalkStartedAlert(
+    fcmTokens: string[],
+    data: {
+      journeyId: string | number;
+      userName: string;
+      destinationName?: string;
+    },
+  ): Promise<void> {
+    if (!isFirebaseInitialized || fcmTokens.length === 0) return;
+
+    try {
+      await getMessaging().sendEachForMulticast({
+        tokens: fcmTokens,
+        notification: {
+          title: `🛡️ Safe Walk Started`,
+          body: `${data.userName} has started a Safe Walk${data.destinationName ? ` to ${data.destinationName}` : ""}. Open SAFORA to track live.`,
+        },
+        data: {
+          type: "SAFE_WALK_STARTED",
+          journeyId: String(data.journeyId),
+          timestamp: new Date().toISOString(),
+        },
+        android: {
+          priority: "high",
+          notification: {
+            channelId: "safety_alerts",
+            sound: "default",
+            color: "#10B981",
+          },
+        },
+      });
+    } catch (err) {
+      console.error(
+        "[ERROR] Failed to dispatch Firebase Safe Walk started alert:",
+        err,
+      );
+    }
+  }
+
+  /**
+   * Safe Walk Arrival Alert: sent to guardians when user safely arrives at their destination
+   */
+  static async sendSafeWalkArrivalAlert(
+    fcmTokens: string[],
+    data: {
+      journeyId: string | number;
+      userName: string;
+      destinationName?: string;
+    },
+  ): Promise<void> {
+    if (!isFirebaseInitialized || fcmTokens.length === 0) return;
+
+    try {
+      await getMessaging().sendEachForMulticast({
+        tokens: fcmTokens,
+        notification: {
+          title: `✅ Safe Arrival Confirmed`,
+          body: `${data.userName} has arrived safely${data.destinationName ? ` at ${data.destinationName}` : ""}! Safe Walk session completed.`,
+        },
+        data: {
+          type: "SAFE_WALK_ARRIVED",
+          journeyId: String(data.journeyId),
+          timestamp: new Date().toISOString(),
+        },
+        android: {
+          priority: "high",
+          notification: {
+            channelId: "safety_alerts",
+            sound: "default",
+            color: "#10B981",
+          },
+        },
+      });
+    } catch (err) {
+      console.error(
+        "[ERROR] Failed to dispatch Firebase Safe Walk arrival alert:",
+        err,
+      );
+    }
+  }
+
+  /**
+   * Safe Walk Cancelled Alert: sent to guardians when user stops/cancels their Safe Walk session
+   */
+  static async sendSafeWalkCancelledAlert(
+    fcmTokens: string[],
+    data: {
+      journeyId: string | number;
+      userName: string;
+    },
+  ): Promise<void> {
+    if (!isFirebaseInitialized || fcmTokens.length === 0) return;
+
+    try {
+      await getMessaging().sendEachForMulticast({
+        tokens: fcmTokens,
+        notification: {
+          title: `ℹ️ Safe Walk Ended`,
+          body: `${data.userName} has ended their Safe Walk session.`,
+        },
+        data: {
+          type: "SAFE_WALK_CANCELLED",
+          journeyId: String(data.journeyId),
+          timestamp: new Date().toISOString(),
+        },
+        android: {
+          priority: "normal",
+          notification: {
+            channelId: "safety_alerts",
+            sound: "default",
+          },
+        },
+      });
+    } catch (err) {
+      console.error(
+        "[ERROR] Failed to dispatch Firebase Safe Walk cancelled alert:",
+        err,
+      );
+    }
+  }
 }

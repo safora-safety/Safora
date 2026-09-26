@@ -118,6 +118,7 @@ export function broadcastJourneyStarted(data: {
   walkerName?: string;
   origin?: any;
   destination?: any;
+  plannedRoute?: any;
   guardianUserIds?: (string | number)[];
 }): void {
   if (socketServerInstance) {

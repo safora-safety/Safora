@@ -70,13 +70,16 @@ export class ReportService {
     return ReportModel.fromRow(row);
   }
 
-  static async getReports(limit = 50): Promise<HazardReport[]> {
-    const boundedLimit = Math.min(100, Math.max(1, limit));
-    const cacheKey = `reports_list_${boundedLimit}`;
+  static async getReports(
+    limit = 500,
+    status?: string,
+  ): Promise<HazardReport[]> {
+    const boundedLimit = Math.min(1000, Math.max(1, limit));
+    const cacheKey = `reports_list_${boundedLimit}_${status || "all"}`;
     const cached = MemoryCache.get<HazardReport[]>(cacheKey);
     if (cached) return cached;
 
-    const rows = await ReportRepository.findAll(boundedLimit);
+    const rows = await ReportRepository.findAll(boundedLimit, status);
     const reports = rows.map((r) => ReportModel.fromRow(r));
     MemoryCache.set(cacheKey, reports, 20);
     return reports;
@@ -85,15 +88,21 @@ export class ReportService {
   static async getNearbyReports(
     lat: number,
     lng: number,
-    radiusMeters = 5000,
+    radiusMeters = 50000,
+    limit = 500,
   ): Promise<{ reports: HazardReport[]; source: string }> {
-    const cacheKey = `reports_nearby_${lat.toFixed(3)}_${lng.toFixed(3)}_${radiusMeters}`;
+    const cacheKey = `reports_nearby_${lat.toFixed(3)}_${lng.toFixed(3)}_${radiusMeters}_${limit}`;
     const cached = MemoryCache.get<{ reports: HazardReport[]; source: string }>(
       cacheKey,
     );
     if (cached) return cached;
 
-    const rows = await ReportRepository.findNearby(lat, lng, radiusMeters, 100);
+    const rows = await ReportRepository.findNearby(
+      lat,
+      lng,
+      radiusMeters,
+      limit,
+    );
     const reports = rows.map((r) => ReportModel.fromRow(r));
     const result = { reports, source: "postgis_gist" };
     MemoryCache.set(cacheKey, result, 20);

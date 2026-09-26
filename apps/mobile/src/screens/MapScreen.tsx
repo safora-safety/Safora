@@ -70,6 +70,8 @@ export const MapScreen: React.FC<MapScreenProps> = ({
   const [loading, setLoading] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [showGuestGuardModal, setShowGuestGuardModal] = useState(false);
+  const [pendingSyncCount, setPendingSyncCount] = useState(0);
+  const [isSyncingPending, setIsSyncingPending] = useState(false);
 
   // Multi-Modal Path Routing State (Car, 2-Wheeler, Walk)
   const [activeRoute, setActiveRoute] = useState<{
@@ -149,21 +151,46 @@ export const MapScreen: React.FC<MapScreenProps> = ({
       const userPos = await getCurrentCoordinates();
       setUserLivePos(userPos);
       setCoords(userPos);
-      const data = await ReportService.getNearby(
-        userPos.latitude,
-        userPos.longitude,
-        5000,
-      );
+
+      // Load all active hazard reports across the city and map (no range cutoff)
+      const data = await ReportService.getAll(500);
       setHazards(data);
 
       // Fetch DBSCAN density clusters for heatmap (SYN-2)
       ReportService.getClusters(0.003, 2)
         .then(setClusters)
         .catch(() => {});
+
+      // Check offline reports pending sync
+      ReportService.getPendingCount()
+        .then(setPendingSyncCount)
+        .catch(() => {});
     } catch {
       // Fallback handled inside services
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSyncPending = async () => {
+    setIsSyncingPending(true);
+    try {
+      const res = await ReportService.syncPendingReports();
+      setPendingSyncCount(res.remaining);
+      if (res.synced > 0) {
+        Alert.alert(
+          '✅ Offline Reports Synced',
+          `Successfully uploaded ${res.synced} offline hazard report${res.synced > 1 ? 's' : ''} to community safety map.`,
+        );
+        loadMapData();
+      }
+    } catch {
+      Alert.alert(
+        'Sync Incomplete',
+        'Could not sync all reports. Please check your internet connection.',
+      );
+    } finally {
+      setIsSyncingPending(false);
     }
   };
 
@@ -228,11 +255,8 @@ export const MapScreen: React.FC<MapScreenProps> = ({
 
     setLoading(true);
     try {
-      const data = await ReportService.getNearby(
-        item.latitude,
-        item.longitude,
-        5000,
-      );
+      // Refresh hazards to ensure destination area pins are loaded
+      const data = await ReportService.getAll(500);
       setHazards(data);
     } catch {
       // Silently maintain existing hazards
@@ -523,6 +547,38 @@ export const MapScreen: React.FC<MapScreenProps> = ({
             </View>
           )}
         </View>
+
+        {/* Offline Queued Hazard Reports Sync Banner */}
+        {pendingSyncCount > 0 && (
+          <View style={styles.offlineSyncBanner}>
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 8,
+                flex: 1,
+              }}
+            >
+              <Text style={styles.offlineSyncIcon}>⚠️</Text>
+              <Text style={styles.offlineSyncText} numberOfLines={1}>
+                {pendingSyncCount} hazard report
+                {pendingSyncCount > 1 ? 's' : ''} queued offline
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.offlineSyncBtn}
+              onPress={handleSyncPending}
+              disabled={isSyncingPending}
+              activeOpacity={0.8}
+            >
+              {isSyncingPending ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.offlineSyncBtnText}>Sync Now</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Heatmap Toggle Floating Button (SYN-2) */}
         <TouchableOpacity
@@ -875,7 +931,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
           longitude: coords.longitude,
         }}
         onReportCreated={newRep => {
-          setHazards(prev => [newRep, ...prev]);
+          setHazards(prev => [newRep, ...prev.filter(h => h.id !== newRep.id)]);
           setSelectedHazard(newRep);
         }}
       />
@@ -1342,5 +1398,43 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     textAlign: 'center',
     lineHeight: 15,
+  },
+  offlineSyncBanner: {
+    position: 'absolute',
+    top: 76,
+    left: 16,
+    right: 16,
+    backgroundColor: '#78350F',
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    zIndex: 99,
+  },
+  offlineSyncIcon: { fontSize: 15 },
+  offlineSyncText: {
+    color: '#FEF3C7',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  offlineSyncBtn: {
+    backgroundColor: '#D97706',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  offlineSyncBtnText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
   },
 });
