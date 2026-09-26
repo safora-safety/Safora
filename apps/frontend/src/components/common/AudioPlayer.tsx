@@ -14,6 +14,8 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState('00:00');
   const [duration, setDuration] = useState('00:30');
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [loadError, setLoadError] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
@@ -71,18 +73,6 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
     setProgress(parseFloat(e.target.value));
   };
 
-  if (!audioUrl) {
-    return (
-      <div className="p-3 rounded-xl bg-obsidian-700/40 border border-white/5 text-xs text-gray-400 flex items-center gap-2">
-        <Volume2 className="w-4 h-4 text-gray-500" />
-        <span>No audio evidence attached to this alert.</span>
-      </div>
-    );
-  }
-
-  const [playbackSpeed, setPlaybackSpeed] = useState(1);
-  const [loadError, setLoadError] = useState(false);
-
   const togglePlaybackSpeed = () => {
     if (!audioRef.current) return;
     const speeds = [1, 1.25, 1.5, 2];
@@ -91,6 +81,15 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
     audioRef.current.playbackRate = nextSpeed;
     setPlaybackSpeed(nextSpeed);
   };
+
+  if (!audioUrl) {
+    return (
+      <div className="p-3 rounded-xl bg-obsidian-700/40 border border-white/5 text-xs text-gray-400 flex items-center gap-2">
+        <Volume2 className="w-4 h-4 text-gray-500" />
+        <span>No audio evidence attached to this alert.</span>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 rounded-xl bg-obsidian-700/60 border border-white/10 space-y-3">

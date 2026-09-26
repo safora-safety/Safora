@@ -6,7 +6,7 @@ import { UserRepository } from "../repositories/userRepository";
 import { SosRepository } from "../repositories/sosRepository";
 import { WatchdogService } from "./watchdogService";
 import { FirebaseService } from "./firebaseService";
-import { pool } from "../config/database";
+import { db } from "../config/database";
 import {
   broadcastJourneyLocation,
   broadcastJourneyStarted,
@@ -112,17 +112,19 @@ export class JourneyService {
     });
 
     // Dispatch background FCM push to all guardian devices (Device B wake-up)
-    JourneyService.resolveGuardianFcmTokens(data.userId, guardianUserIds)
-      .then((tokens) => {
-        if (tokens.length > 0) {
-          FirebaseService.sendSafeWalkStartedAlert(tokens, {
-            journeyId: Number(row.id),
-            userName: walker?.name || "Companion Walker",
-            destinationName: undefined,
-          }).catch(() => {});
-        }
-      })
-      .catch(() => {});
+    if (process.env.NODE_ENV !== "test" && !process.env.JEST_WORKER_ID) {
+      JourneyService.resolveGuardianFcmTokens(data.userId, guardianUserIds)
+        .then((tokens) => {
+          if (tokens.length > 0) {
+            FirebaseService.sendSafeWalkStartedAlert(tokens, {
+              journeyId: Number(row.id),
+              userName: walker?.name || "Companion Walker",
+              destinationName: undefined,
+            }).catch(() => {});
+          }
+        })
+        .catch(() => {});
+    }
 
     return JourneyModel.fromRow(row);
   }
@@ -142,10 +144,13 @@ export class JourneyService {
     userId: string | number,
     guardianUserIds?: (string | number)[],
   ): Promise<string[]> {
+    if (process.env.NODE_ENV === "test" || process.env.JEST_WORKER_ID) {
+      return [];
+    }
     const tokens: string[] = [];
     try {
       if (guardianUserIds && guardianUserIds.length > 0) {
-        const { rows } = await pool.query(
+        const { rows } = await db.query(
           `SELECT id, fcm_token FROM users WHERE id = ANY($1) AND fcm_token IS NOT NULL;`,
           [guardianUserIds.map((id) => Number(id))],
         );
@@ -164,7 +169,7 @@ export class JourneyService {
         .filter((p: string) => p.length === 10);
 
       if (normalizedPhones.length > 0) {
-        const { rows } = await pool.query(
+        const { rows } = await db.query(
           `SELECT id, fcm_token FROM users WHERE RIGHT(REGEXP_REPLACE(phone, '[^0-9]', '', 'g'), 10) = ANY($1) AND fcm_token IS NOT NULL;`,
           [normalizedPhones],
         );
@@ -322,22 +327,24 @@ export class JourneyService {
         WatchdogService.setDeviated(jId, now);
 
         // Dispatch background FCM push to all guardian devices (Deviation Warning)
-        JourneyService.resolveGuardianFcmTokens(
-          row.user_id,
-          row.trusted_contact_ids,
-        )
-          .then((tokens) => {
-            if (tokens.length > 0) {
-              FirebaseService.sendSafeWalkDeviationAlert(tokens, {
-                journeyId: jId,
-                userName: walker?.name || "Companion Walker",
-                deviationMeters,
-                latitude: coords.latitude,
-                longitude: coords.longitude,
-              }).catch(() => {});
-            }
-          })
-          .catch(() => {});
+        if (process.env.NODE_ENV !== "test" && !process.env.JEST_WORKER_ID) {
+          JourneyService.resolveGuardianFcmTokens(
+            row.user_id,
+            row.trusted_contact_ids,
+          )
+            .then((tokens) => {
+              if (tokens.length > 0) {
+                FirebaseService.sendSafeWalkDeviationAlert(tokens, {
+                  journeyId: jId,
+                  userName: walker?.name || "Companion Walker",
+                  deviationMeters,
+                  latitude: coords.latitude,
+                  longitude: coords.longitude,
+                }).catch(() => {});
+              }
+            })
+            .catch(() => {});
+        }
       }
     } else {
       if (row.status === "deviated") {
@@ -407,23 +414,25 @@ export class JourneyService {
     });
 
     // Dispatch background FCM push to all guardian devices (Safe Arrival Confirmed)
-    UserRepository.findById(row.user_id)
-      .then((walker) => {
-        JourneyService.resolveGuardianFcmTokens(
-          row.user_id,
-          row.trusted_contact_ids,
-        )
-          .then((tokens) => {
-            if (tokens.length > 0) {
-              FirebaseService.sendSafeWalkArrivalAlert(tokens, {
-                journeyId,
-                userName: walker?.name || "Companion Walker",
-              }).catch(() => {});
-            }
-          })
-          .catch(() => {});
-      })
-      .catch(() => {});
+    if (process.env.NODE_ENV !== "test" && !process.env.JEST_WORKER_ID) {
+      UserRepository.findById(row.user_id)
+        .then((walker) => {
+          JourneyService.resolveGuardianFcmTokens(
+            row.user_id,
+            row.trusted_contact_ids,
+          )
+            .then((tokens) => {
+              if (tokens.length > 0) {
+                FirebaseService.sendSafeWalkArrivalAlert(tokens, {
+                  journeyId,
+                  userName: walker?.name || "Companion Walker",
+                }).catch(() => {});
+              }
+            })
+            .catch(() => {});
+        })
+        .catch(() => {});
+    }
   }
 
   static async cancelJourney(
@@ -462,23 +471,25 @@ export class JourneyService {
     });
 
     // Dispatch background FCM push to all guardian devices (Safe Walk Ended)
-    UserRepository.findById(row.user_id)
-      .then((walker) => {
-        JourneyService.resolveGuardianFcmTokens(
-          row.user_id,
-          row.trusted_contact_ids,
-        )
-          .then((tokens) => {
-            if (tokens.length > 0) {
-              FirebaseService.sendSafeWalkCancelledAlert(tokens, {
-                journeyId,
-                userName: walker?.name || "Companion Walker",
-              }).catch(() => {});
-            }
-          })
-          .catch(() => {});
-      })
-      .catch(() => {});
+    if (process.env.NODE_ENV !== "test" && !process.env.JEST_WORKER_ID) {
+      UserRepository.findById(row.user_id)
+        .then((walker) => {
+          JourneyService.resolveGuardianFcmTokens(
+            row.user_id,
+            row.trusted_contact_ids,
+          )
+            .then((tokens) => {
+              if (tokens.length > 0) {
+                FirebaseService.sendSafeWalkCancelledAlert(tokens, {
+                  journeyId,
+                  userName: walker?.name || "Companion Walker",
+                }).catch(() => {});
+              }
+            })
+            .catch(() => {});
+        })
+        .catch(() => {});
+    }
   }
 
   static async confirmSafe(
