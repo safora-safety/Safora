@@ -10,6 +10,9 @@ import {
   deleteContact,
   checkGuardian,
   testGuardian,
+  getPendingGuardianRequests,
+  getWardsForGuardian,
+  respondToGuardianRequest,
 } from "../controllers/sosController";
 import { authMiddleware, requireStaff } from "../middleware/auth";
 import { validateBody } from "../middleware/validate";
@@ -84,6 +87,11 @@ router.post(
   validateBody(testGuardianSchema),
   testGuardian,
 );
+
+// Guardian Handshake & Escalation
+router.get("/guardians/pending", getPendingGuardianRequests);
+router.get("/guardians/wards", getWardsForGuardian);
+router.post("/guardians/requests/:id/respond", respondToGuardianRequest);
 
 // Trusted Contacts
 router.get("/contacts", getContacts);

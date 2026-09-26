@@ -67,6 +67,24 @@ export function onJourneyLocation(cb: (payload: any) => void): () => void {
   };
 }
 
+export function onJourneyStart(cb: (payload: any) => void): () => void {
+  if (!socket) return () => {};
+
+  socket.on('journey:start', cb);
+  return () => {
+    socket?.off('journey:start', cb);
+  };
+}
+
+export function onJourneyEnded(cb: (payload: any) => void): () => void {
+  if (!socket) return () => {};
+
+  socket.on('journey:ended', cb);
+  return () => {
+    socket?.off('journey:ended', cb);
+  };
+}
+
 export function onSosAlert(cb: (payload: any) => void): () => void {
   if (!socket) return () => {};
 

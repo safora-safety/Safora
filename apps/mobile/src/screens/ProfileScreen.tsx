@@ -28,6 +28,8 @@ interface Contact {
   phone: string;
   email?: string;
   hasSaforaAccount?: boolean;
+  status?: 'pending' | 'accepted' | 'declined';
+  guardianUserId?: string | number | null;
   isHelpline?: boolean;
 }
 
@@ -82,21 +84,44 @@ export const ProfileScreen: React.FC = () => {
   );
   const [customContacts, setCustomContacts] = useState<Contact[]>([]);
   const [unreadNotifications, setUnreadNotifications] = useState<number>(0);
+  const [activeGuardianTab, setActiveGuardianTab] = useState<
+    'guardians' | 'escorting'
+  >('guardians');
+  const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+  const [escortWards, setEscortWards] = useState<any[]>([]);
+  const [isRespondingRequest, setIsRespondingRequest] = useState<
+    string | number | null
+  >(null);
+
+  const fetchHandshakeData = async () => {
+    if (isGuest || !user) return;
+    try {
+      const [reqs, wards] = await Promise.all([
+        SosService.getPendingRequests(),
+        SosService.getWards(),
+      ]);
+      setPendingRequests(reqs);
+      setEscortWards(wards);
+    } catch {}
+  };
 
   const onRefresh = async () => {
     setRefreshing(true);
     try {
       const notifs = await SosService.getNotifications();
       setUnreadNotifications(notifs.filter(n => !n.isRead).length);
+      await fetchHandshakeData();
       if (!isGuest && user) {
         const dbContacts = await SosService.getContacts();
         if (dbContacts.length > 0) {
-          const mapped = dbContacts.map(c => ({
+          const mapped: Contact[] = dbContacts.map(c => ({
             id: String(c.id),
             name: c.name,
             phone: c.phone,
             email: c.email,
             hasSaforaAccount: c.hasSaforaAccount,
+            status: c.status,
+            guardianUserId: c.guardianUserId,
             relationship: c.relationship || 'Guardian',
             isHelpline: false,
           }));
@@ -151,6 +176,7 @@ export const ProfileScreen: React.FC = () => {
       // If logged in, sync with PostgreSQL database
       if (!isGuest && user) {
         try {
+          fetchHandshakeData();
           const dbContacts = await SosService.getContacts();
           const userOnly = dbContacts.filter(
             c =>
@@ -164,6 +190,8 @@ export const ProfileScreen: React.FC = () => {
               phone: c.phone,
               email: c.email,
               hasSaforaAccount: c.hasSaforaAccount,
+              status: c.status,
+              guardianUserId: c.guardianUserId,
               relationship: c.relationship || 'Guardian',
               isHelpline: false,
             }));
@@ -188,6 +216,35 @@ export const ProfileScreen: React.FC = () => {
       await AsyncStorage.setItem(CONTACTS_STORAGE_KEY, JSON.stringify(updated));
     } catch {
       // Ignore storage error
+    }
+  };
+
+  const handleRespondRequest = async (
+    requestId: string | number,
+    action: 'accept' | 'decline',
+    wardName: string,
+  ) => {
+    setIsRespondingRequest(requestId);
+    try {
+      const success = await SosService.respondToRequest(requestId, action);
+      if (success) {
+        Alert.alert(
+          action === 'accept'
+            ? '🛡️ Guardian Request Accepted'
+            : 'Request Declined',
+          action === 'accept'
+            ? `You are now an active Safety Guardian for ${wardName}. You will receive their live Safe Walk escorts and emergency alerts.`
+            : `Guardian request from ${wardName} was declined.`,
+        );
+        fetchHandshakeData();
+      }
+    } catch {
+      Alert.alert(
+        'Error',
+        'Failed to update request. Please check connection.',
+      );
+    } finally {
+      setIsRespondingRequest(null);
     }
   };
 
@@ -678,154 +735,410 @@ export const ProfileScreen: React.FC = () => {
           </View>
         )}
 
-        {/* Custom Emergency Family & Friends Contacts */}
+        {/* Custom Emergency Family & Friends Contacts Header */}
         <View style={styles.sectionHeader}>
           <View style={styles.sectionTitleWrap}>
             <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-              Family & Personal Guardians
+              Safety Guardians & Escort Network
             </Text>
             <Text style={[styles.sectionSub, { color: colors.textSecondary }]}>
-              Will receive instant push notifications, live GPS, and SMS alerts
+              Two-way safety network for live walk tracking & emergency alerts
             </Text>
           </View>
+          {activeGuardianTab === 'guardians' && (
+            <TouchableOpacity
+              onPress={handleOpenAddModal}
+              style={[styles.addBtn, { backgroundColor: colors.primary }]}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.addBtnText}>+ Add Contact</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Guardian Tabs: My Guardians vs People I Escort */}
+        <View style={styles.guardianTabsRow}>
           <TouchableOpacity
-            onPress={handleOpenAddModal}
-            style={[styles.addBtn, { backgroundColor: colors.primary }]}
+            style={[
+              styles.guardianTabBtn,
+              activeGuardianTab === 'guardians' && styles.guardianTabBtnActive,
+            ]}
+            onPress={() => setActiveGuardianTab('guardians')}
             activeOpacity={0.8}
           >
-            <Text style={styles.addBtnText}>+ Add Contact</Text>
+            <Text
+              style={[
+                styles.guardianTabBtnText,
+                activeGuardianTab === 'guardians' &&
+                  styles.guardianTabBtnTextActive,
+              ]}
+            >
+              My Guardians ({customContacts.length})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.guardianTabBtn,
+              activeGuardianTab === 'escorting' && styles.guardianTabBtnActive,
+            ]}
+            onPress={() => setActiveGuardianTab('escorting')}
+            activeOpacity={0.8}
+          >
+            <Text
+              style={[
+                styles.guardianTabBtnText,
+                activeGuardianTab === 'escorting' &&
+                  styles.guardianTabBtnTextActive,
+              ]}
+            >
+              People I Escort{' '}
+              {pendingRequests.length > 0
+                ? `(${pendingRequests.length} Pending)`
+                : `(${escortWards.length})`}
+            </Text>
           </TouchableOpacity>
         </View>
 
-        {customContacts.length === 0 ? (
-          <View
-            style={[
-              styles.emptyCard,
-              {
-                backgroundColor: colors.backgroundCard,
-                borderColor: colors.border,
-              },
-            ]}
-          >
-            <Text style={styles.emptyEmoji}>👥</Text>
-            <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
-              No Personal Guardians Added Yet
-            </Text>
-            <Text style={[styles.emptySub, { color: colors.textSecondary }]}>
-              Add trusted family members or friends who should be notified when
-              you trigger SOS or Safe Walk alerts.
-            </Text>
-            <TouchableOpacity
-              style={[styles.addFirstBtn, { backgroundColor: colors.primary }]}
-              onPress={handleOpenAddModal}
-            >
-              <Text style={styles.addFirstBtnText}>+ Add First Guardian</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={styles.contactsList}>
-            {customContacts.map(contact => (
+        {/* TAB 1: My Guardians */}
+        {activeGuardianTab === 'guardians' && (
+          <>
+            {customContacts.length === 0 ? (
               <View
-                key={contact.id}
                 style={[
-                  styles.contactItem,
+                  styles.emptyCard,
                   {
                     backgroundColor: colors.backgroundCard,
                     borderColor: colors.border,
                   },
                 ]}
               >
-                <View
+                <Text style={styles.emptyEmoji}>👥</Text>
+                <Text
+                  style={[styles.emptyTitle, { color: colors.textPrimary }]}
+                >
+                  No Personal Guardians Added Yet
+                </Text>
+                <Text
+                  style={[styles.emptySub, { color: colors.textSecondary }]}
+                >
+                  Add trusted family members or friends who should be notified
+                  when you trigger SOS or Safe Walk alerts.
+                </Text>
+                <TouchableOpacity
                   style={[
-                    styles.contactIconCircle,
-                    { backgroundColor: 'rgba(56, 189, 248, 0.12)' },
+                    styles.addFirstBtn,
+                    { backgroundColor: colors.primary },
+                  ]}
+                  onPress={handleOpenAddModal}
+                >
+                  <Text style={styles.addFirstBtnText}>
+                    + Add First Guardian
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.contactsList}>
+                {customContacts.map(contact => (
+                  <View
+                    key={contact.id}
+                    style={[
+                      styles.contactItem,
+                      {
+                        backgroundColor: colors.backgroundCard,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.contactIconCircle,
+                        { backgroundColor: 'rgba(56, 189, 248, 0.12)' },
+                      ]}
+                    >
+                      <Text style={styles.contactIcon}>👥</Text>
+                    </View>
+
+                    <View style={styles.contactDetails}>
+                      <Text
+                        style={[
+                          styles.contactName,
+                          { color: colors.textPrimary },
+                        ]}
+                      >
+                        {contact.name}
+                      </Text>
+                      <Text
+                        style={[styles.contactRel, { color: colors.textMuted }]}
+                      >
+                        {contact.relationship}
+                      </Text>
+                      <Text
+                        style={[styles.contactPhone, { color: colors.primary }]}
+                      >
+                        {contact.phone}
+                      </Text>
+                      {contact.email ? (
+                        <Text
+                          style={[
+                            styles.contactEmail,
+                            { color: colors.textSecondary },
+                          ]}
+                        >
+                          ✉️ {contact.email}
+                        </Text>
+                      ) : null}
+
+                      {/* Safora App Registration & Acceptance Status Badge */}
+                      <View style={styles.badgeRow}>
+                        {contact.status === 'pending' ? (
+                          <View style={styles.badgePending}>
+                            <Text style={styles.badgePendingText}>
+                              ⏳ Request Pending Guardian Acceptance
+                            </Text>
+                          </View>
+                        ) : contact.hasSaforaAccount ? (
+                          <View style={styles.badgeSaforaActive}>
+                            <Text style={styles.badgeSaforaActiveText}>
+                              🟢 Accepted Guardian (Live Escort Active)
+                            </Text>
+                          </View>
+                        ) : (
+                          <View style={styles.badgeSmsOnly}>
+                            <Text style={styles.badgeSmsOnlyText}>
+                              📱 Direct Cellular SMS
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+
+                    {/* Edit, Delete & Test Actions */}
+                    <View style={styles.contactActionsCol}>
+                      <TouchableOpacity
+                        style={styles.actionPill}
+                        onPress={() => handleOpenEditModal(contact)}
+                      >
+                        <Text style={styles.actionPillText}>✏️ Edit</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[styles.actionPill, styles.deletePill]}
+                        onPress={() => handleDeleteContact(contact)}
+                      >
+                        <Text
+                          style={[styles.actionPillText, { color: '#EF4444' }]}
+                        >
+                          🗑️ Delete
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[
+                          styles.testBtn,
+                          contact.hasSaforaAccount && styles.testBtnSafora,
+                        ]}
+                        onPress={() => testAlert(contact)}
+                      >
+                        <Text
+                          style={[
+                            styles.testBtnText,
+                            contact.hasSaforaAccount &&
+                              styles.testBtnSaforaText,
+                          ]}
+                        >
+                          {contact.hasSaforaAccount
+                            ? '🔔 Test Drill'
+                            : 'Test SOS'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+          </>
+        )}
+
+        {/* TAB 2: People I Escort */}
+        {activeGuardianTab === 'escorting' && (
+          <View style={styles.contactsList}>
+            {/* Pending Incoming Requests */}
+            {pendingRequests.length > 0 && (
+              <View style={styles.pendingSection}>
+                <Text
+                  style={[
+                    styles.subSectionTitle,
+                    { color: colors.textPrimary },
                   ]}
                 >
-                  <Text style={styles.contactIcon}>👥</Text>
-                </View>
-
-                <View style={styles.contactDetails}>
-                  <Text
-                    style={[styles.contactName, { color: colors.textPrimary }]}
-                  >
-                    {contact.name}
-                  </Text>
-                  <Text
-                    style={[styles.contactRel, { color: colors.textMuted }]}
-                  >
-                    {contact.relationship}
-                  </Text>
-                  <Text
-                    style={[styles.contactPhone, { color: colors.primary }]}
-                  >
-                    {contact.phone}
-                  </Text>
-                  {contact.email ? (
-                    <Text
-                      style={[
-                        styles.contactEmail,
-                        { color: colors.textSecondary },
-                      ]}
-                    >
-                      ✉️ {contact.email}
-                    </Text>
-                  ) : null}
-
-                  {/* Safora App Registration Status Badge */}
-                  <View style={styles.badgeRow}>
-                    {contact.hasSaforaAccount ? (
-                      <View style={styles.badgeSaforaActive}>
-                        <Text style={styles.badgeSaforaActiveText}>
-                          🟢 Safora Member (Instant Push Alerts)
-                        </Text>
-                      </View>
-                    ) : (
-                      <View style={styles.badgeSmsOnly}>
-                        <Text style={styles.badgeSmsOnlyText}>
-                          📱 Direct Cellular SMS
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-
-                {/* Edit, Delete & Test Actions */}
-                <View style={styles.contactActionsCol}>
-                  <TouchableOpacity
-                    style={styles.actionPill}
-                    onPress={() => handleOpenEditModal(contact)}
-                  >
-                    <Text style={styles.actionPillText}>✏️ Edit</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.actionPill, styles.deletePill]}
-                    onPress={() => handleDeleteContact(contact)}
-                  >
-                    <Text style={[styles.actionPillText, { color: '#EF4444' }]}>
-                      🗑️ Delete
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
+                  Incoming Guardian Requests ({pendingRequests.length})
+                </Text>
+                {pendingRequests.map(req => (
+                  <View
+                    key={String(req.id)}
                     style={[
-                      styles.testBtn,
-                      contact.hasSaforaAccount && styles.testBtnSafora,
+                      styles.pendingRequestCard,
+                      {
+                        backgroundColor: colors.backgroundCard,
+                        borderColor: '#F59E0B',
+                      },
                     ]}
-                    onPress={() => testAlert(contact)}
                   >
-                    <Text
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[
+                          styles.contactName,
+                          { color: colors.textPrimary },
+                        ]}
+                      >
+                        {req.ward_name}
+                      </Text>
+                      <Text
+                        style={[styles.contactRel, { color: colors.textMuted }]}
+                      >
+                        Role: {req.relationship || 'Guardian'}
+                      </Text>
+                      <Text
+                        style={[styles.contactPhone, { color: colors.primary }]}
+                      >
+                        {req.ward_phone || req.ward_email}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.pendingCardNotice,
+                          { color: colors.textSecondary },
+                        ]}
+                      >
+                        Wants you as their Safety Guardian for live Safe Walk
+                        escorts & emergency SOS alerts.
+                      </Text>
+                    </View>
+
+                    <View style={styles.requestActionsRow}>
+                      <TouchableOpacity
+                        style={[
+                          styles.respondBtn,
+                          styles.acceptBtn,
+                          isRespondingRequest === req.id && { opacity: 0.5 },
+                        ]}
+                        onPress={() =>
+                          handleRespondRequest(req.id, 'accept', req.ward_name)
+                        }
+                        disabled={isRespondingRequest === req.id}
+                      >
+                        <Text style={styles.acceptBtnText}>✓ Accept</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[
+                          styles.respondBtn,
+                          styles.declineBtn,
+                          isRespondingRequest === req.id && { opacity: 0.5 },
+                        ]}
+                        onPress={() =>
+                          handleRespondRequest(req.id, 'decline', req.ward_name)
+                        }
+                        disabled={isRespondingRequest === req.id}
+                      >
+                        <Text style={styles.declineBtnText}>✕ Decline</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Confirmed Wards */}
+            {escortWards.length > 0 ? (
+              <View style={{ gap: 10 }}>
+                {pendingRequests.length > 0 && (
+                  <Text
+                    style={[
+                      styles.subSectionTitle,
+                      { color: colors.textPrimary, marginTop: 10 },
+                    ]}
+                  >
+                    Active Escort Network ({escortWards.length})
+                  </Text>
+                )}
+                {escortWards.map(ward => (
+                  <View
+                    key={String(ward.id)}
+                    style={[
+                      styles.contactItem,
+                      {
+                        backgroundColor: colors.backgroundCard,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                  >
+                    <View
                       style={[
-                        styles.testBtnText,
-                        contact.hasSaforaAccount && styles.testBtnSaforaText,
+                        styles.contactIconCircle,
+                        { backgroundColor: 'rgba(16, 185, 129, 0.12)' },
                       ]}
                     >
-                      {contact.hasSaforaAccount ? '🔔 Test Drill' : 'Test SOS'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
+                      <Text style={styles.contactIcon}>🛡️</Text>
+                    </View>
+
+                    <View style={styles.contactDetails}>
+                      <Text
+                        style={[
+                          styles.contactName,
+                          { color: colors.textPrimary },
+                        ]}
+                      >
+                        {ward.ward_name}
+                      </Text>
+                      <Text
+                        style={[styles.contactRel, { color: colors.textMuted }]}
+                      >
+                        Relationship: {ward.relationship || 'Ward'}
+                      </Text>
+                      <Text
+                        style={[styles.contactPhone, { color: colors.primary }]}
+                      >
+                        {ward.ward_phone || ward.ward_email}
+                      </Text>
+                      <View style={styles.badgeRow}>
+                        <View style={styles.badgeSaforaActive}>
+                          <Text style={styles.badgeSaforaActiveText}>
+                            🟢 Active Ward (You Receive Live Escorts)
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+                ))}
               </View>
-            ))}
+            ) : (
+              pendingRequests.length === 0 && (
+                <View
+                  style={[
+                    styles.emptyCard,
+                    {
+                      backgroundColor: colors.backgroundCard,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
+                  <Text style={styles.emptyEmoji}>🛡️</Text>
+                  <Text
+                    style={[styles.emptyTitle, { color: colors.textPrimary }]}
+                  >
+                    No Active Wards
+                  </Text>
+                  <Text
+                    style={[styles.emptySub, { color: colors.textSecondary }]}
+                  >
+                    When family members or friends add you as their Safety
+                    Guardian on Safora, their requests will appear here for your
+                    approval.
+                  </Text>
+                </View>
+              )
+            )}
           </View>
         )}
 
@@ -1327,4 +1640,98 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   logoutBtnText: { color: '#EF4444', fontWeight: '800', fontSize: 13 },
+
+  // Guardian Handshake Subtabs & Cards
+  guardianTabsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 6,
+  },
+  guardianTabBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  guardianTabBtnActive: {
+    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+    borderColor: '#38BDF8',
+  },
+  guardianTabBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#94A3B8',
+  },
+  guardianTabBtnTextActive: {
+    color: '#38BDF8',
+    fontWeight: '800',
+  },
+  badgePending: {
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.35)',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  badgePendingText: {
+    color: '#F59E0B',
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  pendingSection: {
+    gap: 8,
+    marginBottom: 10,
+  },
+  subSectionTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  pendingRequestCard: {
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    gap: 10,
+  },
+  pendingCardNotice: {
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 4,
+  },
+  requestActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'flex-end',
+  },
+  respondBtn: {
+    paddingVertical: 7,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  acceptBtn: {
+    backgroundColor: '#10B981',
+  },
+  acceptBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  declineBtn: {
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+  },
+  declineBtnText: {
+    color: '#EF4444',
+    fontSize: 12,
+    fontWeight: '700',
+  },
 });

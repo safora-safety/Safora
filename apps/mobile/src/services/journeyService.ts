@@ -99,4 +99,29 @@ export class JourneyService {
       console.warn('[JourneyService] confirmSafe failed:', err);
     }
   }
+
+  /**
+   * Fetch active escorting journey for current user (as a guardian)
+   */
+  static async getActiveEscort(): Promise<any | null> {
+    try {
+      const res = await apiClient.get<
+        ApiResponse<{ escort: any }> & { escort: any }
+      >('/journeys/escorting');
+      return res.data.escort ?? (res.data as any).data?.escort ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Delete a journey session
+   */
+  static async deleteJourney(journeyId: string | number): Promise<void> {
+    try {
+      await apiClient.delete(`/journeys/${journeyId}`);
+    } catch {
+      // Offline fallback
+    }
+  }
 }

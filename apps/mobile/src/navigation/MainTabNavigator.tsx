@@ -114,8 +114,44 @@ export const MainTabNavigator: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      {/* Screen Container */}
-      <View style={styles.screenArea}>{renderActiveScreen()}</View>
+      {/* Screen Container with preserved screen state */}
+      <View style={styles.screenArea}>
+        <View
+          style={[
+            styles.screenWrapper,
+            activeTab === 'Home' ? styles.visible : styles.hidden,
+          ]}
+        >
+          <HomeScreen onNavigateTab={tab => handleNavigateTab(tab)} />
+        </View>
+
+        <View
+          style={[
+            styles.screenWrapper,
+            activeTab === 'Map' ? styles.visible : styles.hidden,
+          ]}
+        >
+          <MapScreen onNavigateTab={handleNavigateTab} />
+        </View>
+
+        <View
+          style={[
+            styles.screenWrapper,
+            activeTab === 'SafeWalk' ? styles.visible : styles.hidden,
+          ]}
+        >
+          <SafeWalkScreen initialDestination={safeWalkDestination} />
+        </View>
+
+        <View
+          style={[
+            styles.screenWrapper,
+            activeTab === 'Profile' ? styles.visible : styles.hidden,
+          ]}
+        >
+          <ProfileScreen />
+        </View>
+      </View>
 
       {/* Sleek Bottom Navigation Bar */}
       <View style={styles.bottomTabBar}>
@@ -150,6 +186,15 @@ const styles = StyleSheet.create({
   },
   screenArea: {
     flex: 1,
+  },
+  screenWrapper: {
+    flex: 1,
+  },
+  visible: {
+    display: 'flex',
+  },
+  hidden: {
+    display: 'none',
   },
   bottomTabBar: {
     flexDirection: 'row',

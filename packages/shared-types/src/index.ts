@@ -67,6 +67,8 @@ export interface TrustedContact {
   phone: string;
   email?: string;
   hasSaforaAccount?: boolean;
+  status?: 'pending' | 'accepted' | 'declined';
+  guardianUserId?: string | number | null;
   relationship?: string;
   createdAt?: string;
 }

@@ -27,7 +27,12 @@ import { FakeCallModal } from '../components/FakeCallModal';
 import { CalculatorDecoyModal } from '../components/CalculatorDecoyModal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AudioRecorderService } from '../services/audioRecorderService';
-import { onJourneyLocation } from '../services/socketService';
+import { JourneyService } from '../services/journeyService';
+import {
+  onJourneyLocation,
+  onJourneyStart,
+  onJourneyEnded,
+} from '../services/socketService';
 import { navigationRef } from '../navigation/RootNavigator';
 
 interface HomeScreenProps {
@@ -62,9 +67,32 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [isSirenActive, setIsSirenActive] = useState(false);
 
+  const checkActiveEscort = async () => {
+    if (isGuest || !user) return;
+    try {
+      const escort = await JourneyService.getActiveEscort();
+      if (escort && escort.id) {
+        setActiveTrackedWalker({
+          journeyId: escort.id,
+          walkerName: escort.walkerName || `Walker #${escort.userId}`,
+          latitude: Number(escort.currentLocation.latitude),
+          longitude: Number(escort.currentLocation.longitude),
+          deviated: escort.status === 'deviated',
+          lastSeen: new Date(escort.lastSeenAt || escort.startedAt),
+        });
+      } else {
+        setActiveTrackedWalker(null);
+      }
+    } catch {
+      // Offline fallback
+    }
+  };
+
   // Realtime guardian tracking listener (SYN-4)
   useEffect(() => {
-    const unsub = onJourneyLocation((payload: any) => {
+    checkActiveEscort();
+
+    const unsubLoc = onJourneyLocation((payload: any) => {
       if (!payload || !payload.latitude || !payload.longitude) return;
       if (payload.walkerName) {
         setActiveTrackedWalker({
@@ -77,8 +105,30 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
         });
       }
     });
-    return () => unsub();
-  }, []);
+
+    const unsubStart = onJourneyStart(() => {
+      checkActiveEscort();
+    });
+
+    const unsubEnd = onJourneyEnded((payload: any) => {
+      setActiveTrackedWalker(prev => {
+        if (!prev) return null;
+        if (
+          !payload?.journeyId ||
+          String(prev.journeyId) === String(payload.journeyId)
+        ) {
+          return null;
+        }
+        return prev;
+      });
+    });
+
+    return () => {
+      unsubLoc();
+      unsubStart();
+      unsubEnd();
+    };
+  }, [user, isGuest]);
 
   const loadSafetyScore = (lat: number, lng: number) => {
     setScoreStatus('loading');
@@ -102,6 +152,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
       const c = await getCurrentCoordinates();
       setCoords(c);
       loadSafetyScore(c.latitude, c.longitude);
+      await checkActiveEscort();
     } catch {
     } finally {
       setRefreshing(false);

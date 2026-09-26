@@ -7,6 +7,8 @@ import {
   confirmSafe,
   getActiveJourneys,
   getAllJourneys,
+  getActiveEscort,
+  deleteJourney,
 } from "../controllers/journeyController";
 import { authMiddleware, requireStaff } from "../middleware/auth";
 import { validateBody } from "../middleware/validate";
@@ -19,6 +21,7 @@ const router = Router();
 
 router.use(authMiddleware as any);
 
+router.get("/escorting", getActiveEscort);
 router.get("/active", requireStaff as any, getActiveJourneys);
 router.get("/", requireStaff as any, getAllJourneys);
 router.post("/start", validateBody(startJourneySchema), startJourney);
@@ -30,5 +33,6 @@ router.patch(
 router.post("/:id/confirm-safe", confirmSafe);
 router.patch("/:id/complete", completeJourney);
 router.patch("/:id/cancel", cancelJourney);
+router.delete("/:id", deleteJourney);
 
 export default router;
