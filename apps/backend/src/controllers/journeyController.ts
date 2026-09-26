@@ -234,3 +234,41 @@ export async function cancelJourney(
     next(err);
   }
 }
+
+export async function getActiveEscort(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (!req.user) throw new AppError("Unauthorized", 401);
+    const escort = await JourneyService.getActiveEscortForGuardian(req.user.id);
+    res.status(200).json({
+      success: true,
+      escort,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function deleteJourney(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (!req.user) throw new AppError("Unauthorized", 401);
+    await JourneyService.deleteJourney(
+      req.params.id as string,
+      req.user.id,
+      req.user.role,
+    );
+    res.status(200).json({
+      success: true,
+      message: "Journey deleted",
+    });
+  } catch (err) {
+    next(err);
+  }
+}

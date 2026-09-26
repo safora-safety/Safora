@@ -2,6 +2,7 @@ import { db } from "../config/database";
 import { SosAlertRow } from "../models/SosAlert";
 import { TrustedContactRow } from "../models/TrustedContact";
 import { NotificationRow } from "../models/Notification";
+import { UserRepository } from "./userRepository";
 
 export interface CreateAlertData {
   userId: string | number;
@@ -53,6 +54,52 @@ export class SosRepository {
     return result.rows;
   }
 
+  static async findPendingRequestsForGuardian(
+    guardianUserId: string | number,
+  ): Promise<any[]> {
+    const result = await db.query(
+      `SELECT tc.id, tc.user_id as ward_user_id, tc.relationship, tc.created_at, tc.status,
+              u.name as ward_name, u.email as ward_email, u.phone as ward_phone
+       FROM trusted_contacts tc
+       JOIN users u ON tc.user_id = u.id
+       WHERE tc.guardian_user_id = $1 AND tc.status = 'pending'
+       ORDER BY tc.created_at DESC;`,
+      [guardianUserId],
+    );
+    return result.rows;
+  }
+
+  static async findWardsForGuardian(
+    guardianUserId: string | number,
+  ): Promise<any[]> {
+    const result = await db.query(
+      `SELECT tc.id, tc.user_id as ward_user_id, tc.relationship, tc.created_at, tc.status,
+              u.name as ward_name, u.email as ward_email, u.phone as ward_phone
+       FROM trusted_contacts tc
+       JOIN users u ON tc.user_id = u.id
+       WHERE tc.guardian_user_id = $1 AND tc.status = 'accepted'
+       ORDER BY tc.created_at DESC;`,
+      [guardianUserId],
+    );
+    return result.rows;
+  }
+
+  static async respondToGuardianRequest(
+    contactId: string | number,
+    guardianUserId: string | number,
+    action: "accept" | "decline",
+  ): Promise<TrustedContactRow | null> {
+    const status = action === "accept" ? "accepted" : "declined";
+    const result = await db.query(
+      `UPDATE trusted_contacts
+       SET status = $1
+       WHERE id = $2 AND guardian_user_id = $3
+       RETURNING *;`,
+      [status, contactId, guardianUserId],
+    );
+    return result.rows[0] || null;
+  }
+
   static async addContact(
     userId: string | number,
     data: {
@@ -62,18 +109,50 @@ export class SosRepository {
       relationship?: string;
     },
   ): Promise<TrustedContactRow> {
+    const targetEmail = data.email?.trim().toLowerCase();
+    const targetPhone = data.phone.trim();
+    let guardianUser: any = null;
+
+    if (targetEmail) {
+      guardianUser = await this.findUserByEmail(targetEmail);
+    }
+    if (!guardianUser && targetPhone) {
+      guardianUser = await this.findUserByPhone(targetPhone);
+    }
+
+    const status = guardianUser ? "pending" : "accepted";
+    const guardianUserId = guardianUser ? guardianUser.id : null;
+
     const result = await db.query(
-      `INSERT INTO trusted_contacts (user_id, name, phone, email, relationship)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO trusted_contacts (user_id, name, phone, email, relationship, status, guardian_user_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *;`,
       [
         userId,
         data.name.trim(),
-        data.phone.trim(),
-        data.email?.trim().toLowerCase() || null,
+        targetPhone,
+        targetEmail || null,
         data.relationship || null,
+        status,
+        guardianUserId,
       ],
     );
+
+    // If guardianUser is on Safora, notify them immediately
+    if (guardianUser) {
+      const sender = await UserRepository.findById(userId);
+      const senderName = sender?.name || "A family member";
+      await this.createNotification({
+        userId: guardianUser.id,
+        senderId: userId,
+        senderName,
+        senderPhone: sender?.phone,
+        type: "guardian_request" as any,
+        title: "🛡️ Safety Guardian Request",
+        body: `${senderName} added you as their trusted Safety Guardian for Safe Walk escorts.`,
+      }).catch(() => {});
+    }
+
     return result.rows[0];
   }
 

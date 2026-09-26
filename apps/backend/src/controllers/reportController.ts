@@ -142,6 +142,7 @@ export async function confirmReport(
       success: true,
       message: "Report confirmed",
       confirmations_count: count,
+      confirmationsCount: count,
     });
   } catch (err) {
     next(err);

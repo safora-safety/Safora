@@ -112,6 +112,55 @@ export function broadcastJourneyLocation(data: {
   }
 }
 
+export function broadcastJourneyStarted(data: {
+  journeyId: string | number;
+  userId: string | number;
+  walkerName?: string;
+  origin?: any;
+  destination?: any;
+  guardianUserIds?: (string | number)[];
+}): void {
+  if (socketServerInstance) {
+    const payload = {
+      ...data,
+      timestamp: new Date().toISOString(),
+    };
+
+    socketServerInstance.to("staff").emit("journey:start", payload);
+
+    if (data.guardianUserIds && data.guardianUserIds.length > 0) {
+      for (const gid of data.guardianUserIds) {
+        socketServerInstance.to(`user:${gid}`).emit("journey:start", payload);
+      }
+    }
+  }
+}
+
+export function broadcastJourneyEnded(data: {
+  journeyId: string | number;
+  userId?: string | number;
+  status: "completed" | "cancelled" | "deleted";
+  guardianUserIds?: (string | number)[];
+}): void {
+  if (socketServerInstance) {
+    const payload = {
+      ...data,
+      timestamp: new Date().toISOString(),
+    };
+
+    socketServerInstance
+      .to(`journey:${data.journeyId}`)
+      .emit("journey:ended", payload);
+    socketServerInstance.to("staff").emit("journey:ended", payload);
+
+    if (data.guardianUserIds && data.guardianUserIds.length > 0) {
+      for (const gid of data.guardianUserIds) {
+        socketServerInstance.to(`user:${gid}`).emit("journey:ended", payload);
+      }
+    }
+  }
+}
+
 export function setupJourneySockets(io: Server): void {
   socketServerInstance = io;
 

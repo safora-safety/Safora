@@ -41,6 +41,7 @@ import { SirenService } from '../services/sirenService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { joinJourneyRoom } from '../services/socketService';
 import { useAuthStore } from '../store/authStore';
+import { useJourneyStore } from '../store/journeyStore';
 import { navigationRef } from '../navigation/RootNavigator';
 
 export interface SafeWalkScreenProps {
@@ -112,15 +113,32 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
   const [routeDurationSeconds, setRouteDurationSeconds] = useState(600);
   const [isCalculatingRoute, setIsCalculatingRoute] = useState(false);
 
-  // Active Journey state
-  const [isActive, setIsActive] = useState(false);
-  const [journeyId, setJourneyId] = useState<string | number | null>(null);
-  const [secondsRemaining, setSecondsRemaining] = useState(600);
-  const [isDeviated, setIsDeviated] = useState(false);
-  const [deviationCountdown, setDeviationCountdown] = useState<number | null>(
-    null,
-  );
+  // Active Journey state synced with persistent Zustand store
+  const {
+    isActive,
+    journeyId,
+    secondsRemaining,
+    isDeviated,
+    deviationCountdown,
+    startSession,
+    updateSecondsRemaining,
+    setDeviation,
+    stopSession,
+    hydrateSession,
+  } = useJourneyStore();
+
   const [showArrivalModal, setShowArrivalModal] = useState(false);
+  const [showPreWalkModal, setShowPreWalkModal] = useState(false);
+  const [availableGuardians, setAvailableGuardians] = useState<any[]>([]);
+  const [selectedGuardianIds, setSelectedGuardianIds] = useState<
+    (string | number)[]
+  >([]);
+  const [isStartingWalk, setIsStartingWalk] = useState(false);
+
+  // Hydrate persistent walk session on mount
+  useEffect(() => {
+    hydrateSession();
+  }, []);
 
   // Initialize live position
   useEffect(() => {
@@ -197,17 +215,12 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
     }
   };
 
-  // Update street route whenever start or destination changes
+  // Update street route when destination changes (skip during active walk to prevent map jerking)
   useEffect(() => {
-    if (userPos && destPos) {
+    if (userPos && destPos && !isActive) {
       updateStreetRoute();
     }
-  }, [
-    userPos.latitude,
-    userPos.longitude,
-    destPos.latitude,
-    destPos.longitude,
-  ]);
+  }, [destPos.latitude, destPos.longitude, isActive]);
 
   const updateStreetRoute = async () => {
     setIsCalculatingRoute(true);
@@ -246,12 +259,12 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
     return () => clearTimeout(timer);
   }, [searchQuery, userPos.latitude, userPos.longitude]);
 
-  // Active Countdown Timer & Battery Check
+  // Active Countdown Timer
   useEffect(() => {
     let timer: any;
     if (isActive && secondsRemaining > 0) {
       timer = setInterval(() => {
-        setSecondsRemaining(prev => prev - 1);
+        updateSecondsRemaining(prev => prev - 1);
       }, 1000);
     } else if (secondsRemaining === 0 && isActive) {
       triggerDeviationPrompt(
@@ -267,12 +280,11 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
     let interval: any;
     if (isDeviated && deviationCountdown !== null && deviationCountdown > 0) {
       interval = setInterval(() => {
-        setDeviationCountdown(prev => (prev !== null ? prev - 1 : null));
+        setDeviation(true, deviationCountdown - 1);
       }, 1000);
     } else if (isDeviated && deviationCountdown === 0) {
       // 60s expired without confirmation: Automatically escalate to Emergency SOS
-      setDeviationCountdown(null);
-      setIsDeviated(false);
+      setDeviation(false, null);
       Vibration.vibrate([0, 1000, 500, 1000]);
 
       // Audio Recording (TRG-6-lite) — Prioritize lock-screen native recorder when foreground service is active
@@ -344,7 +356,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
     }
   };
 
-  const handleStartWalk = async () => {
+  const handleInitiateWalk = async () => {
     if (isGuest) {
       Alert.alert(
         'Account Required for Safe Walk',
@@ -364,6 +376,30 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
       return;
     }
 
+    try {
+      const contacts = await SosService.getContacts();
+      const valid = contacts.filter(
+        c =>
+          !String(c.id).startsWith('police-') &&
+          !String(c.id).startsWith('ambulance-'),
+      );
+      setAvailableGuardians(valid);
+      const initialIds = valid.map(c => c.guardianUserId || c.id);
+      setSelectedGuardianIds(initialIds);
+      setShowPreWalkModal(true);
+    } catch {
+      executeStartWalk([]);
+    }
+  };
+
+  const toggleGuardianSelection = (id: string | number) => {
+    setSelectedGuardianIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id],
+    );
+  };
+
+  const executeStartWalk = async (guardianIds: (string | number)[]) => {
+    setIsStartingWalk(true);
     const etaMins = Math.ceil(routeDurationSeconds / 60) || 10;
     try {
       const plannedRoute = downsampleRouteCoords(routeCoords);
@@ -375,8 +411,9 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
         },
         planned_route: plannedRoute.length >= 2 ? plannedRoute : undefined,
         expected_duration_minutes: etaMins,
+        trusted_contact_ids: guardianIds.length > 0 ? guardianIds : undefined,
       });
-      setJourneyId(journey.id);
+
       joinJourneyRoom(journey.id);
 
       // Start native foreground service (TRG-2-lite / NAV-1 with Google Maps notification)
@@ -399,34 +436,65 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
         }
       }
 
-      setSecondsRemaining(routeDurationSeconds || 600);
-      setIsActive(true);
-      setIsDeviated(false);
+      startSession({
+        journeyId: journey.id,
+        destination: destPos,
+        routeCoords,
+        distanceMeters: routeDistanceMeters,
+        durationSeconds: routeDurationSeconds || 600,
+        selectedGuardianIds: guardianIds,
+      });
+
+      setShowPreWalkModal(false);
 
       Alert.alert(
         '🚶‍♀️ Safe Walk Activated',
         `Virtual guardian active along road route to ${destPos.name}.\nEstimated walk: ${formatDistance(routeDistanceMeters)} (${etaMins} mins).`,
       );
     } catch {
-      setIsActive(false);
       Alert.alert(
         'Safe Walk Failed',
         "Couldn't start Safe Walk — no guardian monitoring. Check your connection and try again.",
       );
+    } finally {
+      setIsStartingWalk(false);
     }
   };
 
   const handleCompleteWalk = async () => {
     if (journeyId) {
-      await JourneyService.completeJourney(journeyId);
+      await JourneyService.completeJourney(journeyId).catch(() => {});
     }
     if (Platform.OS === 'android' && NativeModules.SafeWalkService) {
       NativeModules.SafeWalkService.stop().catch(() => {});
     }
-    setIsActive(false);
-    setIsDeviated(false);
-    setDeviationCountdown(null);
+    stopSession();
     setShowArrivalModal(true);
+  };
+
+  const handleCancelWalk = () => {
+    Alert.alert(
+      'Cancel Safe Walk?',
+      'Are you sure you want to stop this walk session? Your guardians will be notified that the walk has ended.',
+      [
+        { text: 'Keep Walking', style: 'cancel' },
+        {
+          text: 'Yes, Stop Walk',
+          style: 'destructive',
+          onPress: async () => {
+            const jId = journeyId;
+            if (jId) {
+              await JourneyService.cancelJourney(jId).catch(() => {});
+            }
+            if (Platform.OS === 'android' && NativeModules.SafeWalkService) {
+              NativeModules.SafeWalkService.stop().catch(() => {});
+            }
+            stopSession();
+            setShowPreWalkModal(false);
+          },
+        },
+      ],
+    );
   };
 
   const shareArrivalWhatsApp = () => {
@@ -442,8 +510,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
   };
 
   const triggerDeviationPrompt = (title: string, msg: string) => {
-    setIsDeviated(true);
-    setDeviationCountdown(60);
+    setDeviation(true, 60);
     Vibration.vibrate([0, 500, 200, 500]);
     Alert.alert(
       `⚠️ ${title}`,
@@ -452,8 +519,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
         {
           text: 'I AM SAFE',
           onPress: () => {
-            setIsDeviated(false);
-            setDeviationCountdown(null);
+            setDeviation(false, null);
             SirenService.stopSiren().catch(() => {});
             if (journeyId) {
               JourneyService.confirmSafe(journeyId);
@@ -464,7 +530,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
           text: 'DISPATCH SOS',
           style: 'destructive',
           onPress: async () => {
-            setDeviationCountdown(null);
+            setDeviation(false, null);
             Vibration.vibrate([0, 800, 300, 800]);
 
             AsyncStorage.getItem('@safora_pref_loud_siren').then(pref => {
@@ -784,7 +850,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
         {!isActive ? (
           <TouchableOpacity
             style={[styles.startWalkBtn, { backgroundColor: colors.primary }]}
-            onPress={handleStartWalk}
+            onPress={handleInitiateWalk}
             activeOpacity={0.85}
           >
             <Text style={styles.startWalkBtnText}>
@@ -810,15 +876,25 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
                 </Text>
               </View>
 
-              <TouchableOpacity
-                style={styles.reachedSafelyBtn}
-                onPress={handleCompleteWalk}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.reachedSafelyBtnText}>
-                  ✅ I Reached Safely
-                </Text>
-              </TouchableOpacity>
+              <View style={styles.walkButtonsRow}>
+                <TouchableOpacity
+                  style={styles.cancelWalkBtn}
+                  onPress={handleCancelWalk}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.cancelWalkBtnText}>🛑 Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.reachedSafelyBtn}
+                  onPress={handleCompleteWalk}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.reachedSafelyBtnText}>
+                    ✅ Reached Safely
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             <View style={styles.activeNoticeRow}>
@@ -832,6 +908,176 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
           </View>
         )}
       </View>
+
+      {/* Pre-Walk Guardian Confirmation Modal */}
+      <Modal
+        visible={showPreWalkModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowPreWalkModal(false)}
+      >
+        <View style={styles.preWalkOverlay}>
+          <View
+            style={[
+              styles.preWalkCard,
+              {
+                backgroundColor: colors.backgroundCard,
+                borderColor: colors.border,
+              },
+            ]}
+          >
+            <View style={styles.preWalkDragHandle} />
+
+            <View style={styles.preWalkHeader}>
+              <Text
+                style={[styles.preWalkTitle, { color: colors.textPrimary }]}
+              >
+                🛡️ Confirm Safe Walk Escort
+              </Text>
+              <Text
+                style={[
+                  styles.preWalkSubtitle,
+                  { color: colors.textSecondary },
+                ]}
+              >
+                Virtual companion will monitor your route to {destPos.name} (
+                {Math.ceil(routeDurationSeconds / 60)} mins).
+              </Text>
+            </View>
+
+            <View style={styles.preWalkSectionHeader}>
+              <Text
+                style={[
+                  styles.preWalkSectionTitle,
+                  { color: colors.textPrimary },
+                ]}
+              >
+                Alerted Safety Guardians ({selectedGuardianIds.length})
+              </Text>
+              <Text
+                style={[styles.preWalkSectionSub, { color: colors.textMuted }]}
+              >
+                Selected guardians receive your live GPS tracking & deviation
+                alerts
+              </Text>
+            </View>
+
+            <ScrollView
+              style={styles.guardiansListScroll}
+              showsVerticalScrollIndicator={false}
+            >
+              {availableGuardians.length === 0 ? (
+                <View
+                  style={[
+                    styles.noGuardiansBox,
+                    { backgroundColor: colors.backgroundInput },
+                  ]}
+                >
+                  <Text style={styles.noGuardiansText}>
+                    No registered personal guardians found. Add trusted contacts
+                    in your Profile to alert them automatically during Safe
+                    Walk.
+                  </Text>
+                </View>
+              ) : (
+                availableGuardians.map(g => {
+                  const gId = g.guardianUserId || g.id;
+                  const isSelected = selectedGuardianIds.includes(gId);
+                  return (
+                    <TouchableOpacity
+                      key={String(g.id)}
+                      style={[
+                        styles.guardianCheckItem,
+                        {
+                          backgroundColor: isSelected
+                            ? 'rgba(16, 185, 129, 0.1)'
+                            : colors.backgroundInput,
+                          borderColor: isSelected ? '#10B981' : colors.border,
+                        },
+                      ]}
+                      onPress={() => toggleGuardianSelection(gId)}
+                      activeOpacity={0.8}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={[
+                            styles.guardianNameText,
+                            { color: colors.textPrimary },
+                          ]}
+                        >
+                          {g.name} ({g.relationship || 'Guardian'})
+                        </Text>
+                        <Text
+                          style={[
+                            styles.guardianPhoneText,
+                            { color: colors.textSecondary },
+                          ]}
+                        >
+                          {g.phone || g.email}
+                        </Text>
+                      </View>
+
+                      <View
+                        style={[
+                          styles.checkboxCircle,
+                          isSelected && styles.checkboxCircleActive,
+                        ]}
+                      >
+                        {isSelected && (
+                          <Text style={styles.checkmarkIcon}>✓</Text>
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })
+              )}
+            </ScrollView>
+
+            <View style={styles.preWalkFooter}>
+              <TouchableOpacity
+                style={[
+                  styles.preWalkCancelBtn,
+                  {
+                    backgroundColor: colors.backgroundInput,
+                    borderColor: colors.border,
+                  },
+                ]}
+                onPress={() => setShowPreWalkModal(false)}
+              >
+                <Text
+                  style={[
+                    styles.preWalkCancelBtnText,
+                    { color: colors.textSecondary },
+                  ]}
+                >
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.preWalkStartBtn,
+                  { backgroundColor: colors.primary },
+                ]}
+                onPress={() => executeStartWalk(selectedGuardianIds)}
+                disabled={isStartingWalk}
+                activeOpacity={0.85}
+              >
+                {isStartingWalk ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.preWalkStartBtnText}>
+                    🚀 Start Walk{' '}
+                    {selectedGuardianIds.length > 0
+                      ? `(${selectedGuardianIds.length} Alerted)`
+                      : ''}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* "I Reached Safely" Broadcast Modal */}
       <Modal
@@ -1049,19 +1295,159 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 1,
   },
+  walkButtonsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  cancelWalkBtn: {
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.35)',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+  },
+  cancelWalkBtnText: {
+    color: '#EF4444',
+    fontWeight: '800',
+    fontSize: 12,
+  },
   reachedSafelyBtn: {
     backgroundColor: '#10B981',
     paddingVertical: 12,
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
     borderRadius: 14,
   },
   reachedSafelyBtnText: {
     color: '#FFFFFF',
     fontWeight: '800',
-    fontSize: 13,
+    fontSize: 12,
   },
   activeNoticeRow: { alignItems: 'center' },
   activeNoticeText: { fontSize: 11, textAlign: 'center' },
+
+  // Pre-Walk Modal Styles
+  preWalkOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'flex-end',
+  },
+  preWalkCard: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 28,
+    maxHeight: '80%',
+  },
+  preWalkDragHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(148, 163, 184, 0.4)',
+    alignSelf: 'center',
+    marginBottom: 14,
+  },
+  preWalkHeader: {
+    marginBottom: 16,
+  },
+  preWalkTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    marginBottom: 4,
+  },
+  preWalkSubtitle: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  preWalkSectionHeader: {
+    marginBottom: 10,
+  },
+  preWalkSectionTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  preWalkSectionSub: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  guardiansListScroll: {
+    maxHeight: 220,
+    marginBottom: 16,
+  },
+  noGuardiansBox: {
+    padding: 14,
+    borderRadius: 12,
+  },
+  noGuardiansText: {
+    fontSize: 12,
+    color: '#94A3B8',
+    lineHeight: 16,
+  },
+  guardianCheckItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  guardianNameText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  guardianPhoneText: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  checkboxCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#94A3B8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxCircleActive: {
+    backgroundColor: '#10B981',
+    borderColor: '#10B981',
+  },
+  checkmarkIcon: {
+    color: '#FFFFFF',
+    fontWeight: '900',
+    fontSize: 13,
+  },
+  preWalkFooter: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  preWalkCancelBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  preWalkCancelBtnText: {
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  preWalkStartBtn: {
+    flex: 2,
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  preWalkStartBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 13,
+  },
 
   // Arrival Modal
   modalOverlay: {

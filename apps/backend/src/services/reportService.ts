@@ -7,9 +7,11 @@ import { MemoryCache } from "../utils/cache";
 export function computeRecencyDecay(
   ageHours: number,
   halfLifeHours = 24,
+  minFloor = 0.0,
 ): number {
   const lambda = Math.log(2) / halfLifeHours;
-  return Math.exp(-lambda * Math.max(0, ageHours));
+  const decay = Math.exp(-lambda * Math.max(0, ageHours));
+  return Math.max(minFloor, decay);
 }
 
 export function computeDistanceFalloff(
@@ -148,11 +150,12 @@ export class ReportService {
       const dist = report.distanceMeters || 0;
       const D = computeDistanceFalloff(dist, radiusMeters);
 
-      // Recency Decay T(t)
+      // Recency Decay T(t): For active street hazards, calibrate half-life to 168h (7 days)
+      // and set a floor of 0.25 so unresolved physical hazards continue to impact safety score
       const ageHours = report.createdAt
         ? (Date.now() - new Date(report.createdAt).getTime()) / (1000 * 60 * 60)
         : 1;
-      const T = computeRecencyDecay(ageHours);
+      const T = computeRecencyDecay(ageHours, 168, 0.25);
 
       // Community Confirmation Multiplier C(c)
       const confirms = report.confirmationsCount || 0;

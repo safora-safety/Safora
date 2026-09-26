@@ -192,16 +192,22 @@ export class ReportService {
   ): Promise<{ confirmationsCount: number }> {
     try {
       const res = await apiClient.patch<
-        ApiResponse<{ confirmationsCount: number }> & {
+        ApiResponse<{
           confirmationsCount: number;
+          confirmations_count?: number;
+        }> & {
+          confirmationsCount?: number;
+          confirmations_count?: number;
         }
       >(`/reports/${reportId}/confirm`);
-      return {
-        confirmationsCount:
-          res.data.confirmationsCount ||
-          (res.data as any).data?.confirmationsCount ||
-          1,
-      };
+      const payload: any = res.data;
+      const count =
+        payload?.confirmationsCount ??
+        payload?.confirmations_count ??
+        payload?.data?.confirmationsCount ??
+        payload?.data?.confirmations_count ??
+        1;
+      return { confirmationsCount: Number(count) };
     } catch {
       return { confirmationsCount: 1 };
     }

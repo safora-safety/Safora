@@ -198,4 +198,42 @@ export class JourneyRepository {
     );
     return result.rows;
   }
+
+  static async findActiveEscortForGuardian(
+    guardianUserId: string | number,
+  ): Promise<any | null> {
+    const result = await db.query(
+      `SELECT j.*,
+              u.name as walker_name, u.phone as walker_phone, u.email as walker_email,
+              ST_Y(j.last_location::geometry) as last_lat,
+              ST_X(j.last_location::geometry) as last_lng
+       FROM journeys j
+       JOIN users u ON j.user_id = u.id
+       WHERE j.status IN ('active', 'deviated')
+         AND (
+           $1 = ANY(j.trusted_contact_ids)
+           OR EXISTS (
+             SELECT 1 FROM trusted_contacts tc
+             WHERE tc.user_id = j.user_id
+               AND tc.guardian_user_id = $1
+               AND (tc.status = 'accepted' OR tc.status IS NULL)
+           )
+         )
+       ORDER BY j.started_at DESC
+       LIMIT 1;`,
+      [guardianUserId],
+    );
+    return result.rows[0] || null;
+  }
+
+  static async delete(
+    journeyId: string | number,
+    userId: string | number,
+  ): Promise<boolean> {
+    const result = await db.query(
+      `DELETE FROM journeys WHERE id = $1 AND user_id = $2 RETURNING id;`,
+      [journeyId, userId],
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
 }

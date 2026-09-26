@@ -426,4 +426,32 @@ export class SosService {
     }
     return SosAlertModel.fromRow(row);
   }
+
+  static async getPendingGuardianRequests(
+    guardianUserId: string | number,
+  ): Promise<any[]> {
+    return SosRepository.findPendingRequestsForGuardian(guardianUserId);
+  }
+
+  static async getWardsForGuardian(
+    guardianUserId: string | number,
+  ): Promise<any[]> {
+    return SosRepository.findWardsForGuardian(guardianUserId);
+  }
+
+  static async respondToGuardianRequest(
+    contactId: string | number,
+    guardianUserId: string | number,
+    action: "accept" | "decline",
+  ): Promise<any> {
+    const updated = await SosRepository.respondToGuardianRequest(
+      contactId,
+      guardianUserId,
+      action,
+    );
+    if (!updated) {
+      throw new AppError("Guardian request not found", 404);
+    }
+    return updated;
+  }
 }

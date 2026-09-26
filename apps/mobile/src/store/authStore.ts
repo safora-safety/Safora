@@ -429,7 +429,11 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
   clearError: () => set({ error: null }),
 }));
 
+let lastSessionExpiredAlert = 0;
+
 setUnauthorizedHandler(() => {
+  const state = useAuthStore.getState();
+  const wasLoggedIn = state.isAuthenticated && !state.isGuest;
   disconnectSocket();
   useAuthStore.setState({
     user: null,
@@ -437,9 +441,14 @@ setUnauthorizedHandler(() => {
     isAuthenticated: false,
     isGuest: false,
   });
-  Alert.alert(
-    'Session Expired',
-    'Your security session has expired. Please log in again to continue.',
-    [{ text: 'OK' }],
-  );
+
+  const now = Date.now();
+  if (wasLoggedIn && now - lastSessionExpiredAlert > 15000) {
+    lastSessionExpiredAlert = now;
+    Alert.alert(
+      'Session Expired',
+      'Your security session has expired. Please log in again to continue.',
+      [{ text: 'OK' }],
+    );
+  }
 });

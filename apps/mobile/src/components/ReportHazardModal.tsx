@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  PermissionsAndroid,
 } from 'react-native';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { useTheme } from '../theme/ThemeContext';
@@ -61,13 +62,49 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
   const [description, setDescription] = useState('');
   const [severity, setSeverity] = useState(3);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [localPhotoUri, setLocalPhotoUri] = useState<string | null>(null);
   const [customPhotoInput, setCustomPhotoInput] = useState('');
   const [showPhotoInput, setShowPhotoInput] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [loading, setLoading] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  // Pin location state (defaults to live device coordinates, adjustable by user)
+  const [reportLat, setReportLat] = useState(coordinates.latitude);
+  const [reportLng, setReportLng] = useState(coordinates.longitude);
+  const [isEditingPin, setIsEditingPin] = useState(false);
+
+  React.useEffect(() => {
+    setReportLat(coordinates.latitude);
+    setReportLng(coordinates.longitude);
+  }, [coordinates.latitude, coordinates.longitude, visible]);
+
   const handleTakePhoto = async () => {
+    if (Platform.OS === 'android') {
+      try {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.CAMERA,
+          {
+            title: 'Camera Permission',
+            message:
+              'Safora needs camera access so you can capture photo evidence of road and safety hazards.',
+            buttonNeutral: 'Ask Later',
+            buttonNegative: 'Cancel',
+            buttonPositive: 'OK',
+          },
+        );
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+          Alert.alert(
+            'Camera Permission Denied',
+            'Camera permission is required to capture hazard photos directly. You can also pick a photo from your gallery.',
+          );
+          return;
+        }
+      } catch (err) {
+        console.warn('Camera permission request error:', err);
+      }
+    }
+
     try {
       const result = await launchCamera({
         mediaType: 'photo',
@@ -81,18 +118,12 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
 
       const asset = result.assets[0];
       if (asset.uri) {
-        setIsUploadingPhoto(true);
-        const uploaded = await ReportService.uploadPhoto(
-          asset.uri,
-          asset.fileName || 'hazard_camera.jpg',
-        );
-        setPhotoUrl(uploaded);
+        setLocalPhotoUri(asset.uri);
+        setPhotoUrl(asset.uri);
         setShowPhotoInput(false);
       }
     } catch {
       Alert.alert('Camera Error', 'Could not open camera on device.');
-    } finally {
-      setIsUploadingPhoto(false);
     }
   };
 
@@ -109,18 +140,12 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
 
       const asset = result.assets[0];
       if (asset.uri) {
-        setIsUploadingPhoto(true);
-        const uploaded = await ReportService.uploadPhoto(
-          asset.uri,
-          asset.fileName || 'hazard_gallery.jpg',
-        );
-        setPhotoUrl(uploaded);
+        setLocalPhotoUri(asset.uri);
+        setPhotoUrl(asset.uri);
         setShowPhotoInput(false);
       }
     } catch {
       Alert.alert('Gallery Error', 'Could not open photo gallery.');
-    } finally {
-      setIsUploadingPhoto(false);
     }
   };
 
@@ -135,14 +160,29 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
 
     setLoading(true);
     try {
+      let finalPhotoUrl = photoUrl;
+      if (localPhotoUri) {
+        setIsUploadingPhoto(true);
+        try {
+          finalPhotoUrl = await ReportService.uploadPhoto(
+            localPhotoUri,
+            `hazard_${Date.now()}.jpg`,
+          );
+        } catch {
+          // Fall back to local photo URI if upload fails
+        } finally {
+          setIsUploadingPhoto(false);
+        }
+      }
+
       const created = await ReportService.create({
         category,
         title: trimmedTitle,
         description: description.trim() || undefined,
         severity,
-        latitude: coordinates.latitude,
-        longitude: coordinates.longitude,
-        photo_url: photoUrl || undefined,
+        latitude: reportLat,
+        longitude: reportLng,
+        photo_url: finalPhotoUrl || undefined,
       });
 
       Alert.alert(
@@ -154,6 +194,7 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
       setDescription('');
       setSeverity(3);
       setPhotoUrl(null);
+      setLocalPhotoUri(null);
       setCustomPhotoInput('');
       setShowPhotoInput(false);
       onClose();
@@ -267,6 +308,99 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
                   </TouchableOpacity>
                 ))}
               </View>
+            </View>
+
+            {/* Location Coordinate Preview with Adjust Pin Button */}
+            <View style={styles.group}>
+              <View style={styles.locationHeaderRow}>
+                <Text style={[styles.label, { color: colors.textPrimary }]}>
+                  Hazard Pin Location
+                </Text>
+                <TouchableOpacity
+                  onPress={() => setIsEditingPin(!isEditingPin)}
+                  style={styles.adjustPinBtn}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.adjustPinBtnText}>
+                    {isEditingPin ? '✓ Done' : '📍 Adjust Pin'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <View
+                style={[
+                  styles.locationCard,
+                  {
+                    backgroundColor: colors.backgroundInput,
+                    borderColor: isEditingPin ? colors.primary : colors.border,
+                  },
+                ]}
+              >
+                <Text style={styles.locationIcon}>📍</Text>
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={[
+                      styles.locationCoordsText,
+                      { color: colors.textPrimary },
+                    ]}
+                  >
+                    Lat: {reportLat.toFixed(5)}, Lng: {reportLng.toFixed(5)}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.locationHelpText,
+                      { color: colors.textMuted },
+                    ]}
+                  >
+                    {isEditingPin
+                      ? 'Manually fine-tuning pin coordinates'
+                      : 'Default: Live device GPS coordinates'}
+                  </Text>
+                </View>
+              </View>
+
+              {isEditingPin && (
+                <View style={styles.pinAdjustInputsRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.microLabel}>Latitude</Text>
+                    <TextInput
+                      style={[
+                        styles.input,
+                        {
+                          backgroundColor: colors.backgroundInput,
+                          borderColor: colors.border,
+                          color: colors.textPrimary,
+                        },
+                      ]}
+                      keyboardType="numeric"
+                      value={String(reportLat)}
+                      onChangeText={val => {
+                        const parsed = parseFloat(val);
+                        if (!isNaN(parsed)) setReportLat(parsed);
+                      }}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.microLabel}>Longitude</Text>
+                    <TextInput
+                      style={[
+                        styles.input,
+                        {
+                          backgroundColor: colors.backgroundInput,
+                          borderColor: colors.border,
+                          color: colors.textPrimary,
+                        },
+                      ]}
+                      keyboardType="numeric"
+                      value={String(reportLng)}
+                      onChangeText={val => {
+                        const parsed = parseFloat(val);
+                        if (!isNaN(parsed)) setReportLng(parsed);
+                      }}
+                    />
+                  </View>
+                </View>
+              )}
             </View>
 
             {/* Title Input */}
@@ -685,6 +819,50 @@ const styles = StyleSheet.create({
   },
   categoryIcon: { fontSize: 20 },
   categoryLabel: { fontSize: 10, fontWeight: '700', textAlign: 'center' },
+  locationHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  adjustPinBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+  },
+  adjustPinBtnText: {
+    color: '#38BDF8',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  locationCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 10,
+  },
+  locationIcon: { fontSize: 18 },
+  locationCoordsText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  locationHelpText: {
+    fontSize: 10,
+    marginTop: 2,
+  },
+  pinAdjustInputsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 6,
+  },
+  microLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#94A3B8',
+    marginBottom: 4,
+  },
   input: {
     borderWidth: 1,
     borderRadius: 12,

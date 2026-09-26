@@ -271,3 +271,63 @@ export async function updateStatus(
     next(err);
   }
 }
+
+export async function getPendingGuardianRequests(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (!req.user) throw new AppError("Unauthorized", 401);
+    const requests = await SosService.getPendingGuardianRequests(req.user.id);
+    res.status(200).json({
+      success: true,
+      requests,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getWardsForGuardian(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (!req.user) throw new AppError("Unauthorized", 401);
+    const wards = await SosService.getWardsForGuardian(req.user.id);
+    res.status(200).json({
+      success: true,
+      wards,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function respondToGuardianRequest(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (!req.user) throw new AppError("Unauthorized", 401);
+    const action = req.body.action;
+    if (action !== "accept" && action !== "decline") {
+      throw new AppError("Action must be 'accept' or 'decline'", 400);
+    }
+    const updated = await SosService.respondToGuardianRequest(
+      req.params.id as string,
+      req.user.id,
+      action,
+    );
+    res.status(200).json({
+      success: true,
+      message: `Guardian request ${action}ed successfully`,
+      contact: updated,
+    });
+  } catch (err) {
+    next(err);
+  }
+}

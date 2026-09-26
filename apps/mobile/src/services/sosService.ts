@@ -237,4 +237,50 @@ export class SosService {
       audio_url: audioUrl,
     });
   }
+
+  /**
+   * Fetch incoming guardian requests waiting for acceptance
+   */
+  static async getPendingRequests(): Promise<any[]> {
+    try {
+      const res = await apiClient.get<{ success: boolean; requests: any[] }>(
+        '/sos/guardians/pending',
+      );
+      return res.data.requests || [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Fetch active wards (people who have accepted me as their guardian)
+   */
+  static async getWards(): Promise<any[]> {
+    try {
+      const res = await apiClient.get<{ success: boolean; wards: any[] }>(
+        '/sos/guardians/wards',
+      );
+      return res.data.wards || [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Accept or decline a guardian request
+   */
+  static async respondToRequest(
+    contactId: string | number,
+    action: 'accept' | 'decline',
+  ): Promise<boolean> {
+    try {
+      const res = await apiClient.post<{ success: boolean }>(
+        `/sos/guardians/requests/${contactId}/respond`,
+        { action },
+      );
+      return Boolean(res.data.success);
+    } catch {
+      return false;
+    }
+  }
 }

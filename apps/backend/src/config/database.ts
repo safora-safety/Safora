@@ -200,7 +200,10 @@ export async function initDatabase(): Promise<void> {
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
       ALTER TABLE trusted_contacts ADD COLUMN IF NOT EXISTS email VARCHAR(255);
+      ALTER TABLE trusted_contacts ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'accepted';
+      ALTER TABLE trusted_contacts ADD COLUMN IF NOT EXISTS guardian_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
       CREATE INDEX IF NOT EXISTS idx_trusted_contacts_user_id ON trusted_contacts(user_id);
+      CREATE INDEX IF NOT EXISTS idx_trusted_contacts_guardian ON trusted_contacts(guardian_user_id);
     `);
 
     // 5. Safe Walk Journeys Table

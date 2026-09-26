@@ -3,8 +3,13 @@ import { Journey } from "@safora/shared-types";
 import { JourneyRepository } from "../repositories/journeyRepository";
 import { JourneyModel } from "../models/Journey";
 import { UserRepository } from "../repositories/userRepository";
+import { SosRepository } from "../repositories/sosRepository";
 import { WatchdogService } from "./watchdogService";
-import { broadcastJourneyLocation } from "../sockets/journeySocket";
+import {
+  broadcastJourneyLocation,
+  broadcastJourneyStarted,
+  broadcastJourneyEnded,
+} from "../sockets/journeySocket";
 
 /**
  * Compute metric distance from point P to line segment AB using Equirectangular projection
@@ -59,16 +64,45 @@ export class JourneyService {
     expectedDurationMinutes?: number;
     trustedContactIds?: (string | number)[];
   }): Promise<Journey> {
+    let guardianUserIds = data.trustedContactIds || [];
+    if (guardianUserIds.length === 0) {
+      try {
+        const contacts = await SosRepository.findContactsByUserId(data.userId);
+        const linked = contacts
+          .filter(
+            (c: any) =>
+              (c.status === "accepted" || !c.status) && c.guardian_user_id,
+          )
+          .map((c: any) => Number(c.guardian_user_id));
+        guardianUserIds = linked;
+      } catch (err) {
+        console.warn(
+          "[JourneyService] Error resolving guardian contacts:",
+          err,
+        );
+      }
+    }
+
     const row = await JourneyRepository.create({
       userId: data.userId,
       origin: data.origin,
       destination: data.destination,
       plannedRoute: data.plannedRoute,
       expectedDurationMinutes: data.expectedDurationMinutes || 30,
-      trustedContactIds: data.trustedContactIds || [],
+      trustedContactIds: guardianUserIds,
     });
 
     WatchdogService.registerJourney(Number(row.id));
+
+    const walker = await UserRepository.findById(data.userId);
+    broadcastJourneyStarted({
+      journeyId: Number(row.id),
+      userId: data.userId,
+      walkerName: walker?.name || "Companion Walker",
+      origin: data.origin,
+      destination: data.destination,
+      guardianUserIds,
+    });
 
     return JourneyModel.fromRow(row);
   }
@@ -270,6 +304,13 @@ export class JourneyService {
     );
 
     WatchdogService.unregisterJourney(Number(journeyId));
+
+    broadcastJourneyEnded({
+      journeyId,
+      userId: row.user_id,
+      status: "completed",
+      guardianUserIds: row.trusted_contact_ids,
+    });
   }
 
   static async cancelJourney(
@@ -299,6 +340,13 @@ export class JourneyService {
     );
 
     WatchdogService.unregisterJourney(Number(journeyId));
+
+    broadcastJourneyEnded({
+      journeyId,
+      userId: row.user_id,
+      status: "cancelled",
+      guardianUserIds: row.trusted_contact_ids,
+    });
   }
 
   static async confirmSafe(
@@ -331,5 +379,78 @@ export class JourneyService {
       confirmed: true,
       deviatedAt: null,
     };
+  }
+
+  static async getActiveEscortForGuardian(
+    guardianUserId: string | number,
+  ): Promise<any | null> {
+    const row =
+      await JourneyRepository.findActiveEscortForGuardian(guardianUserId);
+    if (!row) return null;
+
+    const realLat =
+      row.last_lat != null ? Number(row.last_lat) : Number(row.origin_lat);
+    const realLng =
+      row.last_lng != null ? Number(row.last_lng) : Number(row.origin_lng);
+
+    return {
+      id: row.id,
+      userId: row.user_id,
+      walkerName: row.walker_name || `User #${row.user_id}`,
+      walkerPhone: row.walker_phone,
+      origin: {
+        latitude: Number(row.origin_lat),
+        longitude: Number(row.origin_lng),
+      },
+      destination: {
+        latitude: Number(row.dest_lat),
+        longitude: Number(row.dest_lng),
+      },
+      currentLocation: {
+        latitude: realLat,
+        longitude: realLng,
+      },
+      lastLocation: {
+        latitude: realLat,
+        longitude: realLng,
+      },
+      status: row.status,
+      startedAt:
+        row.started_at instanceof Date
+          ? row.started_at.toISOString()
+          : String(row.started_at),
+      lastSeenAt: row.last_seen_at || row.started_at,
+      deviatedAt: row.deviated_at || null,
+      expectedArrivalAt: row.expected_arrival_at,
+    };
+  }
+
+  static async deleteJourney(
+    journeyId: string | number,
+    userId: string | number,
+    userRole?: string,
+  ): Promise<void> {
+    const row = await JourneyRepository.findById(journeyId);
+    if (!row) {
+      throw new AppError("Journey not found", 404);
+    }
+
+    if (
+      String(row.user_id) !== String(userId) &&
+      userRole !== "admin" &&
+      userRole !== "moderator"
+    ) {
+      throw new AppError("Forbidden: You do not own this journey", 403);
+    }
+
+    await JourneyRepository.delete(journeyId, row.user_id);
+    WatchdogService.unregisterJourney(Number(journeyId));
+
+    broadcastJourneyEnded({
+      journeyId,
+      userId: row.user_id,
+      status: "deleted",
+      guardianUserIds: row.trusted_contact_ids,
+    });
   }
 }
