@@ -97,7 +97,7 @@ export const SafeWalksPage: React.FC = () => {
             gain.connect(audioCtx.destination);
             osc.start();
             osc.stop(audioCtx.currentTime + 0.4);
-          } catch {}
+          } catch { }
         }
       }
 
@@ -278,11 +278,10 @@ export const SafeWalksPage: React.FC = () => {
 
           <button
             onClick={() => setAutoRefresh(!autoRefresh)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all border ${
-              autoRefresh
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all border ${autoRefresh
                 ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300'
                 : 'bg-obsidian-800 border-white/10 text-gray-400'
-            }`}
+              }`}
             title="Toggle 15-second automatic radar refresh"
           >
             <span className={`w-2 h-2 rounded-full ${autoRefresh ? 'bg-emerald-400 animate-pulse' : 'bg-gray-500'}`} />
@@ -374,51 +373,46 @@ export const SafeWalksPage: React.FC = () => {
         <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
           <button
             onClick={() => setStatusFilter('all')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
-              statusFilter === 'all'
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${statusFilter === 'all'
                 ? 'bg-indigo-600 text-white'
                 : 'bg-obsidian-900 text-gray-400 hover:text-white'
-            }`}
+              }`}
           >
             All ({journeys.length})
           </button>
           <button
             onClick={() => setStatusFilter('active')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
-              statusFilter === 'active'
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${statusFilter === 'active'
                 ? 'bg-emerald-600 text-white'
                 : 'bg-obsidian-900 text-gray-400 hover:text-white'
-            }`}
+              }`}
           >
             Active ({activeCount})
           </button>
           <button
             onClick={() => setStatusFilter('deviated')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
-              statusFilter === 'deviated'
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${statusFilter === 'deviated'
                 ? 'bg-red-600 text-white'
                 : 'bg-obsidian-900 text-gray-400 hover:text-white'
-            }`}
+              }`}
           >
             Breaches ({deviatedCount})
           </button>
           <button
             onClick={() => setStatusFilter('completed')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
-              statusFilter === 'completed'
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${statusFilter === 'completed'
                 ? 'bg-blue-600 text-white'
                 : 'bg-obsidian-900 text-gray-400 hover:text-white'
-            }`}
+              }`}
           >
             Completed ({completedCount})
           </button>
           <button
             onClick={() => setStatusFilter('cancelled')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
-              statusFilter === 'cancelled'
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${statusFilter === 'cancelled'
                 ? 'bg-amber-600 text-white'
                 : 'bg-obsidian-900 text-gray-400 hover:text-white'
-            }`}
+              }`}
           >
             Cancelled ({cancelledCount})
           </button>
@@ -437,7 +431,7 @@ export const SafeWalksPage: React.FC = () => {
             <AlertTriangle className="w-6 h-6 mx-auto mb-2 text-red-400" />
             <p className="font-semibold">{loadError}</p>
             <button
-              onClick={loadJourneys}
+              onClick={() => loadJourneys(false)}
               className="mt-4 px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold transition-colors"
             >
               Retry Connection
@@ -458,15 +452,14 @@ export const SafeWalksPage: React.FC = () => {
             return (
               <div
                 key={`journey-card-${journey.id}`}
-                className={`p-6 rounded-2xl bg-obsidian-850 border transition-all space-y-4 shadow-xl flex flex-col justify-between ${
-                  isDeviated
+                className={`p-6 rounded-2xl bg-obsidian-850 border transition-all space-y-4 shadow-xl flex flex-col justify-between ${isDeviated
                     ? 'border-red-500/50 ring-1 ring-red-500/30'
                     : isCompleted
                       ? 'border-blue-500/30'
                       : isCancelled
                         ? 'border-amber-500/30'
                         : 'border-white/10 hover:border-indigo-500/40'
-                }`}
+                  }`}
               >
                 <div className="space-y-4">
                   {/* Top User & Status */}
@@ -759,44 +752,40 @@ export const SafeWalksPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => handleUpdateStatus(selectedJourney.id, 'active')}
-                  className={`px-3 py-2 rounded-xl text-xs font-bold transition-colors ${
-                    selectedJourney.status === 'active'
+                  className={`px-3 py-2 rounded-xl text-xs font-bold transition-colors ${selectedJourney.status === 'active'
                       ? 'bg-emerald-600 text-white'
                       : 'bg-obsidian-900 hover:bg-emerald-950/60 text-emerald-400 border border-emerald-500/30'
-                  }`}
+                    }`}
                 >
                   Mark Active
                 </button>
                 <button
                   type="button"
                   onClick={() => handleUpdateStatus(selectedJourney.id, 'deviated')}
-                  className={`px-3 py-2 rounded-xl text-xs font-bold transition-colors ${
-                    selectedJourney.status === 'deviated'
+                  className={`px-3 py-2 rounded-xl text-xs font-bold transition-colors ${selectedJourney.status === 'deviated'
                       ? 'bg-red-600 text-white'
                       : 'bg-obsidian-900 hover:bg-red-950/60 text-red-400 border border-red-500/30'
-                  }`}
+                    }`}
                 >
                   Flag Deviated
                 </button>
                 <button
                   type="button"
                   onClick={() => handleUpdateStatus(selectedJourney.id, 'completed')}
-                  className={`px-3 py-2 rounded-xl text-xs font-bold transition-colors ${
-                    selectedJourney.status === 'completed'
+                  className={`px-3 py-2 rounded-xl text-xs font-bold transition-colors ${selectedJourney.status === 'completed'
                       ? 'bg-blue-600 text-white'
                       : 'bg-obsidian-900 hover:bg-blue-950/60 text-blue-400 border border-blue-500/30'
-                  }`}
+                    }`}
                 >
                   Mark Reached
                 </button>
                 <button
                   type="button"
                   onClick={() => handleUpdateStatus(selectedJourney.id, 'cancelled')}
-                  className={`px-3 py-2 rounded-xl text-xs font-bold transition-colors ${
-                    selectedJourney.status === 'cancelled'
+                  className={`px-3 py-2 rounded-xl text-xs font-bold transition-colors ${selectedJourney.status === 'cancelled'
                       ? 'bg-amber-600 text-white'
                       : 'bg-obsidian-900 hover:bg-amber-950/60 text-amber-400 border border-amber-500/30'
-                  }`}
+                    }`}
                 >
                   Cancel Walk
                 </button>
