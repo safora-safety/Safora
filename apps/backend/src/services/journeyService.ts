@@ -5,11 +5,17 @@ import { JourneyModel } from "../models/Journey";
 import { UserRepository } from "../repositories/userRepository";
 import { SosRepository } from "../repositories/sosRepository";
 import { WatchdogService } from "./watchdogService";
+import { FirebaseService } from "./firebaseService";
+import { db } from "../config/database";
 import {
   broadcastJourneyLocation,
   broadcastJourneyStarted,
   broadcastJourneyEnded,
 } from "../sockets/journeySocket";
+
+// Default corridor deviation sensitivity is 100m (configurable dynamically via Admin Panel)
+let dynamicCorridorThresholdMeters =
+  Number(process.env.CORRIDOR_THRESHOLD_METERS) || 100;
 
 /**
  * Compute metric distance from point P to line segment AB using Equirectangular projection
@@ -101,10 +107,85 @@ export class JourneyService {
       walkerName: walker?.name || "Companion Walker",
       origin: data.origin,
       destination: data.destination,
+      plannedRoute: data.plannedRoute,
       guardianUserIds,
     });
 
+    // Dispatch background FCM push to all guardian devices (Device B wake-up)
+    if (process.env.NODE_ENV !== "test" && !process.env.JEST_WORKER_ID) {
+      JourneyService.resolveGuardianFcmTokens(data.userId, guardianUserIds)
+        .then((tokens) => {
+          if (tokens.length > 0) {
+            FirebaseService.sendSafeWalkStartedAlert(tokens, {
+              journeyId: Number(row.id),
+              userName: walker?.name || "Companion Walker",
+              destinationName: undefined,
+            }).catch(() => {});
+          }
+        })
+        .catch(() => {});
+    }
+
     return JourneyModel.fromRow(row);
+  }
+
+  static getCorridorThreshold(): number {
+    return dynamicCorridorThresholdMeters;
+  }
+
+  static setCorridorThreshold(meters: number): number {
+    if (meters >= 20 && meters <= 1000) {
+      dynamicCorridorThresholdMeters = meters;
+    }
+    return dynamicCorridorThresholdMeters;
+  }
+
+  static async resolveGuardianFcmTokens(
+    userId: string | number,
+    guardianUserIds?: (string | number)[],
+  ): Promise<string[]> {
+    if (process.env.NODE_ENV === "test" || process.env.JEST_WORKER_ID) {
+      return [];
+    }
+    const tokens: string[] = [];
+    try {
+      if (guardianUserIds && guardianUserIds.length > 0) {
+        const { rows } = await db.query(
+          `SELECT id, fcm_token FROM users WHERE id = ANY($1) AND fcm_token IS NOT NULL;`,
+          [guardianUserIds.map((id) => Number(id))],
+        );
+        for (const r of rows) {
+          if (r.fcm_token && !tokens.includes(r.fcm_token)) {
+            tokens.push(r.fcm_token);
+          }
+        }
+      }
+
+      const contacts = await SosRepository.findContactsByUserId(userId);
+      const normalizedPhones = contacts
+        .map((c: any) =>
+          c.phone ? c.phone.replace(/[^0-9]/g, "").slice(-10) : "",
+        )
+        .filter((p: string) => p.length === 10);
+
+      if (normalizedPhones.length > 0) {
+        const { rows } = await db.query(
+          `SELECT id, fcm_token FROM users WHERE RIGHT(REGEXP_REPLACE(phone, '[^0-9]', '', 'g'), 10) = ANY($1) AND fcm_token IS NOT NULL;`,
+          [normalizedPhones],
+        );
+        for (const r of rows) {
+          if (r.fcm_token && !tokens.includes(r.fcm_token)) {
+            tokens.push(r.fcm_token);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn(
+        "[JourneyService] Error resolving guardian FCM tokens:",
+        err,
+      );
+    }
+    return tokens;
   }
 
   static async updateLocation(
@@ -177,7 +258,7 @@ export class JourneyService {
     const distToDest = Math.round(R * c);
 
     // Compute minimum perpendicular distance to the safe corridor
-    const CORRIDOR_THRESHOLD_METERS = 150;
+    const CORRIDOR_THRESHOLD_METERS = dynamicCorridorThresholdMeters;
     let minDistanceToCorridor = Infinity;
 
     const routePoints: Array<[number, number]> = [];
@@ -232,6 +313,9 @@ export class JourneyService {
     const isDeviated = deviationMeters > CORRIDOR_THRESHOLD_METERS;
     const status: "active" | "deviated" = isDeviated ? "deviated" : "active";
 
+    // Fetch walker name for guardian live view (SYN-4)
+    const walker = await UserRepository.findById(row.user_id);
+
     // Synchronize status and watchdog deviation state
     if (isDeviated) {
       if (row.status === "active") {
@@ -241,6 +325,26 @@ export class JourneyService {
         const now = new Date();
         await JourneyRepository.setDeviatedAt(jId, now);
         WatchdogService.setDeviated(jId, now);
+
+        // Dispatch background FCM push to all guardian devices (Deviation Warning)
+        if (process.env.NODE_ENV !== "test" && !process.env.JEST_WORKER_ID) {
+          JourneyService.resolveGuardianFcmTokens(
+            row.user_id,
+            row.trusted_contact_ids,
+          )
+            .then((tokens) => {
+              if (tokens.length > 0) {
+                FirebaseService.sendSafeWalkDeviationAlert(tokens, {
+                  journeyId: jId,
+                  userName: walker?.name || "Companion Walker",
+                  deviationMeters,
+                  latitude: coords.latitude,
+                  longitude: coords.longitude,
+                }).catch(() => {});
+              }
+            })
+            .catch(() => {});
+        }
       }
     } else {
       if (row.status === "deviated") {
@@ -251,9 +355,6 @@ export class JourneyService {
         WatchdogService.clearDeviated(jId);
       }
     }
-
-    // Fetch walker name for guardian live view (SYN-4)
-    const walker = await UserRepository.findById(row.user_id);
 
     // Emit realtime socket event (TRK-2 / SYN-4)
     broadcastJourneyLocation({
@@ -311,6 +412,27 @@ export class JourneyService {
       status: "completed",
       guardianUserIds: row.trusted_contact_ids,
     });
+
+    // Dispatch background FCM push to all guardian devices (Safe Arrival Confirmed)
+    if (process.env.NODE_ENV !== "test" && !process.env.JEST_WORKER_ID) {
+      UserRepository.findById(row.user_id)
+        .then((walker) => {
+          JourneyService.resolveGuardianFcmTokens(
+            row.user_id,
+            row.trusted_contact_ids,
+          )
+            .then((tokens) => {
+              if (tokens.length > 0) {
+                FirebaseService.sendSafeWalkArrivalAlert(tokens, {
+                  journeyId,
+                  userName: walker?.name || "Companion Walker",
+                }).catch(() => {});
+              }
+            })
+            .catch(() => {});
+        })
+        .catch(() => {});
+    }
   }
 
   static async cancelJourney(
@@ -347,6 +469,27 @@ export class JourneyService {
       status: "cancelled",
       guardianUserIds: row.trusted_contact_ids,
     });
+
+    // Dispatch background FCM push to all guardian devices (Safe Walk Ended)
+    if (process.env.NODE_ENV !== "test" && !process.env.JEST_WORKER_ID) {
+      UserRepository.findById(row.user_id)
+        .then((walker) => {
+          JourneyService.resolveGuardianFcmTokens(
+            row.user_id,
+            row.trusted_contact_ids,
+          )
+            .then((tokens) => {
+              if (tokens.length > 0) {
+                FirebaseService.sendSafeWalkCancelledAlert(tokens, {
+                  journeyId,
+                  userName: walker?.name || "Companion Walker",
+                }).catch(() => {});
+              }
+            })
+            .catch(() => {});
+        })
+        .catch(() => {});
+    }
   }
 
   static async confirmSafe(
@@ -415,6 +558,7 @@ export class JourneyService {
         longitude: realLng,
       },
       status: row.status,
+      plannedRoute: row.planned_route || null,
       startedAt:
         row.started_at instanceof Date
           ? row.started_at.toISOString()

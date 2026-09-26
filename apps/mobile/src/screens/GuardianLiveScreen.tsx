@@ -8,6 +8,7 @@ import {
   StatusBar,
   Linking,
   Alert,
+  Platform,
 } from 'react-native';
 import {
   OpenMapView,
@@ -16,9 +17,11 @@ import {
 } from '../components/OpenMapView';
 import {
   onJourneyLocation,
+  onJourneyEnded,
   joinJourneyRoom,
   leaveJourneyRoom,
 } from '../services/socketService';
+import { JourneyService } from '../services/journeyService';
 import { colors } from '../theme/colors';
 
 interface GuardianLiveScreenProps {
@@ -51,6 +54,45 @@ export const GuardianLiveScreen: React.FC<GuardianLiveScreenProps> = ({
   const [isDeviated, setIsDeviated] = useState(false);
   const [speed, setSpeed] = useState<number | null>(null);
   const [battery, setBattery] = useState<number | null>(null);
+  const [plannedRoute, setPlannedRoute] = useState<
+    Array<{ latitude: number; longitude: number }>
+  >([]);
+  const [originCoord, setOriginCoord] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
+  const [destCoord, setDestCoord] = useState<{
+    latitude: number;
+    longitude: number;
+    name?: string;
+  } | null>(null);
+
+  // Fetch planned route and origin/destination on mount
+  useEffect(() => {
+    JourneyService.getActiveEscort()
+      .then(escort => {
+        if (escort) {
+          if (escort.plannedRoute && Array.isArray(escort.plannedRoute)) {
+            const mapped = escort.plannedRoute.map((p: any) =>
+              Array.isArray(p)
+                ? { latitude: Number(p[0]), longitude: Number(p[1]) }
+                : {
+                    latitude: Number(p.latitude),
+                    longitude: Number(p.longitude),
+                  },
+            );
+            setPlannedRoute(mapped);
+          }
+          if (escort.origin) {
+            setOriginCoord(escort.origin);
+          }
+          if (escort.destination) {
+            setDestCoord(escort.destination);
+          }
+        }
+      })
+      .catch(() => {});
+  }, [initialJourneyId]);
 
   useEffect(() => {
     if (initialJourneyId) {
@@ -59,7 +101,6 @@ export const GuardianLiveScreen: React.FC<GuardianLiveScreenProps> = ({
 
     const unsub = onJourneyLocation((payload: any) => {
       if (!payload) return;
-      // If we filtered by journeyId or if we accept active location
       if (
         initialJourneyId &&
         payload.journeyId &&
@@ -100,13 +141,31 @@ export const GuardianLiveScreen: React.FC<GuardianLiveScreenProps> = ({
       }
     });
 
+    const unsubEnded = onJourneyEnded((payload: any) => {
+      if (!payload) return;
+      if (
+        !initialJourneyId ||
+        String(payload.journeyId) === String(initialJourneyId)
+      ) {
+        const isCompleted = payload.status === 'completed';
+        Alert.alert(
+          isCompleted ? '🎉 Safe Arrival!' : '🛑 Safe Walk Ended',
+          isCompleted
+            ? `${walkerName} has reached their destination safely! Safe Walk escort session is complete.`
+            : `${walkerName} has cancelled / ended their Safe Walk escort session.`,
+          [{ text: 'Exit Live View', onPress: () => navigation.goBack() }],
+        );
+      }
+    });
+
     return () => {
       if (initialJourneyId) {
         leaveJourneyRoom(initialJourneyId);
       }
       unsub();
+      unsubEnded();
     };
-  }, [initialJourneyId]);
+  }, [initialJourneyId, walkerName, navigation]);
 
   const markers: MapMarkerItem[] = [
     {
@@ -118,6 +177,30 @@ export const GuardianLiveScreen: React.FC<GuardianLiveScreenProps> = ({
       color: isDeviated ? '#EF4444' : '#10B981',
       isUser: true,
     },
+    ...(originCoord
+      ? [
+          {
+            id: 'origin-marker',
+            latitude: originCoord.latitude,
+            longitude: originCoord.longitude,
+            title: 'Start Location',
+            icon: '🟢',
+            color: '#10B981',
+          },
+        ]
+      : []),
+    ...(destCoord
+      ? [
+          {
+            id: 'dest-marker',
+            latitude: destCoord.latitude,
+            longitude: destCoord.longitude,
+            title: destCoord.name || 'Destination',
+            icon: '🏁',
+            color: '#EF4444',
+          },
+        ]
+      : []),
   ];
 
   const handleCallEmergency = () => {
@@ -177,7 +260,7 @@ export const GuardianLiveScreen: React.FC<GuardianLiveScreenProps> = ({
         </View>
       )}
 
-      {/* Live Map */}
+      {/* Live Map with planned corridor polyline and markers */}
       <View style={styles.mapContainer}>
         <OpenMapView
           ref={mapRef}
@@ -185,6 +268,8 @@ export const GuardianLiveScreen: React.FC<GuardianLiveScreenProps> = ({
           zoom={16}
           isDark={true}
           markers={markers}
+          polyline={plannedRoute.length >= 2 ? plannedRoute : undefined}
+          polylineColor={isDeviated ? '#EF4444' : '#4F46E5'}
           showLayerSwitcher={true}
         />
       </View>
@@ -261,7 +346,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop:
+      Platform.OS === 'android' ? (StatusBar.currentHeight || 16) + 8 : 12,
+    paddingBottom: 12,
     backgroundColor: '#0D111D',
     borderBottomWidth: 1,
     borderBottomColor: '#1E293B',

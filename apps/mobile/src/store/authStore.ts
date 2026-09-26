@@ -180,6 +180,7 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
       await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, 'guest-session-token');
       await AsyncStorage.setItem(STORAGE_KEYS.IS_GUEST, 'true');
       await AsyncStorage.setItem(STORAGE_KEYS.ONBOARDING_SEEN, 'true');
+      await AsyncStorage.removeItem('@safora_custom_emergency_contacts');
     } catch {
       // Storage fallback
     }
@@ -332,6 +333,7 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
         AsyncStorage.removeItem(STORAGE_KEYS.USER),
         AsyncStorage.removeItem(STORAGE_KEYS.TOKEN),
         AsyncStorage.removeItem(STORAGE_KEYS.IS_GUEST),
+        AsyncStorage.removeItem('@safora_custom_emergency_contacts'),
       ]);
     } catch {
       // Cleanup fallback

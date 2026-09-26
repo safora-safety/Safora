@@ -18,6 +18,9 @@ import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { useTheme } from '../theme/ThemeContext';
 import { HazardCategory, HazardReport } from '@safora/shared-types';
 import { ReportService } from '../services/reportService';
+import { reverseGeocode } from '../services/locationService';
+import { useAuthStore } from '../store/authStore';
+import { navigationRef } from '../navigation/RootNavigator';
 
 interface ReportHazardModalProps {
   visible: boolean;
@@ -57,6 +60,7 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
   onReportCreated,
 }) => {
   const { colors, isDark } = useTheme();
+  const { isGuest } = useAuthStore();
   const [category, setCategory] = useState<HazardCategory>('lighting');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -72,12 +76,23 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
   // Pin location state (defaults to live device coordinates, adjustable by user)
   const [reportLat, setReportLat] = useState(coordinates.latitude);
   const [reportLng, setReportLng] = useState(coordinates.longitude);
+  const [reportAddress, setReportAddress] = useState<string>('');
   const [isEditingPin, setIsEditingPin] = useState(false);
 
   React.useEffect(() => {
     setReportLat(coordinates.latitude);
     setReportLng(coordinates.longitude);
+    reverseGeocode(coordinates.latitude, coordinates.longitude).then(
+      setReportAddress,
+    );
   }, [coordinates.latitude, coordinates.longitude, visible]);
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      reverseGeocode(reportLat, reportLng).then(setReportAddress);
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [reportLat, reportLng]);
 
   const handleTakePhoto = async () => {
     if (Platform.OS === 'android') {
@@ -150,6 +165,26 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
   };
 
   const handleSubmit = async () => {
+    if (isGuest) {
+      Alert.alert(
+        'Account Required to Report Hazards',
+        'To maintain safety data integrity and prevent false reports, reporting community hazards requires a registered citizen account.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Sign In / Register',
+            onPress: () => {
+              onClose();
+              if (navigationRef.isReady()) {
+                navigationRef.navigate('Auth', { initialTab: 'register' });
+              }
+            },
+          },
+        ],
+      );
+      return;
+    }
+
     setFormError(null);
 
     const trimmedTitle = title.trim();
@@ -341,20 +376,23 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
                   <Text
                     style={[
                       styles.locationCoordsText,
-                      { color: colors.textPrimary },
+                      {
+                        color: colors.textPrimary,
+                        fontWeight: '800',
+                        fontSize: 13,
+                      },
                     ]}
+                    numberOfLines={2}
                   >
-                    Lat: {reportLat.toFixed(5)}, Lng: {reportLng.toFixed(5)}
+                    {reportAddress || 'Resolving street address...'}
                   </Text>
                   <Text
                     style={[
                       styles.locationHelpText,
-                      { color: colors.textMuted },
+                      { color: colors.textMuted, fontSize: 11, marginTop: 2 },
                     ]}
                   >
-                    {isEditingPin
-                      ? 'Manually fine-tuning pin coordinates'
-                      : 'Default: Live device GPS coordinates'}
+                    GPS Pin: {reportLat.toFixed(5)}, {reportLng.toFixed(5)}
                   </Text>
                 </View>
               </View>

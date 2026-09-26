@@ -119,13 +119,62 @@ export async function getCurrentCoordinates(): Promise<LocationCoordinates> {
             });
           },
           () => {
-            // Absolute fallback if no GPS hardware enabled
-            resolve(DEFAULT_COORDINATES);
+            // Cold start fallback: Listen transiently for initial hardware GPS warm-up lock
+            let hasResolved = false;
+            let watchId: number | null = null;
+            const cleanup = () => {
+              if (watchId !== null) {
+                Geolocation.clearWatch(watchId);
+                watchId = null;
+              }
+            };
+
+            const timer = setTimeout(() => {
+              if (!hasResolved) {
+                hasResolved = true;
+                cleanup();
+                resolve(DEFAULT_COORDINATES);
+              }
+            }, 10000);
+
+            try {
+              watchId = Geolocation.watchPosition(
+                async warmPos => {
+                  if (hasResolved) return;
+                  hasResolved = true;
+                  clearTimeout(timer);
+                  cleanup();
+                  const lat = warmPos.coords.latitude;
+                  const lng = warmPos.coords.longitude;
+                  const accuracy = Math.round(warmPos.coords.accuracy || 12);
+                  const resolvedName = await reverseGeocode(lat, lng);
+                  resolve({
+                    latitude: lat,
+                    longitude: lng,
+                    accuracy,
+                    areaName: resolvedName,
+                    isLive: true,
+                  });
+                },
+                () => {
+                  if (!hasResolved) {
+                    hasResolved = true;
+                    clearTimeout(timer);
+                    cleanup();
+                    resolve(DEFAULT_COORDINATES);
+                  }
+                },
+                { enableHighAccuracy: true, distanceFilter: 1, interval: 1500 },
+              );
+            } catch {
+              clearTimeout(timer);
+              resolve(DEFAULT_COORDINATES);
+            }
           },
-          { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 },
+          { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 },
         );
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 10000 },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 10000 },
     );
   });
 }

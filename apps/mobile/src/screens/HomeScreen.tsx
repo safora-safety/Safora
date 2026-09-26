@@ -92,6 +92,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
   useEffect(() => {
     checkActiveEscort();
 
+    // Auto-fetch active escort every 8 seconds so Device B detects new walks immediately
+    const pollTimer = setInterval(() => {
+      checkActiveEscort();
+    }, 8000);
+
     const unsubLoc = onJourneyLocation((payload: any) => {
       if (!payload || !payload.latitude || !payload.longitude) return;
       if (payload.walkerName) {
@@ -106,17 +111,53 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
       }
     });
 
-    const unsubStart = onJourneyStart(() => {
+    const unsubStart = onJourneyStart((payload: any) => {
       checkActiveEscort();
+      Vibration.vibrate([0, 300, 100, 300]);
+      const walker = payload?.walkerName || 'Your contact';
+      Alert.alert(
+        '🚶‍♀️ Live Safe Walk Started',
+        `${walker} has started a Safe Walk escort session. Live GPS tracking is active!`,
+        [
+          { text: 'Later', style: 'cancel' },
+          {
+            text: 'Watch Live Escort',
+            onPress: () => {
+              if (navigationRef.isReady()) {
+                (navigationRef as any).navigate('GuardianLive', {
+                  journeyId: payload?.journeyId,
+                  walkerName: walker,
+                  initialLocation: payload?.origin,
+                });
+              }
+            },
+          },
+        ],
+      );
     });
 
     const unsubEnd = onJourneyEnded((payload: any) => {
+      const status = payload?.status || 'completed';
       setActiveTrackedWalker(prev => {
         if (!prev) return null;
         if (
           !payload?.journeyId ||
           String(prev.journeyId) === String(payload.journeyId)
         ) {
+          const wName = prev.walkerName || 'Walker';
+          if (status === 'completed') {
+            Vibration.vibrate(500);
+            Alert.alert(
+              '✅ Safe Arrival Confirmed',
+              `${wName} has reached their destination safely! Safe Walk escort session completed.`,
+            );
+          } else if (status === 'cancelled') {
+            Vibration.vibrate([0, 200, 100, 200]);
+            Alert.alert(
+              '🛑 Safe Walk Cancelled',
+              `${wName} has cancelled their Safe Walk session.`,
+            );
+          }
           return null;
         }
         return prev;
@@ -124,6 +165,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
     });
 
     return () => {
+      clearInterval(pollTimer);
       unsubLoc();
       unsubStart();
       unsubEnd();
@@ -180,6 +222,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
     getCurrentCoordinates().then(c => {
       setCoords(c);
       loadSafetyScore(c.latitude, c.longitude);
+    });
+
+    // Ensure microphone permission is prompted if user bypassed onboarding
+    AudioRecorderService.isPermissionGranted().then(granted => {
+      if (!granted) {
+        AudioRecorderService.requestPermissionOnce().catch(() => {});
+      }
     });
   }, []);
 

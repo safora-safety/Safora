@@ -3,6 +3,7 @@ import { ReportService } from "../services/reportService";
 import { ReportRepository } from "../repositories/reportRepository";
 import { AuthenticatedRequest } from "../middleware/auth";
 import { ReportModel } from "../models/Report";
+import { HazardReport } from "@safora/shared-types";
 
 export async function createReport(
   req: AuthenticatedRequest,
@@ -48,13 +49,15 @@ export async function getReports(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const limit = parseInt(req.query.limit as string, 10) || 50;
-    const reports = await ReportService.getReports(limit);
-
+    const limit = parseInt(req.query.limit as string, 10) || 500;
     const authReq = req as AuthenticatedRequest;
     const isStaff =
       authReq.user &&
       (authReq.user.role === "admin" || authReq.user.role === "moderator");
+    const statusQuery = req.query.status as string | undefined;
+    const status = statusQuery || (isStaff ? undefined : "active");
+
+    const reports = await ReportService.getReports(limit, status);
     const formatted = isStaff
       ? reports.map(ReportModel.toStaff)
       : reports.map(ReportModel.toPublic);
@@ -77,13 +80,26 @@ export async function getNearbyReports(
   try {
     const lat = parseFloat(req.query.lat as string) || 30.3165;
     const lng = parseFloat(req.query.lng as string) || 78.0322;
-    const radiusMeters = parseFloat(req.query.radius as string) || 5000;
+    const radiusMeters = parseFloat(req.query.radius as string) || 50000;
+    const limit = parseInt(req.query.limit as string, 10) || 500;
+    const showAll = req.query.all === "true" || radiusMeters >= 500000;
 
-    const { reports, source } = await ReportService.getNearbyReports(
-      lat,
-      lng,
-      radiusMeters,
-    );
+    let reports: HazardReport[];
+    let source = "postgis_gist";
+
+    if (showAll) {
+      reports = await ReportService.getReports(limit, "active");
+      source = "all_active";
+    } else {
+      const result = await ReportService.getNearbyReports(
+        lat,
+        lng,
+        radiusMeters,
+        limit,
+      );
+      reports = result.reports;
+      source = result.source;
+    }
 
     const authReq = req as AuthenticatedRequest;
     const isStaff =

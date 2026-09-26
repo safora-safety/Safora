@@ -186,17 +186,57 @@ export class JourneyRepository {
   }
 
   static async findAll(
-    limit = 50,
-  ): Promise<Array<JourneyRow & { user_name?: string; user_phone?: string }>> {
-    const result = await db.query(
-      `SELECT j.*, u.name as user_name, u.phone as user_phone, u.email as user_email
-       FROM journeys j
-       LEFT JOIN users u ON j.user_id = u.id
-       ORDER BY j.started_at DESC
-       LIMIT $1;`,
-      [limit],
-    );
+    limit = 100,
+    status?: string,
+  ): Promise<
+    Array<
+      JourneyRow & {
+        user_name?: string;
+        user_phone?: string;
+        user_email?: string;
+        last_lat?: number;
+        last_lng?: number;
+      }
+    >
+  > {
+    const query = status
+      ? `SELECT j.*, u.name as user_name, u.phone as user_phone, u.email as user_email,
+                ST_Y(j.last_location::geometry) as last_lat,
+                ST_X(j.last_location::geometry) as last_lng
+         FROM journeys j
+         LEFT JOIN users u ON j.user_id = u.id
+         WHERE j.status = $2
+         ORDER BY j.started_at DESC
+         LIMIT $1;`
+      : `SELECT j.*, u.name as user_name, u.phone as user_phone, u.email as user_email,
+                ST_Y(j.last_location::geometry) as last_lat,
+                ST_X(j.last_location::geometry) as last_lng
+         FROM journeys j
+         LEFT JOIN users u ON j.user_id = u.id
+         ORDER BY j.started_at DESC
+         LIMIT $1;`;
+    const params: any[] = [limit];
+    if (status) params.push(status);
+    const result = await db.query(query, params);
     return result.rows;
+  }
+
+  static async updateStatusByStaff(
+    journeyId: string | number,
+    status: string,
+  ): Promise<JourneyRow | null> {
+    const isEnd = status === "completed" || status === "cancelled";
+    const query = isEnd
+      ? `UPDATE journeys
+         SET status = $1, ended_at = CURRENT_TIMESTAMP
+         WHERE id = $2
+         RETURNING *;`
+      : `UPDATE journeys
+         SET status = $1
+         WHERE id = $2
+         RETURNING *;`;
+    const result = await db.query(query, [status, journeyId]);
+    return result.rows[0] || null;
   }
 
   static async findActiveEscortForGuardian(

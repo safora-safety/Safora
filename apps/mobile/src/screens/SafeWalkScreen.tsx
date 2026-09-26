@@ -376,6 +376,54 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
       return;
     }
 
+    // Android Battery Optimization Whitelist Check (V1 Upgrade)
+    if (Platform.OS === 'android') {
+      try {
+        const batPrompted = await AsyncStorage.getItem(
+          '@safora_battery_optimization_prompted',
+        );
+        if (batPrompted !== 'true') {
+          Alert.alert(
+            '🔋 Ensure Reliable Background GPS',
+            'To prevent phone battery savers (Samsung, Xiaomi, OnePlus) from interrupting Safe Walk GPS when your screen is locked, please allow SAFORA in unrestricted battery settings.',
+            [
+              {
+                text: 'Later',
+                style: 'cancel',
+                onPress: async () => {
+                  await AsyncStorage.setItem(
+                    '@safora_battery_optimization_prompted',
+                    'true',
+                  );
+                  continueInitiateWalk();
+                },
+              },
+              {
+                text: 'Open Battery Settings',
+                onPress: async () => {
+                  await AsyncStorage.setItem(
+                    '@safora_battery_optimization_prompted',
+                    'true',
+                  );
+                  Linking.sendIntent(
+                    'android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS',
+                  ).catch(() => {
+                    Linking.openSettings().catch(() => {});
+                  });
+                  continueInitiateWalk();
+                },
+              },
+            ],
+          );
+          return;
+        }
+      } catch {}
+    }
+
+    await continueInitiateWalk();
+  };
+
+  const continueInitiateWalk = async () => {
     try {
       const contacts = await SosService.getContacts();
       const valid = contacts.filter(
@@ -498,12 +546,16 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
   };
 
   const shareArrivalWhatsApp = () => {
+    const destination = destPos.name || 'my destination';
     const text = encodeURIComponent(
-      `✅ Hey! I have reached my destination (${destPos.name}) safely. My SAFORA Safe Walk escort session is completed.`,
+      `✅ Hey! I have reached ${destination} safely. My SAFORA Safe Walk companion escort session is completed.`,
     );
     Linking.openURL(`whatsapp://send?text=${text}`).catch(() => {
       Linking.openURL(`sms:?body=${text}`).catch(() => {
-        Alert.alert('Arrival Shared', 'Emergency contacts notified.');
+        Alert.alert(
+          'Arrival Notification',
+          'Could not launch messaging client. Please verify WhatsApp or SMS app is installed.',
+        );
       });
     });
     setShowArrivalModal(false);
@@ -511,7 +563,8 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
 
   const triggerDeviationPrompt = (title: string, msg: string) => {
     setDeviation(true, 60);
-    Vibration.vibrate([0, 500, 200, 500]);
+    // 3-pulse urgent haptic vibration alert so user feels it immediately even in deep pocket/purse
+    Vibration.vibrate([0, 600, 200, 600, 200, 600]);
     Alert.alert(
       `⚠️ ${title}`,
       `${msg}\n\nEmergency contacts will be auto-dispatched in 60s if not confirmed.`,

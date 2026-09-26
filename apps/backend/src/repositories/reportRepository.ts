@@ -14,15 +14,22 @@ export interface CreateReportData {
 }
 
 export class ReportRepository {
-  static async findAll(limit = 100): Promise<ReportRow[]> {
-    const result = await db.query(
-      `SELECT r.*, u.name as reporter_name
-       FROM reports r
-       LEFT JOIN users u ON r.user_id = u.id
-       ORDER BY r.created_at DESC
-       LIMIT $1;`,
-      [limit],
-    );
+  static async findAll(limit = 500, status?: string): Promise<ReportRow[]> {
+    const query = status
+      ? `SELECT r.*, u.name as reporter_name
+         FROM reports r
+         LEFT JOIN users u ON r.user_id = u.id
+         WHERE r.status = $2
+         ORDER BY r.created_at DESC
+         LIMIT $1;`
+      : `SELECT r.*, u.name as reporter_name
+         FROM reports r
+         LEFT JOIN users u ON r.user_id = u.id
+         ORDER BY r.created_at DESC
+         LIMIT $1;`;
+    const params: any[] = [limit];
+    if (status) params.push(status);
+    const result = await db.query(query, params);
     return result.rows;
   }
 
@@ -30,7 +37,7 @@ export class ReportRepository {
     lat: number,
     lng: number,
     radiusMeters: number,
-    limit = 50,
+    limit = 500,
   ): Promise<ReportRow[]> {
     const result = await db.query(
       `SELECT

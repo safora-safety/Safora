@@ -68,8 +68,9 @@ export const createReportSchema = z.object({
 export const nearbyReportsQuerySchema = z.object({
   lat: z.coerce.number().min(-90).max(90).default(30.3165),
   lng: z.coerce.number().min(-180).max(180).default(78.0322),
-  radius: z.coerce.number().positive().default(5000),
-  limit: z.coerce.number().int().positive().max(200).default(50),
+  radius: z.coerce.number().positive().default(50000),
+  limit: z.coerce.number().int().positive().max(1000).default(500),
+  all: z.coerce.string().optional(),
 });
 
 export const startJourneySchema = z.object({

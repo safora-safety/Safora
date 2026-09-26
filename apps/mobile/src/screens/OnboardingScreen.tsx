@@ -117,11 +117,9 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     navigation.replace('AccountSelect');
   };
 
-  const handleSkip = async () => {
-    // Skip marks consent decided so panic SOS does not pop unexpected dialogs
-    await AudioRecorderService.markConsentDecided();
-    await completeOnboarding();
-    navigation.replace('AccountSelect');
+  const handleSkip = () => {
+    // Skipping intro slides must still prompt for essential emergency microphone consent
+    setShowConsentModal(true);
   };
 
   return (

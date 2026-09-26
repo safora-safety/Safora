@@ -97,6 +97,7 @@ function createDatabasePool(): InstanceType<typeof Pool> {
 }
 
 export const db = createDatabasePool();
+export const pool = db;
 
 // Handle idle connection drops gracefully (Neon serverless scales down to 0)
 db.on("error", (err: any) => {

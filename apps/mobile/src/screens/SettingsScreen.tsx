@@ -8,11 +8,13 @@ import {
   Switch,
   StatusBar,
   Alert,
+  Linking,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuthStore } from '../store/authStore';
 import { ChangePasswordModal } from '../components/ChangePasswordModal';
+import { AudioRecorderService } from '../services/audioRecorderService';
 
 interface SettingsScreenProps {
   navigation: any;
@@ -31,6 +33,29 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const [highAccuracyGps, setHighAccuracyGps] = useState(true);
   const [hazardAlerts, setHazardAlerts] = useState(true);
   const [reachedNotification, setReachedNotification] = useState(true);
+  const [micGranted, setMicGranted] = useState(false);
+
+  useEffect(() => {
+    AudioRecorderService.isPermissionGranted().then(setMicGranted);
+  }, []);
+
+  const handleManageMic = async () => {
+    const granted = await AudioRecorderService.isPermissionGranted();
+    if (!granted) {
+      const requested = await AudioRecorderService.requestPermission();
+      if (requested) {
+        setMicGranted(true);
+        Alert.alert(
+          'Microphone Access Enabled',
+          '30-second ambient audio evidence will capture automatically during emergency SOS broadcasts.',
+        );
+      } else {
+        Linking.openSettings();
+      }
+    } else {
+      Linking.openSettings();
+    }
+  };
 
   useEffect(() => {
     Promise.all([
@@ -381,6 +406,55 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               >
                 Update ›
               </Text>
+            </View>
+          </TouchableOpacity>
+
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+          <TouchableOpacity style={styles.actionItem} onPress={handleManageMic}>
+            <View
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <View style={{ flex: 1, paddingRight: 10 }}>
+                <Text
+                  style={[styles.actionItemText, { color: colors.textPrimary }]}
+                >
+                  🎙️ Microphone Evidence Permission
+                </Text>
+                <Text
+                  style={{
+                    color: colors.textMuted,
+                    fontSize: 11,
+                    marginTop: 2,
+                  }}
+                >
+                  Captures 30s ambient audio during emergency SOS broadcasts
+                </Text>
+              </View>
+              <View
+                style={{
+                  backgroundColor: micGranted
+                    ? 'rgba(16, 185, 129, 0.15)'
+                    : 'rgba(239, 68, 68, 0.15)',
+                  paddingHorizontal: 10,
+                  paddingVertical: 5,
+                  borderRadius: 8,
+                }}
+              >
+                <Text
+                  style={{
+                    color: micGranted ? '#10B981' : '#EF4444',
+                    fontSize: 12,
+                    fontWeight: '700',
+                  }}
+                >
+                  {micGranted ? '✓ Allowed' : 'Enable ›'}
+                </Text>
+              </View>
             </View>
           </TouchableOpacity>
         </View>

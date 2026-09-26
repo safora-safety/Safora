@@ -22,19 +22,56 @@ const PENDING_REPORTS_KEY = '@safora_offline_pending_reports';
 
 export class ReportService {
   /**
+   * Fetch all active community hazard reports across the entire city and map
+   */
+  static async getAll(limit = 500): Promise<HazardReport[]> {
+    try {
+      const res = await apiClient.get<
+        ApiResponse<{ reports: HazardReport[] }> & { reports: HazardReport[] }
+      >(`/reports?limit=${limit}&status=active`, {
+        timeout: 6000,
+      });
+
+      const reports = res.data.reports || (res.data as any).data?.reports;
+      if (Array.isArray(reports)) {
+        await AsyncStorage.setItem(HAZARDS_CACHE_KEY, JSON.stringify(reports));
+        return reports;
+      }
+    } catch {
+      // Fallback handled below
+    }
+
+    try {
+      const cached = await AsyncStorage.getItem(HAZARDS_CACHE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch {}
+
+    return [];
+  }
+
+  /**
    * Fetch nearby hazard reports with offline AsyncStorage persistence
    */
   static async getNearby(
     lat = 30.3165,
     lng = 78.0322,
-    radius = 5000,
+    radius = 50000,
+    limit = 500,
   ): Promise<HazardReport[]> {
     try {
       const res = await apiClient.get<
         ApiResponse<{ reports: HazardReport[] }> & { reports: HazardReport[] }
-      >(`/reports/nearby?lat=${lat}&lng=${lng}&radius=${radius}`, {
-        timeout: 4500, // Fast 4.5s timeout for low-bandwidth connections
-      });
+      >(
+        `/reports/nearby?lat=${lat}&lng=${lng}&radius=${radius}&limit=${limit}`,
+        {
+          timeout: 5000,
+        },
+      );
 
       const reports = res.data.reports || (res.data as any).data?.reports;
       if (Array.isArray(reports)) {
@@ -181,6 +218,62 @@ export class ReportService {
       } catch {}
 
       return localReport;
+    }
+  }
+
+  /**
+   * Get the count of offline hazard reports waiting to be synced
+   */
+  static async getPendingCount(): Promise<number> {
+    try {
+      const pending = await AsyncStorage.getItem(PENDING_REPORTS_KEY);
+      if (!pending) return 0;
+      const list = JSON.parse(pending);
+      return Array.isArray(list) ? list.length : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
+   * Manually sync all queued offline hazard reports with the backend server
+   */
+  static async syncPendingReports(): Promise<{
+    synced: number;
+    remaining: number;
+  }> {
+    try {
+      const pending = await AsyncStorage.getItem(PENDING_REPORTS_KEY);
+      if (!pending) return { synced: 0, remaining: 0 };
+      const list: CreateReportPayload[] = JSON.parse(pending);
+      if (!Array.isArray(list) || list.length === 0)
+        return { synced: 0, remaining: 0 };
+
+      const remaining: CreateReportPayload[] = [];
+      let synced = 0;
+
+      for (const item of list) {
+        try {
+          const res = await apiClient.post<
+            ApiResponse<{ report: HazardReport }> & { report: HazardReport }
+          >('/reports', item);
+          if (res.data?.report || (res.data as any)?.data?.report) {
+            synced++;
+          } else {
+            remaining.push(item);
+          }
+        } catch {
+          remaining.push(item);
+        }
+      }
+
+      await AsyncStorage.setItem(
+        PENDING_REPORTS_KEY,
+        JSON.stringify(remaining),
+      );
+      return { synced, remaining: remaining.length };
+    } catch {
+      return { synced: 0, remaining: 0 };
     }
   }
 
