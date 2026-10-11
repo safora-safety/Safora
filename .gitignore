@@ -32,6 +32,8 @@ node_modules/
 
 # Android & Gradle
 **/.gradle/
+**/.gradle-home/
+*.keystore.bak
 local.properties
 *.iml
 *.hprof

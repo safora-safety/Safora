@@ -16,6 +16,9 @@ export interface User {
   emergencyNotes?: string;
   role?: UserRole;
   isActive?: boolean;
+  authProvider?: string;
+  googleId?: string;
+  avatarUrl?: string;
   age?: number | null;
   ageNoticeAck?: boolean;
   age_notice_ack?: boolean;

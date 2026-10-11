@@ -12,10 +12,38 @@ export class UserRepository {
 
   static async findById(id: string | number): Promise<UserRow | null> {
     const result = await db.query(
-      "SELECT id, name, email, phone, blood_group, emergency_notes, role, is_active, age, age_notice_ack, terms_accepted_at, created_at FROM users WHERE id = $1 LIMIT 1;",
+      "SELECT id, name, email, phone, blood_group, emergency_notes, role, is_active, auth_provider, google_id, avatar_url, age, age_notice_ack, terms_accepted_at, created_at FROM users WHERE id = $1 LIMIT 1;",
       [id],
     );
     return result.rows[0] || null;
+  }
+
+  static async findByGoogleId(googleId: string): Promise<UserRow | null> {
+    const result = await db.query(
+      "SELECT * FROM users WHERE google_id = $1 LIMIT 1;",
+      [googleId],
+    );
+    return result.rows[0] || null;
+  }
+
+  static async createGoogleUser(data: {
+    name: string;
+    email: string;
+    googleId: string;
+    avatarUrl?: string;
+  }): Promise<UserRow> {
+    const result = await db.query(
+      `INSERT INTO users (name, email, google_id, auth_provider, avatar_url, role)
+       VALUES ($1, $2, $3, 'google', $4, 'user')
+       RETURNING id, name, email, phone, blood_group, emergency_notes, role, is_active, auth_provider, google_id, avatar_url, age, age_notice_ack, terms_accepted_at, created_at;`,
+      [
+        data.name.trim(),
+        data.email.toLowerCase().trim(),
+        data.googleId,
+        data.avatarUrl || null,
+      ],
+    );
+    return result.rows[0];
   }
 
   static async createUser(data: {
@@ -25,9 +53,9 @@ export class UserRepository {
     passwordHash: string;
   }): Promise<UserRow> {
     const result = await db.query(
-      `INSERT INTO users (name, email, phone, password)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, name, email, phone, blood_group, emergency_notes, role, age, age_notice_ack, terms_accepted_at, created_at;`,
+      `INSERT INTO users (name, email, phone, password, auth_provider)
+       VALUES ($1, $2, $3, $4, 'local')
+       RETURNING id, name, email, phone, blood_group, emergency_notes, role, auth_provider, google_id, avatar_url, age, age_notice_ack, terms_accepted_at, created_at;`,
       [
         data.name.trim(),
         data.email.toLowerCase().trim(),
@@ -47,6 +75,9 @@ export class UserRepository {
       blood_group?: string | null;
       emergency_notes?: string | null;
       fcm_token?: string | null;
+      google_id?: string | null;
+      avatar_url?: string | null;
+      auth_provider?: string | null;
       age?: number | null;
       age_notice_ack?: boolean | null;
       terms_accepted_at?: Date | string | null;
@@ -80,6 +111,18 @@ export class UserRepository {
       fields.push(`fcm_token = $${idx++}`);
       values.push(data.fcm_token ? data.fcm_token.trim() : null);
     }
+    if (data.google_id !== undefined) {
+      fields.push(`google_id = $${idx++}`);
+      values.push(data.google_id);
+    }
+    if (data.avatar_url !== undefined) {
+      fields.push(`avatar_url = $${idx++}`);
+      values.push(data.avatar_url);
+    }
+    if (data.auth_provider !== undefined) {
+      fields.push(`auth_provider = $${idx++}`);
+      values.push(data.auth_provider);
+    }
     if (data.age !== undefined) {
       fields.push(`age = $${idx++}`);
       values.push(data.age != null ? Number(data.age) : null);
@@ -104,7 +147,7 @@ export class UserRepository {
       UPDATE users
       SET ${fields.join(", ")}
       WHERE id = $${idx}
-      RETURNING id, name, email, phone, blood_group, emergency_notes, role, age, age_notice_ack, terms_accepted_at, created_at;
+      RETURNING id, name, email, phone, blood_group, emergency_notes, role, is_active, auth_provider, google_id, avatar_url, age, age_notice_ack, terms_accepted_at, created_at;
     `;
 
     const result = await db.query(query, values);

@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { OAuth2Client } from "google-auth-library";
 import { AppError } from "../errors/AppError";
 import { User } from "@safora/shared-types";
 import { UserRepository } from "../repositories/userRepository";
@@ -13,7 +14,127 @@ if (!JWT_SECRET) {
 }
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 
+const GOOGLE_CLIENT_ID =
+  process.env.GOOGLE_CLIENT_ID ||
+  "586932371847-8kr8epdn0u64jdma6e6s8is1hdodv5pt.apps.googleusercontent.com";
+const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
+
 export class AuthService {
+  static async loginWithGoogle(
+    idToken: string,
+  ): Promise<{ user: User; token: string }> {
+    if (!idToken || !idToken.trim()) {
+      throw new AppError("Google ID token is required", 400);
+    }
+
+    let payload:
+      | {
+          sub: string;
+          email?: string;
+          name?: string;
+          picture?: string;
+          email_verified?: boolean;
+        }
+      | undefined;
+
+    try {
+      const ticket = await googleClient.verifyIdToken({
+        idToken: idToken.trim(),
+        audience: GOOGLE_CLIENT_ID,
+      });
+      const googlePayload = ticket.getPayload();
+      if (!googlePayload) {
+        throw new AppError("Invalid Google token payload", 401);
+      }
+      payload = {
+        sub: googlePayload.sub,
+        email: googlePayload.email,
+        name: googlePayload.name,
+        picture: googlePayload.picture,
+        email_verified: googlePayload.email_verified,
+      };
+    } catch (err: unknown) {
+      // Fallback: tokeninfo endpoint check
+      try {
+        const response = await fetch(
+          `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken.trim())}`,
+        );
+        if (!response.ok) {
+          throw new Error("Tokeninfo returned non-200");
+        }
+        const data = (await response.json()) as any;
+        if (data.error_description || !data.sub || !data.email) {
+          throw new Error(
+            data.error_description || "Invalid tokeninfo response",
+          );
+        }
+        payload = {
+          sub: data.sub,
+          email: data.email,
+          name: data.name,
+          picture: data.picture,
+          email_verified:
+            data.email_verified === "true" || data.email_verified === true,
+        };
+      } catch {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new AppError(`Google authentication failed: ${msg}`, 401);
+      }
+    }
+
+    if (!payload?.email) {
+      throw new AppError(
+        "Google account does not provide an email address",
+        400,
+      );
+    }
+
+    const email = payload.email.toLowerCase().trim();
+    const name = payload.name?.trim() || email.split("@")[0] || "Safora User";
+    const googleId = payload.sub;
+    const avatarUrl = payload.picture;
+
+    // Check if user already exists by email
+    let row = await UserRepository.findByEmail(email);
+
+    if (row) {
+      // User exists: link Google credentials if not present
+      const updates: {
+        google_id?: string;
+        avatar_url?: string;
+        auth_provider?: string;
+      } = {};
+      if (!row.google_id) updates.google_id = googleId;
+      if (!row.avatar_url && avatarUrl) updates.avatar_url = avatarUrl;
+      if (!row.auth_provider || row.auth_provider === "local") {
+        updates.auth_provider = "google";
+      }
+
+      if (Object.keys(updates).length > 0) {
+        const updatedRow = await UserRepository.updateUser(row.id, updates);
+        if (updatedRow) row = updatedRow;
+      }
+    } else {
+      // Create new user via Google Sign-In (Option B: direct login, phone optional)
+      row = await UserRepository.createGoogleUser({
+        name,
+        email,
+        googleId,
+        avatarUrl,
+      });
+    }
+
+    const user = UserModel.fromRow(row);
+
+    const token = jwt.sign(
+      { id: user.id, email: user.email, role: user.role },
+      JWT_SECRET,
+      { expiresIn: JWT_EXPIRES_IN as any },
+    );
+
+    return { user, token };
+  }
+
   static async register(userData: {
     name: string;
     email: string;

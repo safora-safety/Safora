@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   register,
   login,
+  googleAuth,
   getMe,
   updateProfile,
   changePassword,
@@ -17,6 +18,7 @@ import {
 import {
   registerSchema,
   loginSchema,
+  googleAuthSchema,
   updateProfileSchema,
   changePasswordSchema,
 } from "../validation/schemas";
@@ -36,6 +38,12 @@ router.post(
   loginEmailRateLimiter,
   validateBody(loginSchema),
   login,
+);
+router.post(
+  "/google",
+  loginIpRateLimiter,
+  validateBody(googleAuthSchema),
+  googleAuth,
 );
 router.get("/me", authMiddleware as any, getMe);
 router.patch(

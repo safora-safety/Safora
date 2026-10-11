@@ -42,6 +42,24 @@ export async function login(
   }
 }
 
+export async function googleAuth(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { user, token } = await AuthService.loginWithGoogle(req.body.idToken);
+    res.status(200).json({
+      success: true,
+      message: "Google authentication successful",
+      token,
+      user,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function getMe(
   req: AuthenticatedRequest,
   res: Response,
