@@ -3,6 +3,7 @@ import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User } from '@safora/shared-types';
 import { AuthService } from '../services/authService';
+import { GoogleSignInService } from '../services/googleSignInService';
 import { notificationService } from '../services/notificationService';
 import { connectSocket, disconnectSocket } from '../services/socketService';
 import { setUnauthorizedHandler } from '../services/apiClient';
@@ -34,6 +35,7 @@ interface AuthState {
   completeOnboarding: () => Promise<void>;
   enterAsGuest: () => Promise<void>;
   login: (email: string, pass: string) => Promise<boolean>;
+  loginWithGoogle: () => Promise<boolean>;
   register: (
     name: string,
     email: string,
@@ -244,6 +246,57 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
     }
   },
 
+  loginWithGoogle: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const idToken = await GoogleSignInService.promptGoogleSignIn();
+      const rawUser = await AuthService.loginWithGoogle(idToken);
+      const user = normalizeUser(rawUser.user);
+      const token = rawUser.token;
+
+      await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
+      await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, token);
+      await AsyncStorage.setItem(STORAGE_KEYS.IS_GUEST, 'false');
+      await AsyncStorage.setItem(STORAGE_KEYS.ONBOARDING_SEEN, 'true');
+
+      // Update saved profiles
+      const newProfile: SavedProfile = {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        lastActive: new Date().toISOString(),
+      };
+      const filtered = _get().savedProfiles.filter(
+        p => String(p.id) !== String(user.id) && p.email !== user.email,
+      );
+      const updatedProfiles = [newProfile, ...filtered];
+      await AsyncStorage.setItem(
+        STORAGE_KEYS.SAVED_PROFILES,
+        JSON.stringify(updatedProfiles),
+      );
+
+      set({
+        user,
+        token,
+        isAuthenticated: true,
+        isGuest: false,
+        hasSeenOnboarding: true,
+        isLoading: false,
+        savedProfiles: updatedProfiles,
+      });
+
+      connectSocket(token);
+      notificationService.registerTokenWithBackend().catch(() => {});
+      return true;
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : 'Google authentication failed';
+      set({ error: msg, isLoading: false });
+      return false;
+    }
+  },
+
   register: async (
     name: string,
     email: string,
@@ -300,6 +353,7 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
 
   logout: async () => {
     disconnectSocket();
+    GoogleSignInService.signOut().catch(() => {});
     const currentUser = _get().user;
     let profiles = _get().savedProfiles;
 

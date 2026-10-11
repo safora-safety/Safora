@@ -34,9 +34,17 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
-  const { login, register, enterAsGuest, isLoading, error, clearError } =
-    useAuthStore();
+  const {
+    login,
+    loginWithGoogle,
+    register,
+    enterAsGuest,
+    isLoading,
+    error,
+    clearError,
+  } = useAuthStore();
 
   const isEmailValid = (val: string) =>
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val.trim());
@@ -115,6 +123,43 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           navigation.navigate('Terms');
         }
       }
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setLocalError(null);
+    clearError();
+    setIsGoogleLoading(true);
+    try {
+      const ok = await loginWithGoogle();
+      if (ok) {
+        try {
+          const u = useAuthStore.getState().user;
+          const hasTerms = Boolean(
+            u?.terms_accepted_at || (u as any)?.termsAcceptedAt,
+          );
+          const hasAck = Boolean(u?.age_notice_ack || (u as any)?.ageNoticeAck);
+          if (!hasTerms || !hasAck) {
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'Terms' }],
+            });
+          } else {
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'MainTabs' }],
+            });
+          }
+        } catch {
+          navigation.navigate('MainTabs');
+        }
+      }
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : 'Google authentication failed';
+      setLocalError(msg);
+    } finally {
+      setIsGoogleLoading(false);
     }
   };
 
@@ -301,7 +346,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           <TouchableOpacity
             style={styles.submitButton}
             onPress={handleAuthSubmit}
-            disabled={isLoading}
+            disabled={isLoading || isGoogleLoading}
             activeOpacity={0.85}
           >
             {isLoading ? (
@@ -310,6 +355,36 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               <Text style={styles.submitButtonText}>
                 {activeTab === 'login' ? 'Sign In' : 'Create Account'} →
               </Text>
+            )}
+          </TouchableOpacity>
+
+          {/* Google Sign-In Divider */}
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or continue with</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          {/* Continue with Google Button */}
+          <TouchableOpacity
+            style={styles.googleButton}
+            onPress={handleGoogleSignIn}
+            disabled={isLoading || isGoogleLoading}
+            activeOpacity={0.85}
+          >
+            {isGoogleLoading ? (
+              <ActivityIndicator color="#FFFFFF" size="small" />
+            ) : (
+              <View style={styles.googleButtonContent}>
+                <View style={styles.googleIconCircle}>
+                  <Text style={styles.googleIconLetter}>G</Text>
+                </View>
+                <Text style={styles.googleButtonText}>
+                  {activeTab === 'login'
+                    ? 'Continue with Google'
+                    : 'Sign up with Google'}
+                </Text>
+              </View>
             )}
           </TouchableOpacity>
 
@@ -507,6 +582,64 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
     letterSpacing: 0.5,
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 18,
+    gap: 12,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#1E293B',
+  },
+  dividerText: {
+    color: '#64748B',
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  googleButton: {
+    backgroundColor: '#0F172A',
+    borderRadius: 14,
+    paddingVertical: 13,
+    borderWidth: 1.2,
+    borderColor: '#334155',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  googleButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  googleIconCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#EA4335',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  googleIconLetter: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '900',
+    marginTop: -1,
+  },
+  googleButtonText: {
+    color: '#F8FAFC',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   offlineEntryBtn: {
     flexDirection: 'row',

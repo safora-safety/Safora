@@ -10,6 +10,9 @@ export interface UserRow {
   password?: string;
   role: UserRole;
   is_active?: boolean;
+  auth_provider?: string | null;
+  google_id?: string | null;
+  avatar_url?: string | null;
   age?: number | null;
   age_notice_ack?: boolean | null;
   terms_accepted_at?: Date | string | null;
@@ -25,6 +28,9 @@ export interface UserEntity {
   emergencyNotes?: string;
   role: UserRole;
   isActive?: boolean;
+  authProvider?: string;
+  googleId?: string;
+  avatarUrl?: string;
   age?: number | null;
   ageNoticeAck?: boolean;
   age_notice_ack?: boolean;
@@ -52,6 +58,9 @@ export class UserModel {
       emergencyNotes: row.emergency_notes || undefined,
       role: row.role || "user",
       isActive: row.is_active !== undefined ? Boolean(row.is_active) : true,
+      authProvider: row.auth_provider || "local",
+      googleId: row.google_id || undefined,
+      avatarUrl: row.avatar_url || undefined,
       age: row.age != null ? Number(row.age) : undefined,
       ageNoticeAck: ageAck,
       age_notice_ack: ageAck,

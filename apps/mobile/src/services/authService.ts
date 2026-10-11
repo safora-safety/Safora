@@ -28,6 +28,26 @@ export class AuthService {
     }
   }
 
+  static async loginWithGoogle(
+    idToken: string,
+  ): Promise<{ user: User; token: string }> {
+    try {
+      const response = await apiClient.post<
+        ApiResponse<AuthResponseData> & { token: string; user: User }
+      >('/auth/google', { idToken });
+      return {
+        user: response.data.user,
+        token: response.data.token,
+      };
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.message ||
+        err?.message ||
+        'Google login failed. Please check your connection and try again.';
+      throw new Error(message);
+    }
+  }
+
   static async register(
     name: string,
     email: string,

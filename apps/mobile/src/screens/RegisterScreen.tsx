@@ -31,8 +31,10 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
-  const { register, isLoading, error, clearError } = useAuthStore();
+  const { register, loginWithGoogle, isLoading, error, clearError } =
+    useAuthStore();
 
   const isEmailValid = (val: string) =>
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val.trim());
@@ -82,6 +84,23 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
     }
 
     await register(name.trim(), email.trim(), phone.trim(), password);
+  };
+
+  const handleGoogleSignUp = async () => {
+    setLocalError(null);
+    clearError();
+    setIsGoogleLoading(true);
+    try {
+      const success = await loginWithGoogle();
+      if (success) {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'MainTabs' }],
+        });
+      }
+    } finally {
+      setIsGoogleLoading(false);
+    }
   };
 
   const displayError = localError || error;
@@ -340,6 +359,48 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
           </TouchableOpacity>
         </View>
 
+        {/* Google Divider */}
+        <View style={styles.dividerRow}>
+          <View
+            style={[styles.dividerLine, { backgroundColor: colors.border }]}
+          />
+          <Text style={[styles.dividerText, { color: colors.textMuted }]}>
+            or sign up with
+          </Text>
+          <View
+            style={[styles.dividerLine, { backgroundColor: colors.border }]}
+          />
+        </View>
+
+        {/* Continue with Google */}
+        <TouchableOpacity
+          style={[
+            styles.googleButton,
+            {
+              backgroundColor: colors.backgroundCard,
+              borderColor: colors.border,
+            },
+          ]}
+          onPress={handleGoogleSignUp}
+          disabled={isLoading || isGoogleLoading}
+          activeOpacity={0.8}
+        >
+          {isGoogleLoading ? (
+            <ActivityIndicator color={colors.primary} />
+          ) : (
+            <View style={styles.googleButtonContent}>
+              <View style={styles.googleIconCircle}>
+                <Text style={styles.googleIconLetter}>G</Text>
+              </View>
+              <Text
+                style={[styles.googleButtonText, { color: colors.textPrimary }]}
+              >
+                Sign up with Google
+              </Text>
+            </View>
+          )}
+        </TouchableOpacity>
+
         {/* Login Link */}
         <View style={styles.footerRow}>
           <Text style={[styles.footerText, { color: colors.textSecondary }]}>
@@ -489,6 +550,54 @@ const createStyles = (colors: ThemeColors) =>
       color: '#FFFFFF',
       fontSize: 15,
       fontWeight: '800',
+    },
+    dividerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginVertical: 18,
+    },
+    dividerLine: {
+      flex: 1,
+      height: 1,
+      backgroundColor: colors.border,
+    },
+    dividerText: {
+      color: colors.textMuted,
+      paddingHorizontal: 12,
+      fontSize: 12,
+    },
+    googleButton: {
+      backgroundColor: colors.backgroundCard,
+      paddingVertical: 13,
+      borderRadius: 14,
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: colors.border,
+      marginBottom: 4,
+    },
+    googleButtonContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 12,
+    },
+    googleIconCircle: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      backgroundColor: '#EA4335',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    googleIconLetter: {
+      color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight: '900',
+      marginTop: -1,
+    },
+    googleButtonText: {
+      fontSize: 14,
+      fontWeight: '700',
     },
     footerRow: {
       flexDirection: 'row',

@@ -138,10 +138,14 @@ export async function initDatabase(): Promise<void> {
         role VARCHAR(50) DEFAULT 'user',
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
+      ALTER TABLE users ALTER COLUMN password DROP NOT NULL;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS blood_group VARCHAR(10);
       ALTER TABLE users ADD COLUMN IF NOT EXISTS emergency_notes TEXT;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS fcm_token TEXT;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(50) DEFAULT 'local';
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id VARCHAR(255) UNIQUE;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
     `);
 
     // 3. Hazard Reports Table (with PostGIS location column & GiST spatial index)
