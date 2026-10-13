@@ -293,6 +293,24 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
   }, [fakeCallDelay]);
 
   const handleSosPress = () => {
+    if (isGuest) {
+      Alert.alert(
+        '🔒 SOS Locked in Guest Mode',
+        'Emergency SOS broadcasts live GPS, audio evidence, and notifies your emergency guardians.\n\nTo activate Emergency SOS and configure emergency contacts, please sign in or create an account.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Sign In / Switch Account',
+            onPress: () => {
+              if (navigationRef.isReady()) {
+                (navigationRef as any).navigate('AccountSelect');
+              }
+            },
+          },
+        ],
+      );
+      return;
+    }
     setSosCountdown(5);
   };
 
@@ -398,6 +416,24 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
 
   // Offline SMS Fallback (Zero-Internet SOS Dispatch)
   const dispatchOfflineSmsSos = async () => {
+    if (isGuest) {
+      Alert.alert(
+        '🔒 Offline SOS Locked in Guest Mode',
+        'Offline SMS SOS broadcasts emergency coordinates to your registered emergency contacts.\n\nPlease sign in or create an account to configure contacts.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Sign In / Switch Account',
+            onPress: () => {
+              if (navigationRef.isReady()) {
+                (navigationRef as any).navigate('AccountSelect');
+              }
+            },
+          },
+        ],
+      );
+      return;
+    }
     let targetPhone = '112';
     try {
       const stored = await AsyncStorage.getItem(
@@ -746,24 +782,51 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
             },
           ]}
         >
-          <Text style={styles.sosHeading}>INSTANT EMERGENCY SOS</Text>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: 4,
+            }}
+          >
+            <Text style={styles.sosHeading}>INSTANT EMERGENCY SOS</Text>
+            {isGuest && (
+              <View style={styles.guestLockedBadge}>
+                <Text style={styles.guestLockedBadgeText}>🔒 GUEST LOCKED</Text>
+              </View>
+            )}
+          </View>
           <Text style={[styles.sosSubheading, { color: colors.textSecondary }]}>
-            {sosCountdown !== null
-              ? `DISPATCHING IN ${sosCountdown}s • TAP TO ABORT`
-              : 'Press & hold or tap to notify emergency network'}
+            {isGuest
+              ? 'SOS broadcast is locked in Guest Mode • Tap to unlock'
+              : sosCountdown !== null
+                ? `DISPATCHING IN ${sosCountdown}s • TAP TO ABORT`
+                : 'Press & hold or tap to notify emergency network'}
           </Text>
 
           {/* Concentric Circle SOS Button */}
           <View style={styles.sosRippleContainer}>
-            <View style={styles.sosOuterRing} />
+            <View
+              style={[
+                styles.sosOuterRing,
+                isGuest && styles.sosOuterRingLocked,
+              ]}
+            />
             {sosCountdown === null ? (
               <TouchableOpacity
-                style={styles.sosButton}
+                style={[styles.sosButton, isGuest && styles.sosButtonLocked]}
                 activeOpacity={0.85}
                 onPress={handleSosPress}
               >
-                <Text style={styles.sosButtonText}>SOS</Text>
-                <Text style={styles.sosButtonSubtext}>PRESS FOR HELP</Text>
+                <Text
+                  style={[styles.sosButtonText, isGuest && { fontSize: 26 }]}
+                >
+                  {isGuest ? '🔒 SOS' : 'SOS'}
+                </Text>
+                <Text style={styles.sosButtonSubtext}>
+                  {isGuest ? 'TAP TO UNLOCK' : 'PRESS FOR HELP'}
+                </Text>
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
@@ -779,19 +842,22 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
 
           {/* Offline SMS SOS Fallback Button */}
           <TouchableOpacity
-            style={styles.offlineSmsBtn}
+            style={[styles.offlineSmsBtn, isGuest && { opacity: 0.65 }]}
             onPress={dispatchOfflineSmsSos}
             activeOpacity={0.8}
           >
             <Text style={styles.offlineSmsBtnIcon}>📡</Text>
             <Text style={styles.offlineSmsBtnText}>
-              Offline SMS SOS (No Internet / Basements)
+              {isGuest
+                ? 'Offline SMS SOS 🔒 (Requires Account)'
+                : 'Offline SMS SOS (No Internet / Basements)'}
             </Text>
           </TouchableOpacity>
 
           <Text style={[styles.sosFooterNote, { color: colors.textMuted }]}>
-            Sends live coordinates and audio to your guardians. Quick-dial 112
-            is one tap away.
+            {isGuest
+              ? 'Emergency broadcast and guardian notification loops are locked in Guest Mode. Tap SOS to sign in and activate full protection.'
+              : 'Sends live coordinates and audio to your guardians. Quick-dial 112 is one tap away.'}
           </Text>
         </View>
 
@@ -1212,6 +1278,29 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.6,
     shadowRadius: 18,
     elevation: 10,
+  },
+  guestLockedBadge: {
+    backgroundColor: 'rgba(245, 158, 11, 0.18)',
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  guestLockedBadgeText: {
+    color: '#F59E0B',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  sosButtonLocked: {
+    backgroundColor: '#78350F',
+    borderColor: '#F59E0B',
+    shadowColor: '#B45309',
+  },
+  sosOuterRingLocked: {
+    borderColor: 'rgba(245, 158, 11, 0.25)',
+    backgroundColor: 'rgba(245, 158, 11, 0.05)',
   },
   sosButtonCountdown: {
     backgroundColor: '#991B1B',

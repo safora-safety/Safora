@@ -471,7 +471,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
                 : '#6366F1'
           }
           polylineDash={false}
-          layerSwitcherTop={68}
+          layerSwitcherTop={122}
           onMapPress={handleMapPress}
           onMarkerPress={markerId => {
             const found = hazards.find(h => String(h.id) === String(markerId));
@@ -483,7 +483,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
         />
 
         {/* Floating Google Maps-Style Location Search Bar */}
-        <View style={styles.searchOverlay}>
+        <View style={styles.searchOverlay} pointerEvents="box-none">
           <View
             style={[
               styles.searchBar,
@@ -1047,7 +1047,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
                 ]}
                 onPress={() => {
                   setShowGuestGuardModal(false);
-                  navigation.navigate('Auth', { initialTab: 'register' });
+                  navigation.navigate('AccountSelect');
                 }}
               >
                 <Text style={styles.guestAuthBtnText}>
