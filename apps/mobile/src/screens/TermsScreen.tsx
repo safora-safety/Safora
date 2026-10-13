@@ -159,6 +159,24 @@ export const TermsScreen: React.FC<TermsScreenProps> = ({
 
         <View style={styles.card}>
           <Text style={styles.sectionHeader}>
+            🚨 Emergency SOS & Guardian Protocol
+          </Text>
+          <Text style={styles.bodyText}>
+            • <Text style={styles.bold}>Designated Guardians:</Text> When you
+            trigger SOS, emergency SMS notifications with your live GPS location
+            are instantly dispatched to your trusted contacts.
+          </Text>
+          <Text style={[styles.bodyText, { marginTop: 6 }]}>
+            • <Text style={styles.bold}>If No Contacts Configured:</Text> If no
+            personal guardians are added to your profile, SOS panic alerts are
+            routed exclusively to Central Emergency Dispatch and National
+            Services (112). We recommend adding at least 1 guardian for personal
+            protection.
+          </Text>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionHeader}>
             🎓 Project & Emergency Notice
           </Text>
           <Text style={styles.bodyText}>

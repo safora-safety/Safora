@@ -1,5 +1,6 @@
 import { PermissionsAndroid, Platform } from 'react-native';
 import Geolocation from '@react-native-community/geolocation';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface LocationCoordinates {
   latitude: number;
@@ -10,6 +11,7 @@ export interface LocationCoordinates {
 }
 
 const MAPTILER_KEY = 'NWS4ts6GlPJ2wfFvWYgJ';
+const LAST_KNOWN_LOCATION_KEY = '@safora_last_known_location';
 
 // Default universal fallback
 export const DEFAULT_COORDINATES: LocationCoordinates = {
@@ -76,105 +78,182 @@ export async function requestLocationPermission(): Promise<boolean> {
   return false;
 }
 
+const saveLastKnown = async (loc: LocationCoordinates) => {
+  try {
+    await AsyncStorage.setItem(LAST_KNOWN_LOCATION_KEY, JSON.stringify(loc));
+  } catch {}
+};
+
+/**
+ * Fast coarse IP geolocation fallback for brand-new app installs
+ * when GPS satellite lock has not yet resolved and AsyncStorage is empty.
+ */
+async function fetchCoarseIpCoordinates(): Promise<LocationCoordinates | null> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2500);
+    const res = await fetch('https://ipapi.co/json/', {
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (
+      data &&
+      typeof data.latitude === 'number' &&
+      typeof data.longitude === 'number'
+    ) {
+      const area = data.city
+        ? `${data.city}, ${data.region || data.country_name}`
+        : 'Current Region';
+      const loc: LocationCoordinates = {
+        latitude: data.latitude,
+        longitude: data.longitude,
+        accuracy: 3000,
+        areaName: area,
+        isLive: false,
+      };
+      saveLastKnown(loc);
+      return loc;
+    }
+  } catch {
+    // Silently fall through
+  }
+  return null;
+}
+
+const getFallbackCoordinates = async (): Promise<LocationCoordinates> => {
+  try {
+    const cached = await AsyncStorage.getItem(LAST_KNOWN_LOCATION_KEY);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (parsed && typeof parsed.latitude === 'number') {
+        return { ...parsed, isLive: false };
+      }
+    }
+  } catch {}
+
+  // On brand-new install with empty cache, resolve local IP coordinates before defaulting to Dehradun
+  const ipLoc = await fetchCoarseIpCoordinates();
+  if (ipLoc) {
+    return ipLoc;
+  }
+
+  return DEFAULT_COORDINATES;
+};
+
 /**
  * Robust live hardware GPS fetcher:
  * 1. Explicitly ensures Android location permission is prompted.
- * 2. Tries High Accuracy GPS satellite lock first.
- * 3. Falls back immediately to Network/Wi-Fi location if indoors.
+ * 2. Checks Android system-level last known location with high maximumAge (instantaneous).
+ * 3. Tries High Accuracy GPS satellite lock.
+ * 4. Falls back to Network/Wi-Fi location if indoors.
+ * 5. Falls back to persistent cache or IP geolocation before default coordinates.
  */
 export async function getCurrentCoordinates(): Promise<LocationCoordinates> {
   await requestLocationPermission();
 
-  return new Promise(resolve => {
-    Geolocation.getCurrentPosition(
-      async position => {
-        const lat = position.coords.latitude;
-        const lng = position.coords.longitude;
-        const accuracy = Math.round(position.coords.accuracy || 8);
-        const resolvedName = await reverseGeocode(lat, lng);
+  return new Promise(async resolve => {
+    const handleSuccess = async (lat: number, lng: number, acc: number) => {
+      const resolvedName = await reverseGeocode(lat, lng);
+      const loc: LocationCoordinates = {
+        latitude: lat,
+        longitude: lng,
+        accuracy: acc,
+        areaName: resolvedName,
+        isLive: true,
+      };
+      saveLastKnown(loc);
+      resolve(loc);
+    };
 
-        resolve({
-          latitude: lat,
-          longitude: lng,
-          accuracy,
-          areaName: resolvedName,
-          isLive: true,
-        });
+    // 1. Fast check: retrieve system's cached position (maximumAge: 1 hr) so first install doesn't lag
+    Geolocation.getCurrentPosition(
+      cachedPos => {
+        const lat = cachedPos.coords.latitude;
+        const lng = cachedPos.coords.longitude;
+        const accuracy = Math.round(cachedPos.coords.accuracy || 15);
+        handleSuccess(lat, lng, accuracy);
       },
       () => {
-        // High accuracy failed or timed out (e.g. indoors); fallback to network provider
+        // 2. High accuracy active satellite acquisition
         Geolocation.getCurrentPosition(
-          async netPos => {
-            const lat = netPos.coords.latitude;
-            const lng = netPos.coords.longitude;
-            const accuracy = Math.round(netPos.coords.accuracy || 20);
-            const resolvedName = await reverseGeocode(lat, lng);
-
-            resolve({
-              latitude: lat,
-              longitude: lng,
-              accuracy,
-              areaName: resolvedName,
-              isLive: true,
-            });
+          position => {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            const accuracy = Math.round(position.coords.accuracy || 8);
+            handleSuccess(lat, lng, accuracy);
           },
           () => {
-            // Cold start fallback: Listen transiently for initial hardware GPS warm-up lock
-            let hasResolved = false;
-            let watchId: number | null = null;
-            const cleanup = () => {
-              if (watchId !== null) {
-                Geolocation.clearWatch(watchId);
-                watchId = null;
-              }
-            };
+            // 3. Indoors / cellular network provider fallback
+            Geolocation.getCurrentPosition(
+              netPos => {
+                const lat = netPos.coords.latitude;
+                const lng = netPos.coords.longitude;
+                const accuracy = Math.round(netPos.coords.accuracy || 20);
+                handleSuccess(lat, lng, accuracy);
+              },
+              () => {
+                // 4. Watch position warmup fallback
+                let hasResolved = false;
+                let watchId: number | null = null;
+                const cleanup = () => {
+                  if (watchId !== null) {
+                    Geolocation.clearWatch(watchId);
+                    watchId = null;
+                  }
+                };
 
-            const timer = setTimeout(() => {
-              if (!hasResolved) {
-                hasResolved = true;
-                cleanup();
-                resolve(DEFAULT_COORDINATES);
-              }
-            }, 10000);
-
-            try {
-              watchId = Geolocation.watchPosition(
-                async warmPos => {
-                  if (hasResolved) return;
-                  hasResolved = true;
-                  clearTimeout(timer);
-                  cleanup();
-                  const lat = warmPos.coords.latitude;
-                  const lng = warmPos.coords.longitude;
-                  const accuracy = Math.round(warmPos.coords.accuracy || 12);
-                  const resolvedName = await reverseGeocode(lat, lng);
-                  resolve({
-                    latitude: lat,
-                    longitude: lng,
-                    accuracy,
-                    areaName: resolvedName,
-                    isLive: true,
-                  });
-                },
-                () => {
+                const timer = setTimeout(async () => {
                   if (!hasResolved) {
                     hasResolved = true;
-                    clearTimeout(timer);
                     cleanup();
-                    resolve(DEFAULT_COORDINATES);
+                    const fallback = await getFallbackCoordinates();
+                    resolve(fallback);
                   }
-                },
-                { enableHighAccuracy: true, distanceFilter: 1, interval: 1500 },
-              );
-            } catch {
-              clearTimeout(timer);
-              resolve(DEFAULT_COORDINATES);
-            }
+                }, 6000);
+
+                try {
+                  watchId = Geolocation.watchPosition(
+                    warmPos => {
+                      if (hasResolved) return;
+                      hasResolved = true;
+                      clearTimeout(timer);
+                      cleanup();
+                      const lat = warmPos.coords.latitude;
+                      const lng = warmPos.coords.longitude;
+                      const accuracy = Math.round(
+                        warmPos.coords.accuracy || 12,
+                      );
+                      handleSuccess(lat, lng, accuracy);
+                    },
+                    async () => {
+                      if (!hasResolved) {
+                        hasResolved = true;
+                        clearTimeout(timer);
+                        cleanup();
+                        const fallback = await getFallbackCoordinates();
+                        resolve(fallback);
+                      }
+                    },
+                    {
+                      enableHighAccuracy: true,
+                      distanceFilter: 1,
+                      interval: 1500,
+                    },
+                  );
+                } catch {
+                  clearTimeout(timer);
+                  getFallbackCoordinates().then(resolve);
+                }
+              },
+              { enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 },
+            );
           },
-          { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 },
+          { enableHighAccuracy: true, timeout: 6000, maximumAge: 60000 },
         );
       },
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 10000 },
+      { enableHighAccuracy: false, timeout: 2000, maximumAge: 3600000 },
     );
   });
 }

@@ -377,8 +377,15 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             onPress={() => {
               if (isGuest) {
                 Alert.alert(
-                  'Guest Mode',
-                  'Guest explorers do not have a password. Please register an account to set a password.',
+                  '🔒 Feature Locked in Guest Mode',
+                  'Guest explorers do not have an account password. Would you like to sign in or create a verified citizen account?',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Sign In / Register',
+                      onPress: () => navigation.navigate('Auth'),
+                    },
+                  ],
                 );
               } else {
                 setShowPasswordModal(true);
@@ -393,18 +400,21 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               }}
             >
               <Text
-                style={[styles.actionItemText, { color: colors.textPrimary }]}
+                style={[
+                  styles.actionItemText,
+                  { color: isGuest ? colors.textMuted : colors.textPrimary },
+                ]}
               >
                 🔐 Change Account Password
               </Text>
               <Text
                 style={{
-                  color: colors.primary,
+                  color: isGuest ? colors.textMuted : colors.primary,
                   fontSize: 13,
                   fontWeight: '700',
                 }}
               >
-                Update ›
+                {isGuest ? '🔒 Locked (Guest)' : 'Update ›'}
               </Text>
             </View>
           </TouchableOpacity>

@@ -12,6 +12,7 @@ class SafeWalkServiceModule(private val reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
 
     private var sirenPlayer: android.media.MediaPlayer? = null
+    private var fakeCallPlayer: android.media.MediaPlayer? = null
 
     override fun getName(): String = "SafeWalkService"
 
@@ -111,6 +112,65 @@ class SafeWalkServiceModule(private val reactContext: ReactApplicationContext) :
     @ReactMethod
     fun isSirenPlaying(promise: Promise) {
         promise.resolve(sirenPlayer?.isPlaying == true)
+    }
+
+    @ReactMethod
+    fun playFakeCall(language: String, isSpeaker: Boolean, promise: Promise) {
+        try {
+            stopFakeCallInternal()
+            val resName = if (language.equals("hi", ignoreCase = true)) "fake_call_hi" else "fake_call_en"
+            var resId = reactContext.resources.getIdentifier(resName, "raw", reactContext.packageName)
+            if (resId == 0) {
+                resId = reactContext.resources.getIdentifier("fake_call_en", "raw", reactContext.packageName)
+            }
+            if (resId != 0) {
+                fakeCallPlayer = android.media.MediaPlayer.create(reactContext, resId)?.apply {
+                    isLooping = true
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                        val usage = if (isSpeaker) android.media.AudioAttributes.USAGE_MEDIA else android.media.AudioAttributes.USAGE_VOICE_COMMUNICATION
+                        setAudioAttributes(
+                            android.media.AudioAttributes.Builder()
+                                .setUsage(usage)
+                                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+                                .build()
+                        )
+                    } else {
+                        @Suppress("DEPRECATION")
+                        val stream = if (isSpeaker) android.media.AudioManager.STREAM_MUSIC else android.media.AudioManager.STREAM_VOICE_CALL
+                        setAudioStreamType(stream)
+                    }
+                    start()
+                }
+                promise.resolve(true)
+            } else {
+                promise.resolve(false)
+            }
+        } catch (e: Exception) {
+            promise.reject("FAKECALL_ERROR", e.message, e)
+        }
+    }
+
+    private fun stopFakeCallInternal() {
+        try {
+            fakeCallPlayer?.let {
+                if (it.isPlaying) {
+                    it.stop()
+                }
+                it.release()
+            }
+            fakeCallPlayer = null
+        } catch (_: Exception) {}
+    }
+
+    @ReactMethod
+    fun stopFakeCall(promise: Promise) {
+        stopFakeCallInternal()
+        promise.resolve(true)
+    }
+
+    @ReactMethod
+    fun isFakeCallPlaying(promise: Promise) {
+        promise.resolve(fakeCallPlayer?.isPlaying == true)
     }
 
     @ReactMethod

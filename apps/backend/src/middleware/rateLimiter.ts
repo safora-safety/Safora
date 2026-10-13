@@ -183,10 +183,10 @@ export const checkGuardianRateLimiter = createRateLimiter({
     "Too many guardian verification requests. Please wait before checking again.",
 });
 
-// 5 audio evidence uploads per 15 minutes (keyed by user ID)
+// 30 audio evidence uploads per 15 minutes (allows continuous 5s emergency streaming pipeline)
 export const uploadAudioRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
-  max: 5,
+  max: 30,
   keyGenerator: userOrIpKeyGenerator,
   message:
     "Too many audio evidence uploads. Please wait before uploading again.",

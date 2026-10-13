@@ -14,7 +14,22 @@ export interface SafetyScoreResponse {
   breakdown: Record<string, number>;
 }
 
+export interface CreateReportInput {
+  category: string;
+  title: string;
+  description?: string;
+  severity: number;
+  latitude: number;
+  longitude: number;
+  photo_url?: string | null;
+}
+
 export const reportService = {
+  async createReport(data: CreateReportInput): Promise<HazardReport> {
+    const response = await apiClient.post<{ success: boolean; report: HazardReport }>('/reports', data);
+    return response.data.report || (response.data as any).data?.report || (response.data as any);
+  },
+
   async getReports(limit: number = 100): Promise<HazardReport[]> {
     const response = await apiClient.get<ReportsResponse>(`/reports?limit=${limit}`);
     return response.data.reports || [];

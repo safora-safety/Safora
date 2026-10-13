@@ -12,6 +12,7 @@ import {
   StatusBar,
 } from 'react-native';
 import { useAuthStore } from '../store/authStore';
+import { GoogleLogo } from '../components/GoogleLogo';
 
 interface AuthScreenProps {
   navigation: any;
@@ -376,9 +377,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               <ActivityIndicator color="#FFFFFF" size="small" />
             ) : (
               <View style={styles.googleButtonContent}>
-                <View style={styles.googleIconCircle}>
-                  <Text style={styles.googleIconLetter}>G</Text>
-                </View>
+                <GoogleLogo size={20} />
                 <Text style={styles.googleButtonText}>
                   {activeTab === 'login'
                     ? 'Continue with Google'

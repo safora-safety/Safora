@@ -15,6 +15,8 @@ export interface CreateReportPayload {
   latitude: number;
   longitude: number;
   photo_url?: string | null;
+  photo_urls?: string[];
+  is_anonymous?: boolean;
 }
 
 const HAZARDS_CACHE_KEY = '@safora_cached_nearby_hazards';

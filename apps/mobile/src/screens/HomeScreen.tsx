@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -67,11 +67,40 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [isSirenActive, setIsSirenActive] = useState(false);
 
+  const lastAlertedJourneyIdRef = useRef<string | number | null>(null);
+
   const checkActiveEscort = async () => {
     if (isGuest || !user) return;
     try {
       const escort = await JourneyService.getActiveEscort();
       if (escort && escort.id) {
+        const isNewWalk =
+          String(escort.id) !== String(lastAlertedJourneyIdRef.current);
+        if (isNewWalk) {
+          lastAlertedJourneyIdRef.current = escort.id;
+          Vibration.vibrate([0, 400, 200, 400]);
+          const walker = escort.walkerName || `Walker #${escort.userId}`;
+          Alert.alert(
+            '🚶‍♀️ Live Safe Walk Detected',
+            `${walker} is currently on an active Safe Walk escort session. Live GPS tracking is active!`,
+            [
+              { text: 'Later', style: 'cancel' },
+              {
+                text: 'Watch Live Escort',
+                onPress: () => {
+                  if (navigationRef.isReady()) {
+                    (navigationRef as any).navigate('GuardianLive', {
+                      journeyId: escort.id,
+                      walkerName: walker,
+                      initialLocation: escort.currentLocation,
+                    });
+                  }
+                },
+              },
+            ],
+          );
+        }
+
         setActiveTrackedWalker({
           journeyId: escort.id,
           walkerName: escort.walkerName || `Walker #${escort.userId}`,
@@ -81,6 +110,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
           lastSeen: new Date(escort.lastSeenAt || escort.startedAt),
         });
       } else {
+        lastAlertedJourneyIdRef.current = null;
         setActiveTrackedWalker(null);
       }
     } catch {
@@ -224,6 +254,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
       loadSafetyScore(c.latitude, c.longitude);
     });
 
+    // Check and recover any interrupted SOS audio recordings from cold reboot
+    AudioRecorderService.recoverPendingEvidence().catch(() => {});
+
     // Ensure microphone permission is prompted if user bypassed onboarding
     AudioRecorderService.isPermissionGranted().then(granted => {
       if (!granted) {
@@ -284,9 +317,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
     if (isLoudSiren) {
       SirenService.startSiren().catch(() => {});
       setIsSirenActive(true);
-    } else {
-      // Start real 30-second ambient audio evidence recording (Stealth mode)
-      AudioRecorderService.startRecording().catch(() => {});
     }
 
     let onlineSuccess = false;
@@ -308,11 +338,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
       onlineSuccess = false;
     }
 
-    // After 30 seconds, stop recording and upload audio evidence to Cloudinary (if stealth audio was recorded)
+    // Launch continuous 5-second real-time streaming audio pipeline
     if (alertId && !isLoudSiren) {
-      setTimeout(() => {
-        AudioRecorderService.stopAndUpload(alertId).catch(() => {});
-      }, 30000);
+      AudioRecorderService.startStreamingPipeline(alertId).catch(() => {});
     }
 
     // Determine target primary contact for carrier SMS
@@ -926,14 +954,28 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
                   borderColor: colors.border,
                 },
               ]}
-              onPress={() =>
+              onPress={() => {
+                if (item.title === 'Report Hazard' && isGuest) {
+                  Alert.alert(
+                    '🔒 Citizen Account Required',
+                    'To maintain safety radar integrity and prevent false alarms, hazard reporting requires a registered citizen account.',
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      {
+                        text: 'Sign In / Register',
+                        onPress: () => onNavigateTab?.('Profile'),
+                      },
+                    ],
+                  );
+                  return;
+                }
                 onNavigateTab?.(
                   item.tab,
                   item.title === 'Live Heatmap'
                     ? { showHeatmap: true }
                     : undefined,
-                )
-              }
+                );
+              }}
             >
               <Text style={styles.cardEmoji}>{item.emoji}</Text>
               <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>

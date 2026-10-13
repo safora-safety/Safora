@@ -170,40 +170,74 @@ export const searchPlaces = async (
   const trimmed = query.trim();
   if (!trimmed || trimmed.length < 2) return [];
 
-  // 1. Try Photon (OpenStreetMap Autocomplete with Proximity Bias)
+  const formatDistanceBadge = (d: number): string => {
+    if (d <= 1500) {
+      return ` • 🚶 ${d}m walk`;
+    } else if (d <= 6000) {
+      return ` • 🚶 ${(d / 1000).toFixed(1)} km walk`;
+    } else if (d <= 15000) {
+      return ` • 🚲 ${(d / 1000).toFixed(1)} km`;
+    }
+    return ` • ${(d / 1000).toFixed(1)} km`;
+  };
+
+  // 1. Try Photon (OpenStreetMap Autocomplete with Heavy Local Proximity Bias)
   try {
     let photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(
       trimmed,
-    )}&limit=8`;
+    )}&limit=12`;
     if (proximity) {
-      photonUrl += `&lat=${proximity.latitude}&lon=${proximity.longitude}`;
+      photonUrl += `&lat=${proximity.latitude}&lon=${proximity.longitude}&location_bias_scale=1.0`;
     }
 
     const photonRes = await fetch(photonUrl);
     if (photonRes.ok) {
       const data = await photonRes.json();
       if (data.features && data.features.length > 0) {
-        return data.features.map((f: any, idx: number) => {
-          const p = f.properties || {};
-          const title =
-            p.name || p.street || p.housenumber || p.city || 'Location';
-          const details = [
-            p.name !== title ? p.name : null,
-            p.street,
-            p.city || p.county || p.district,
-            p.state,
-          ]
-            .filter(Boolean)
-            .join(', ');
+        const mapped: PlaceSearchResult[] = data.features.map(
+          (f: any, idx: number) => {
+            const p = f.properties || {};
+            const title =
+              p.name || p.street || p.housenumber || p.city || 'Location';
+            const details = [
+              p.name !== title ? p.name : null,
+              p.street,
+              p.city || p.county || p.district,
+              p.state,
+            ]
+              .filter(Boolean)
+              .join(', ');
 
-          return {
-            id: `photon-${idx}-${f.geometry.coordinates[0]}`,
-            name: title,
-            placeName: details || title,
-            latitude: f.geometry.coordinates[1],
-            longitude: f.geometry.coordinates[0],
-          };
-        });
+            const lat = f.geometry.coordinates[1];
+            const lng = f.geometry.coordinates[0];
+
+            let distStr = '';
+            let distanceM = 999999;
+            if (proximity) {
+              distanceM = calculateDistanceMeters(proximity, {
+                latitude: lat,
+                longitude: lng,
+              });
+              distStr = formatDistanceBadge(distanceM);
+            }
+
+            return {
+              id: `photon-${idx}-${lng}-${lat}`,
+              name: title,
+              placeName: (details || title) + distStr,
+              latitude: lat,
+              longitude: lng,
+              _dist: distanceM,
+            };
+          },
+        );
+
+        if (proximity) {
+          // Walking-friendly bias: strictly sort ascending by distance
+          mapped.sort((a: any, b: any) => (a._dist || 0) - (b._dist || 0));
+        }
+
+        return mapped.map(({ _dist, ...rest }: any) => rest);
       }
     }
   } catch (err) {
@@ -213,27 +247,52 @@ export const searchPlaces = async (
     );
   }
 
-  // 2. Fallback: MapTiler Geocoding API
+  // 2. Fallback: MapTiler Geocoding API with Proximity
   try {
     let url = `https://api.maptiler.com/geocoding/${encodeURIComponent(
       trimmed,
-    )}.json?country=in&limit=6&key=${MAPTILER_KEY}`;
+    )}.json?country=in&limit=10&key=${MAPTILER_KEY}`;
 
     if (proximity) {
       url += `&proximity=${proximity.longitude},${proximity.latitude}`;
+      // Approximate 25km bounding box around user for local search bias
+      const delta = 0.22;
+      const bbox = `${proximity.longitude - delta},${proximity.latitude - delta},${proximity.longitude + delta},${proximity.latitude + delta}`;
+      url += `&bbox=${bbox}`;
     }
 
     const res = await fetch(url);
     if (res.ok) {
       const data = await res.json();
       if (data.features && Array.isArray(data.features)) {
-        return data.features.map((f: any) => ({
-          id: f.id || `${f.center?.[0]}-${f.center?.[1]}`,
-          name: f.text || f.place_name?.split(',')[0] || 'Location',
-          placeName: f.place_name || f.text,
-          latitude: f.center[1],
-          longitude: f.center[0],
-        }));
+        const mapped: PlaceSearchResult[] = data.features.map((f: any) => {
+          const lat = f.center[1];
+          const lng = f.center[0];
+          let distStr = '';
+          let distanceM = 999999;
+          if (proximity) {
+            distanceM = calculateDistanceMeters(proximity, {
+              latitude: lat,
+              longitude: lng,
+            });
+            distStr = formatDistanceBadge(distanceM);
+          }
+
+          return {
+            id: f.id || `${lng}-${lat}`,
+            name: f.text || f.place_name?.split(',')[0] || 'Location',
+            placeName: (f.place_name || f.text) + distStr,
+            latitude: lat,
+            longitude: lng,
+            _dist: distanceM,
+          };
+        });
+
+        if (proximity) {
+          mapped.sort((a: any, b: any) => (a._dist || 0) - (b._dist || 0));
+        }
+
+        return mapped.map(({ _dist, ...rest }: any) => rest);
       }
     }
   } catch (err) {

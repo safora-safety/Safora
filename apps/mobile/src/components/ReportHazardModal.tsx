@@ -13,6 +13,7 @@ import {
   Alert,
   Image,
   PermissionsAndroid,
+  Switch,
 } from 'react-native';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { useTheme } from '../theme/ThemeContext';
@@ -21,6 +22,7 @@ import { ReportService } from '../services/reportService';
 import { reverseGeocode } from '../services/locationService';
 import { useAuthStore } from '../store/authStore';
 import { navigationRef } from '../navigation/RootNavigator';
+import { OpenMapView } from './OpenMapView';
 
 interface ReportHazardModalProps {
   visible: boolean;
@@ -62,14 +64,15 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
   const { colors, isDark } = useTheme();
   const { isGuest } = useAuthStore();
   const [category, setCategory] = useState<HazardCategory>('lighting');
+  const [customCategoryTitle, setCustomCategoryTitle] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [severity, setSeverity] = useState(3);
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
-  const [localPhotoUri, setLocalPhotoUri] = useState<string | null>(null);
+  const [photoList, setPhotoList] = useState<string[]>([]);
   const [customPhotoInput, setCustomPhotoInput] = useState('');
   const [showPhotoInput, setShowPhotoInput] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [isAnonymous, setIsAnonymous] = useState(false);
   const [loading, setLoading] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -95,6 +98,14 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
   }, [reportLat, reportLng]);
 
   const handleTakePhoto = async () => {
+    if (photoList.length >= 3) {
+      Alert.alert(
+        'Maximum Photos',
+        'You can attach up to 3 photos per hazard report.',
+      );
+      return;
+    }
+
     if (Platform.OS === 'android') {
       try {
         const granted = await PermissionsAndroid.request(
@@ -133,8 +144,7 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
 
       const asset = result.assets[0];
       if (asset.uri) {
-        setLocalPhotoUri(asset.uri);
-        setPhotoUrl(asset.uri);
+        setPhotoList(prev => [...prev.slice(0, 2), asset.uri!]);
         setShowPhotoInput(false);
       }
     } catch {
@@ -143,6 +153,14 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
   };
 
   const handlePickGallery = async () => {
+    if (photoList.length >= 3) {
+      Alert.alert(
+        'Maximum Photos',
+        'You can attach up to 3 photos per hazard report.',
+      );
+      return;
+    }
+
     try {
       const result = await launchImageLibrary({
         mediaType: 'photo',
@@ -155,13 +173,42 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
 
       const asset = result.assets[0];
       if (asset.uri) {
-        setLocalPhotoUri(asset.uri);
-        setPhotoUrl(asset.uri);
+        setPhotoList(prev => [...prev.slice(0, 2), asset.uri!]);
         setShowPhotoInput(false);
       }
     } catch {
       Alert.alert('Gallery Error', 'Could not open photo gallery.');
     }
+  };
+
+  const handleAddPresetPhoto = (url: string) => {
+    if (photoList.length >= 3) {
+      Alert.alert(
+        'Maximum Photos',
+        'You can attach up to 3 photos per hazard report.',
+      );
+      return;
+    }
+    setPhotoList(prev => [...prev.slice(0, 2), url]);
+    setShowPhotoInput(false);
+  };
+
+  const handleAddCustomUrlPhoto = () => {
+    if (!customPhotoInput.trim()) return;
+    if (photoList.length >= 3) {
+      Alert.alert(
+        'Maximum Photos',
+        'You can attach up to 3 photos per hazard report.',
+      );
+      return;
+    }
+    setPhotoList(prev => [...prev.slice(0, 2), customPhotoInput.trim()]);
+    setCustomPhotoInput('');
+    setShowPhotoInput(false);
+  };
+
+  const handleRemovePhoto = (index: number) => {
+    setPhotoList(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleSubmit = async () => {
@@ -195,29 +242,50 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
 
     setLoading(true);
     try {
-      let finalPhotoUrl = photoUrl;
-      if (localPhotoUri) {
+      let uploadedUrls: string[] = [];
+      if (photoList.length > 0) {
         setIsUploadingPhoto(true);
         try {
-          finalPhotoUrl = await ReportService.uploadPhoto(
-            localPhotoUri,
-            `hazard_${Date.now()}.jpg`,
-          );
-        } catch {
-          // Fall back to local photo URI if upload fails
+          for (let i = 0; i < photoList.length; i++) {
+            const uri = photoList[i];
+            if (uri.startsWith('http')) {
+              uploadedUrls.push(uri);
+            } else {
+              try {
+                const uploaded = await ReportService.uploadPhoto(
+                  uri,
+                  `hazard_${Date.now()}_${i}.jpg`,
+                );
+                uploadedUrls.push(uploaded);
+              } catch {
+                uploadedUrls.push(uri);
+              }
+            }
+          }
         } finally {
           setIsUploadingPhoto(false);
         }
       }
 
+      const finalDescription = [
+        customCategoryTitle.trim()
+          ? `[Custom Hazard Type: ${customCategoryTitle.trim()}]`
+          : null,
+        description.trim() ? description.trim() : null,
+      ]
+        .filter(Boolean)
+        .join('\n\n');
+
       const created = await ReportService.create({
         category,
         title: trimmedTitle,
-        description: description.trim() || undefined,
+        description: finalDescription || undefined,
         severity,
         latitude: reportLat,
         longitude: reportLng,
-        photo_url: finalPhotoUrl || undefined,
+        photo_url: uploadedUrls[0] || undefined,
+        photo_urls: uploadedUrls.length > 0 ? uploadedUrls : undefined,
+        is_anonymous: isAnonymous,
       });
 
       Alert.alert(
@@ -226,10 +294,11 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
       );
       onReportCreated(created);
       setTitle('');
+      setCustomCategoryTitle('');
       setDescription('');
       setSeverity(3);
-      setPhotoUrl(null);
-      setLocalPhotoUri(null);
+      setPhotoList([]);
+      setIsAnonymous(false);
       setCustomPhotoInput('');
       setShowPhotoInput(false);
       onClose();
@@ -298,459 +367,592 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
             contentContainerStyle={styles.form}
             showsVerticalScrollIndicator={false}
           >
-            {formError && (
-              <View style={styles.errorBox}>
-                <Text style={styles.errorText}>⚠️ {formError}</Text>
-              </View>
-            )}
-
-            {/* Category Selector */}
-            <View style={styles.group}>
-              <Text style={[styles.label, { color: colors.textPrimary }]}>
-                Hazard Category
-              </Text>
-              <View style={styles.categoryGrid}>
-                {CATEGORIES.map(cat => (
-                  <TouchableOpacity
-                    key={cat.id}
-                    style={[
-                      styles.categoryCard,
-                      {
-                        backgroundColor:
-                          category === cat.id
-                            ? 'rgba(56, 189, 248, 0.15)'
-                            : colors.backgroundInput,
-                        borderColor:
-                          category === cat.id ? '#38BDF8' : colors.border,
-                      },
-                    ]}
-                    onPress={() => setCategory(cat.id)}
-                  >
-                    <Text style={styles.categoryIcon}>{cat.icon}</Text>
-                    <Text
-                      style={[
-                        styles.categoryLabel,
-                        {
-                          color:
-                            category === cat.id
-                              ? '#38BDF8'
-                              : colors.textSecondary,
-                        },
-                      ]}
-                    >
-                      {cat.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            {/* Location Coordinate Preview with Adjust Pin Button */}
-            <View style={styles.group}>
-              <View style={styles.locationHeaderRow}>
-                <Text style={[styles.label, { color: colors.textPrimary }]}>
-                  Hazard Pin Location
-                </Text>
-                <TouchableOpacity
-                  onPress={() => setIsEditingPin(!isEditingPin)}
-                  style={styles.adjustPinBtn}
-                  activeOpacity={0.8}
+            {/* Early Guest Mode Guard */}
+            {isGuest ? (
+              <View style={styles.guestGuardBox}>
+                <Text style={styles.guestGuardIcon}>🔒</Text>
+                <Text
+                  style={[
+                    styles.guestGuardTitle,
+                    { color: colors.textPrimary },
+                  ]}
                 >
-                  <Text style={styles.adjustPinBtnText}>
-                    {isEditingPin ? '✓ Done' : '📍 Adjust Pin'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              <View
-                style={[
-                  styles.locationCard,
-                  {
-                    backgroundColor: colors.backgroundInput,
-                    borderColor: isEditingPin ? colors.primary : colors.border,
-                  },
-                ]}
-              >
-                <Text style={styles.locationIcon}>📍</Text>
-                <View style={{ flex: 1 }}>
-                  <Text
-                    style={[
-                      styles.locationCoordsText,
-                      {
-                        color: colors.textPrimary,
-                        fontWeight: '800',
-                        fontSize: 13,
-                      },
-                    ]}
-                    numberOfLines={2}
-                  >
-                    {reportAddress || 'Resolving street address...'}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.locationHelpText,
-                      { color: colors.textMuted, fontSize: 11, marginTop: 2 },
-                    ]}
-                  >
-                    GPS Pin: {reportLat.toFixed(5)}, {reportLng.toFixed(5)}
-                  </Text>
-                </View>
-              </View>
-
-              {isEditingPin && (
-                <View style={styles.pinAdjustInputsRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.microLabel}>Latitude</Text>
-                    <TextInput
-                      style={[
-                        styles.input,
-                        {
-                          backgroundColor: colors.backgroundInput,
-                          borderColor: colors.border,
-                          color: colors.textPrimary,
-                        },
-                      ]}
-                      keyboardType="numeric"
-                      value={String(reportLat)}
-                      onChangeText={val => {
-                        const parsed = parseFloat(val);
-                        if (!isNaN(parsed)) setReportLat(parsed);
-                      }}
-                    />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.microLabel}>Longitude</Text>
-                    <TextInput
-                      style={[
-                        styles.input,
-                        {
-                          backgroundColor: colors.backgroundInput,
-                          borderColor: colors.border,
-                          color: colors.textPrimary,
-                        },
-                      ]}
-                      keyboardType="numeric"
-                      value={String(reportLng)}
-                      onChangeText={val => {
-                        const parsed = parseFloat(val);
-                        if (!isNaN(parsed)) setReportLng(parsed);
-                      }}
-                    />
-                  </View>
-                </View>
-              )}
-            </View>
-
-            {/* Title Input */}
-            <View style={styles.group}>
-              <Text style={[styles.label, { color: colors.textPrimary }]}>
-                Hazard Title <Text style={styles.req}>*</Text>
-              </Text>
-              <TextInput
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: colors.backgroundInput,
-                    borderColor: colors.border,
-                    color: colors.textPrimary,
-                  },
-                ]}
-                placeholder="e.g., Broken street light opposite grocery store"
-                placeholderTextColor={colors.textMuted}
-                value={title}
-                onChangeText={setTitle}
-              />
-            </View>
-
-            {/* Severity Slider */}
-            <View style={styles.group}>
-              <View style={styles.labelRow}>
-                <Text style={[styles.label, { color: colors.textPrimary }]}>
-                  Risk Severity (1 - 5)
+                  Citizen Account Required
                 </Text>
                 <Text
                   style={[
-                    styles.sevIndicator,
-                    {
-                      color:
-                        severity >= 4
-                          ? '#EF4444'
-                          : severity === 3
-                            ? '#F59E0B'
-                            : '#38BDF8',
-                    },
+                    styles.guestGuardDesc,
+                    { color: colors.textSecondary },
                   ]}
                 >
-                  {getSeverityLabel(severity)}
+                  To maintain safety radar integrity and prevent fake reports,
+                  reporting community street hazards requires a registered
+                  citizen account.
                 </Text>
+                <TouchableOpacity
+                  style={[
+                    styles.guestActionBtn,
+                    { backgroundColor: colors.primary },
+                  ]}
+                  onPress={() => {
+                    onClose();
+                    if (navigationRef.isReady()) {
+                      navigationRef.navigate('Auth', {
+                        initialTab: 'register',
+                      });
+                    }
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.guestActionBtnText}>
+                    Sign In / Register Account →
+                  </Text>
+                </TouchableOpacity>
               </View>
+            ) : (
+              <>
+                {formError && (
+                  <View style={styles.errorBox}>
+                    <Text style={styles.errorText}>⚠️ {formError}</Text>
+                  </View>
+                )}
 
-              <View style={styles.sevButtonsRow}>
-                {[1, 2, 3, 4, 5].map(num => (
-                  <TouchableOpacity
-                    key={num}
-                    style={[
-                      styles.sevButton,
-                      {
-                        backgroundColor:
-                          severity === num
-                            ? num >= 4
-                              ? '#EF4444'
-                              : num === 3
-                                ? '#F59E0B'
-                                : '#38BDF8'
-                            : colors.backgroundInput,
-                        borderColor:
-                          severity === num ? '#FFFFFF' : colors.border,
-                      },
-                    ]}
-                    onPress={() => setSeverity(num)}
-                  >
-                    <Text
-                      style={[
-                        styles.sevButtonText,
-                        {
-                          color:
-                            severity === num ? '#FFFFFF' : colors.textSecondary,
-                        },
-                      ]}
-                    >
-                      {num}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            {/* Photo Proof Evidence (Cloudinary) */}
-            <View style={styles.group}>
-              <Text style={[styles.label, { color: colors.textPrimary }]}>
-                Photo Proof{' '}
-                <Text style={styles.opt}>(Cloudinary Evidence)</Text>
-              </Text>
-
-              {photoUrl ? (
-                <View style={styles.photoPreviewCard}>
-                  <Image
-                    source={{ uri: photoUrl }}
-                    style={styles.photoPreviewImage}
-                  />
-                  <View style={styles.photoPreviewMeta}>
-                    <Text style={styles.photoPreviewStatus}>
-                      ✓ Photo Attached
-                    </Text>
-                    <TouchableOpacity
-                      onPress={() => setPhotoUrl(null)}
-                      style={styles.photoRemoveBtn}
-                    >
-                      <Text style={styles.photoRemoveText}>✕ Remove</Text>
-                    </TouchableOpacity>
+                {/* Category Selector */}
+                <View style={styles.group}>
+                  <Text style={[styles.label, { color: colors.textPrimary }]}>
+                    Hazard Category
+                  </Text>
+                  <View style={styles.categoryGrid}>
+                    {CATEGORIES.map(cat => (
+                      <TouchableOpacity
+                        key={cat.id}
+                        style={[
+                          styles.categoryCard,
+                          {
+                            backgroundColor:
+                              category === cat.id
+                                ? 'rgba(56, 189, 248, 0.15)'
+                                : colors.backgroundInput,
+                            borderColor:
+                              category === cat.id ? '#38BDF8' : colors.border,
+                          },
+                        ]}
+                        onPress={() => setCategory(cat.id)}
+                      >
+                        <Text style={styles.categoryIcon}>{cat.icon}</Text>
+                        <Text
+                          style={[
+                            styles.categoryLabel,
+                            {
+                              color:
+                                category === cat.id
+                                  ? '#38BDF8'
+                                  : colors.textSecondary,
+                            },
+                          ]}
+                        >
+                          {cat.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
                   </View>
                 </View>
-              ) : (
-                <View style={styles.photoPresetRow}>
-                  <TouchableOpacity
+
+                {/* Custom Category Field if "Other" is chosen */}
+                {category === 'other' && (
+                  <View style={styles.group}>
+                    <Text style={[styles.label, { color: colors.textPrimary }]}>
+                      Specify Hazard Name / Type{' '}
+                      <Text style={styles.opt}>(Optional)</Text>
+                    </Text>
+                    <TextInput
+                      style={[
+                        styles.input,
+                        {
+                          backgroundColor: colors.backgroundInput,
+                          borderColor: colors.border,
+                          color: colors.textPrimary,
+                        },
+                      ]}
+                      placeholder="e.g., Broken Footbridge, Exposed Electrical Cable"
+                      placeholderTextColor={colors.textMuted}
+                      value={customCategoryTitle}
+                      onChangeText={setCustomCategoryTitle}
+                    />
+                  </View>
+                )}
+
+                {/* Location Pin with Interactive Mini Map (No typing numbers) */}
+                <View style={styles.group}>
+                  <View style={styles.locationHeaderRow}>
+                    <Text style={[styles.label, { color: colors.textPrimary }]}>
+                      Hazard Pin Location
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => setIsEditingPin(!isEditingPin)}
+                      style={styles.adjustPinBtn}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.adjustPinBtnText}>
+                        {isEditingPin
+                          ? '✓ Done Adjusting'
+                          : '📍 Adjust Pin on Map'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View
                     style={[
-                      styles.addPhotoBtn,
+                      styles.locationCard,
                       {
                         backgroundColor: colors.backgroundInput,
-                        borderColor: colors.border,
+                        borderColor: isEditingPin
+                          ? colors.primary
+                          : colors.border,
                       },
                     ]}
-                    onPress={() => setShowPhotoInput(!showPhotoInput)}
                   >
-                    <Text style={styles.addPhotoBtnIcon}>📸</Text>
-                    <Text
-                      style={[
-                        styles.addPhotoBtnText,
-                        { color: colors.textPrimary },
-                      ]}
-                    >
-                      {showPhotoInput ? 'Cancel Photo' : 'Attach Photo Proof'}
-                    </Text>
-                  </TouchableOpacity>
-
-                  {showPhotoInput && (
-                    <View style={styles.presetOptionsBox}>
+                    <Text style={styles.locationIcon}>📍</Text>
+                    <View style={{ flex: 1 }}>
                       <Text
                         style={[
-                          styles.presetTitle,
+                          styles.locationCoordsText,
+                          {
+                            color: colors.textPrimary,
+                            fontWeight: '800',
+                            fontSize: 13,
+                          },
+                        ]}
+                        numberOfLines={2}
+                      >
+                        {reportAddress || 'Resolving street address...'}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.locationHelpText,
+                          {
+                            color: colors.textMuted,
+                            fontSize: 11,
+                            marginTop: 2,
+                          },
+                        ]}
+                      >
+                        GPS Pin: {reportLat.toFixed(5)}, {reportLng.toFixed(5)}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Interactive Map Pin Adjuster */}
+                  {isEditingPin && (
+                    <View style={styles.miniMapWrapper}>
+                      <Text
+                        style={[
+                          styles.miniMapHelp,
                           { color: colors.textSecondary },
                         ]}
                       >
-                        Capture or upload live evidence:
+                        🗺️ Tap anywhere on the map to reposition hazard pin:
                       </Text>
-
-                      {isUploadingPhoto ? (
-                        <View
-                          style={{
-                            paddingVertical: 12,
-                            alignItems: 'center',
-                            gap: 6,
-                          }}
-                        >
-                          <ActivityIndicator
-                            size="small"
-                            color={colors.primary}
-                          />
-                          <Text
-                            style={{
-                              fontSize: 12,
-                              color: colors.textSecondary,
-                            }}
-                          >
-                            Uploading photo to secure storage...
-                          </Text>
-                        </View>
-                      ) : (
-                        <View
-                          style={{
-                            flexDirection: 'row',
-                            gap: 10,
-                            marginBottom: 12,
-                          }}
-                        >
-                          <TouchableOpacity
-                            style={[
-                              styles.pickerActionBtn,
-                              {
-                                backgroundColor: colors.backgroundCard,
-                                borderColor: colors.border,
-                              },
-                            ]}
-                            onPress={handleTakePhoto}
-                          >
-                            <Text style={styles.pickerActionIcon}>📷</Text>
-                            <Text
-                              style={[
-                                styles.pickerActionText,
-                                { color: colors.textPrimary },
-                              ]}
-                            >
-                              Take Photo
-                            </Text>
-                          </TouchableOpacity>
-
-                          <TouchableOpacity
-                            style={[
-                              styles.pickerActionBtn,
-                              {
-                                backgroundColor: colors.backgroundCard,
-                                borderColor: colors.border,
-                              },
-                            ]}
-                            onPress={handlePickGallery}
-                          >
-                            <Text style={styles.pickerActionIcon}>🖼️</Text>
-                            <Text
-                              style={[
-                                styles.pickerActionText,
-                                { color: colors.textPrimary },
-                              ]}
-                            >
-                              Choose Gallery
-                            </Text>
-                          </TouchableOpacity>
-                        </View>
-                      )}
-
-                      <Text
-                        style={[
-                          styles.presetTitle,
-                          { color: colors.textSecondary, marginTop: 4 },
-                        ]}
-                      >
-                        Or choose quick preset proof:
-                      </Text>
-                      <View style={styles.presetChipsRow}>
-                        {SAMPLE_PHOTO_PRESETS.map(preset => (
-                          <TouchableOpacity
-                            key={preset.name}
-                            style={[
-                              styles.presetChip,
-                              {
-                                backgroundColor: colors.backgroundCard,
-                                borderColor: colors.border,
-                              },
-                            ]}
-                            onPress={() => {
-                              setPhotoUrl(preset.url);
-                              setShowPhotoInput(false);
-                            }}
-                          >
-                            <Text
-                              style={[
-                                styles.presetChipText,
-                                { color: colors.primary },
-                              ]}
-                            >
-                              {preset.name}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-
-                      <View style={styles.customUrlRow}>
-                        <TextInput
-                          style={[
-                            styles.input,
+                      <View style={styles.miniMapBox}>
+                        <OpenMapView
+                          center={{ latitude: reportLat, longitude: reportLng }}
+                          zoom={16}
+                          isDark={isDark}
+                          showLayerSwitcher={false}
+                          markers={[
                             {
-                              flex: 1,
-                              backgroundColor: colors.backgroundCard,
-                              borderColor: colors.border,
-                              color: colors.textPrimary,
+                              id: 'hazard-pin',
+                              latitude: reportLat,
+                              longitude: reportLng,
+                              icon: '⚠️',
+                              title: 'Hazard Pin',
+                              color: '#EF4444',
                             },
                           ]}
-                          placeholder="Or paste image URL..."
-                          placeholderTextColor={colors.textMuted}
-                          value={customPhotoInput}
-                          onChangeText={setCustomPhotoInput}
-                        />
-                        <TouchableOpacity
-                          style={[
-                            styles.applyUrlBtn,
-                            { backgroundColor: colors.primary },
-                          ]}
-                          onPress={() => {
-                            if (customPhotoInput.trim()) {
-                              setPhotoUrl(customPhotoInput.trim());
-                              setShowPhotoInput(false);
-                            }
+                          onMapPress={c => {
+                            setReportLat(c.latitude);
+                            setReportLng(c.longitude);
                           }}
-                        >
-                          <Text style={styles.applyUrlText}>Attach</Text>
-                        </TouchableOpacity>
+                          style={styles.miniMap}
+                        />
                       </View>
+                      <TouchableOpacity
+                        style={[
+                          styles.resetGpsBtn,
+                          {
+                            borderColor: colors.border,
+                            backgroundColor: colors.backgroundInput,
+                          },
+                        ]}
+                        onPress={() => {
+                          setReportLat(coordinates.latitude);
+                          setReportLng(coordinates.longitude);
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Text
+                          style={[
+                            styles.resetGpsText,
+                            { color: colors.primary },
+                          ]}
+                        >
+                          📍 Reset to Current Live GPS Coordinates
+                        </Text>
+                      </TouchableOpacity>
                     </View>
                   )}
                 </View>
-              )}
-            </View>
 
-            {/* Description */}
-            <View style={styles.group}>
-              <Text style={[styles.label, { color: colors.textPrimary }]}>
-                Additional Details <Text style={styles.opt}>(Optional)</Text>
-              </Text>
-              <TextInput
-                style={[
-                  styles.input,
-                  styles.textArea,
-                  {
-                    backgroundColor: colors.backgroundInput,
-                    borderColor: colors.border,
-                    color: colors.textPrimary,
-                  },
-                ]}
-                placeholder="Describe landmark or specific danger points..."
-                placeholderTextColor={colors.textMuted}
-                multiline
-                numberOfLines={3}
-                textAlignVertical="top"
-                value={description}
-                onChangeText={setDescription}
-              />
-            </View>
+                {/* Title Input */}
+                <View style={styles.group}>
+                  <Text style={[styles.label, { color: colors.textPrimary }]}>
+                    Hazard Title <Text style={styles.req}>*</Text>
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      {
+                        backgroundColor: colors.backgroundInput,
+                        borderColor: colors.border,
+                        color: colors.textPrimary,
+                      },
+                    ]}
+                    placeholder="e.g., Unlit Canal Path Behind Hostel"
+                    placeholderTextColor={colors.textMuted}
+                    value={title}
+                    onChangeText={setTitle}
+                  />
+                </View>
+
+                {/* Severity Rating */}
+                <View style={styles.group}>
+                  <View style={styles.labelRow}>
+                    <Text style={[styles.label, { color: colors.textPrimary }]}>
+                      Danger Severity Rating
+                    </Text>
+                    <Text
+                      style={[
+                        styles.sevIndicator,
+                        {
+                          color:
+                            severity >= 4
+                              ? '#EF4444'
+                              : severity === 3
+                                ? '#F59E0B'
+                                : '#38BDF8',
+                        },
+                      ]}
+                    >
+                      {getSeverityLabel(severity)}
+                    </Text>
+                  </View>
+
+                  <View style={styles.sevButtonsRow}>
+                    {[1, 2, 3, 4, 5].map(num => (
+                      <TouchableOpacity
+                        key={num}
+                        style={[
+                          styles.sevButton,
+                          {
+                            backgroundColor:
+                              severity === num
+                                ? num >= 4
+                                  ? '#EF4444'
+                                  : num === 3
+                                    ? '#F59E0B'
+                                    : '#38BDF8'
+                                : colors.backgroundInput,
+                            borderColor:
+                              severity === num ? '#FFFFFF' : colors.border,
+                          },
+                        ]}
+                        onPress={() => setSeverity(num)}
+                      >
+                        <Text
+                          style={[
+                            styles.sevButtonText,
+                            {
+                              color:
+                                severity === num
+                                  ? '#FFFFFF'
+                                  : colors.textSecondary,
+                            },
+                          ]}
+                        >
+                          {num}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                {/* Photo Proof Evidence (Up to 3 Photos) */}
+                <View style={styles.group}>
+                  <View style={styles.labelRow}>
+                    <Text style={[styles.label, { color: colors.textPrimary }]}>
+                      Photo Proof Evidence{' '}
+                      <Text style={styles.opt}>
+                        ({photoList.length}/3 photos)
+                      </Text>
+                    </Text>
+                  </View>
+
+                  {/* Horizontal Photo Thumbnails Strip */}
+                  {photoList.length > 0 && (
+                    <View style={styles.photosStrip}>
+                      {photoList.map((url, idx) => (
+                        <View
+                          key={`${url}-${idx}`}
+                          style={styles.photoThumbCard}
+                        >
+                          <Image
+                            source={{ uri: url }}
+                            style={styles.photoThumbImage}
+                          />
+                          <TouchableOpacity
+                            onPress={() => handleRemovePhoto(idx)}
+                            style={styles.photoThumbRemoveBtn}
+                            activeOpacity={0.8}
+                          >
+                            <Text style={styles.photoThumbRemoveText}>✕</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  {/* Add Photo Button (If under 3 photos) */}
+                  {photoList.length < 3 && (
+                    <View style={styles.photoPresetRow}>
+                      <TouchableOpacity
+                        style={[
+                          styles.addPhotoBtn,
+                          {
+                            backgroundColor: colors.backgroundInput,
+                            borderColor: colors.border,
+                          },
+                        ]}
+                        onPress={() => setShowPhotoInput(!showPhotoInput)}
+                      >
+                        <Text style={styles.addPhotoBtnIcon}>📸</Text>
+                        <Text
+                          style={[
+                            styles.addPhotoBtnText,
+                            { color: colors.textPrimary },
+                          ]}
+                        >
+                          {showPhotoInput
+                            ? 'Cancel Photo Picker'
+                            : `+ Attach Photo Proof (${photoList.length}/3)`}
+                        </Text>
+                      </TouchableOpacity>
+
+                      {showPhotoInput && (
+                        <View style={styles.presetOptionsBox}>
+                          <Text
+                            style={[
+                              styles.presetTitle,
+                              { color: colors.textSecondary },
+                            ]}
+                          >
+                            Capture or upload photo:
+                          </Text>
+
+                          {isUploadingPhoto ? (
+                            <View
+                              style={{
+                                paddingVertical: 12,
+                                alignItems: 'center',
+                                gap: 6,
+                              }}
+                            >
+                              <ActivityIndicator
+                                size="small"
+                                color={colors.primary}
+                              />
+                              <Text
+                                style={{
+                                  fontSize: 12,
+                                  color: colors.textSecondary,
+                                }}
+                              >
+                                Uploading evidence to cloud storage...
+                              </Text>
+                            </View>
+                          ) : (
+                            <View
+                              style={{
+                                flexDirection: 'row',
+                                gap: 10,
+                                marginBottom: 12,
+                              }}
+                            >
+                              <TouchableOpacity
+                                style={[
+                                  styles.pickerActionBtn,
+                                  {
+                                    backgroundColor: colors.backgroundCard,
+                                    borderColor: colors.border,
+                                  },
+                                ]}
+                                onPress={handleTakePhoto}
+                              >
+                                <Text style={styles.pickerActionIcon}>📷</Text>
+                                <Text
+                                  style={[
+                                    styles.pickerActionText,
+                                    { color: colors.textPrimary },
+                                  ]}
+                                >
+                                  Take Photo
+                                </Text>
+                              </TouchableOpacity>
+
+                              <TouchableOpacity
+                                style={[
+                                  styles.pickerActionBtn,
+                                  {
+                                    backgroundColor: colors.backgroundCard,
+                                    borderColor: colors.border,
+                                  },
+                                ]}
+                                onPress={handlePickGallery}
+                              >
+                                <Text style={styles.pickerActionIcon}>🖼️</Text>
+                                <Text
+                                  style={[
+                                    styles.pickerActionText,
+                                    { color: colors.textPrimary },
+                                  ]}
+                                >
+                                  Choose Gallery
+                                </Text>
+                              </TouchableOpacity>
+                            </View>
+                          )}
+
+                          <Text
+                            style={[
+                              styles.presetTitle,
+                              { color: colors.textSecondary, marginTop: 4 },
+                            ]}
+                          >
+                            Or choose quick preset proof:
+                          </Text>
+                          <View style={styles.presetChipsRow}>
+                            {SAMPLE_PHOTO_PRESETS.map(preset => (
+                              <TouchableOpacity
+                                key={preset.name}
+                                style={[
+                                  styles.presetChip,
+                                  {
+                                    backgroundColor: colors.backgroundCard,
+                                    borderColor: colors.border,
+                                  },
+                                ]}
+                                onPress={() => handleAddPresetPhoto(preset.url)}
+                              >
+                                <Text
+                                  style={[
+                                    styles.presetChipText,
+                                    { color: colors.primary },
+                                  ]}
+                                >
+                                  {preset.name}
+                                </Text>
+                              </TouchableOpacity>
+                            ))}
+                          </View>
+
+                          <View style={styles.customUrlRow}>
+                            <TextInput
+                              style={[
+                                styles.input,
+                                {
+                                  flex: 1,
+                                  backgroundColor: colors.backgroundCard,
+                                  borderColor: colors.border,
+                                  color: colors.textPrimary,
+                                },
+                              ]}
+                              placeholder="Or paste image URL..."
+                              placeholderTextColor={colors.textMuted}
+                              value={customPhotoInput}
+                              onChangeText={setCustomPhotoInput}
+                            />
+                            <TouchableOpacity
+                              style={[
+                                styles.applyUrlBtn,
+                                { backgroundColor: colors.primary },
+                              ]}
+                              onPress={handleAddCustomUrlPhoto}
+                            >
+                              <Text style={styles.applyUrlText}>Attach</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      )}
+                    </View>
+                  )}
+                </View>
+
+                {/* Description */}
+                <View style={styles.group}>
+                  <Text style={[styles.label, { color: colors.textPrimary }]}>
+                    Additional Details{' '}
+                    <Text style={styles.opt}>(Optional)</Text>
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      styles.textArea,
+                      {
+                        backgroundColor: colors.backgroundInput,
+                        borderColor: colors.border,
+                        color: colors.textPrimary,
+                      },
+                    ]}
+                    placeholder="Describe landmark or specific danger points..."
+                    placeholderTextColor={colors.textMuted}
+                    multiline
+                    numberOfLines={3}
+                    textAlignVertical="top"
+                    value={description}
+                    onChangeText={setDescription}
+                  />
+                </View>
+
+                {/* Anonymous Reporting Switch */}
+                <View
+                  style={[
+                    styles.anonSwitchCard,
+                    {
+                      backgroundColor: colors.backgroundInput,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
+                  <View style={{ flex: 1, marginRight: 12 }}>
+                    <Text
+                      style={[styles.anonTitle, { color: colors.textPrimary }]}
+                    >
+                      🕵️ Report Anonymously
+                    </Text>
+                    <Text
+                      style={[styles.anonDesc, { color: colors.textSecondary }]}
+                    >
+                      Hide your profile name on the public community safety map.
+                    </Text>
+                  </View>
+                  <Switch
+                    value={isAnonymous}
+                    onValueChange={setIsAnonymous}
+                    trackColor={{ false: '#334155', true: colors.primary }}
+                    thumbColor="#FFFFFF"
+                  />
+                </View>
+              </>
+            )}
           </ScrollView>
 
           {/* Footer */}
@@ -769,26 +971,28 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
               <Text
                 style={[styles.cancelBtnText, { color: colors.textSecondary }]}
               >
-                Cancel
+                {isGuest ? 'Close' : 'Cancel'}
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[
-                styles.submitBtn,
-                { backgroundColor: colors.primary },
-                loading && styles.btnDisabled,
-              ]}
-              onPress={handleSubmit}
-              disabled={loading}
-              activeOpacity={0.85}
-            >
-              {loading ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <Text style={styles.submitBtnText}>Submit Report</Text>
-              )}
-            </TouchableOpacity>
+            {!isGuest && (
+              <TouchableOpacity
+                style={[
+                  styles.submitBtn,
+                  { backgroundColor: colors.primary },
+                  loading && styles.btnDisabled,
+                ]}
+                onPress={handleSubmit}
+                disabled={loading}
+                activeOpacity={0.85}
+              >
+                {loading ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.submitBtnText}>Submit Hazard Pin</Text>
+                )}
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -803,7 +1007,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    maxHeight: '90%',
+    maxHeight: '92%',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     borderWidth: 1,
@@ -890,16 +1094,40 @@ const styles = StyleSheet.create({
     fontSize: 10,
     marginTop: 2,
   },
-  pinAdjustInputsRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 6,
+  miniMapWrapper: {
+    marginTop: 8,
+    borderRadius: 14,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    padding: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
   },
-  microLabel: {
-    fontSize: 10,
+  miniMapHelp: {
+    fontSize: 11,
     fontWeight: '600',
-    color: '#94A3B8',
-    marginBottom: 4,
+    marginBottom: 8,
+  },
+  miniMapBox: {
+    height: 180,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  miniMap: {
+    width: '100%',
+    height: '100%',
+  },
+  resetGpsBtn: {
+    marginTop: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  resetGpsText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   input: {
     borderWidth: 1,
@@ -921,44 +1149,40 @@ const styles = StyleSheet.create({
   },
   sevButtonText: { fontSize: 13, fontWeight: '800' },
 
-  // Photo Proof styles
-  photoPreviewCard: {
+  // Multi-Photo Styles
+  photosStrip: {
     flexDirection: 'row',
-    alignItems: 'center',
-    padding: 8,
-    borderRadius: 14,
+    gap: 10,
+    marginBottom: 4,
+  },
+  photoThumbCard: {
+    position: 'relative',
+    width: 76,
+    height: 76,
+    borderRadius: 12,
+    overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)',
-    backgroundColor: 'rgba(16, 185, 129, 0.08)',
-    gap: 12,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
   },
-  photoPreviewImage: {
-    width: 60,
-    height: 60,
+  photoThumbImage: {
+    width: '100%',
+    height: '100%',
+  },
+  photoThumbRemoveBtn: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(239, 68, 68, 0.9)',
     borderRadius: 10,
-  },
-  photoPreviewMeta: {
-    flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    width: 20,
+    height: 20,
     alignItems: 'center',
-    paddingRight: 8,
+    justifyContent: 'center',
   },
-  photoPreviewStatus: {
-    color: '#10B981',
-    fontWeight: '800',
-    fontSize: 12,
-  },
-  photoRemoveBtn: {
-    backgroundColor: 'rgba(239, 68, 68, 0.12)',
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-  },
-  photoRemoveText: {
-    color: '#EF4444',
+  photoThumbRemoveText: {
+    color: '#FFFFFF',
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   photoPresetRow: { gap: 10 },
   addPhotoBtn: {
@@ -1010,6 +1234,61 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   applyUrlText: { color: '#FFFFFF', fontWeight: '800', fontSize: 11 },
+
+  // Anonymous Switch Card
+  anonSwitchCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginTop: 4,
+  },
+  anonTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  anonDesc: {
+    fontSize: 11,
+    marginTop: 2,
+    lineHeight: 15,
+  },
+
+  // Early Guest Mode Guard Box
+  guestGuardBox: {
+    paddingVertical: 30,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  guestGuardIcon: {
+    fontSize: 40,
+    marginBottom: 12,
+  },
+  guestGuardTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  guestGuardDesc: {
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 19,
+    marginBottom: 24,
+  },
+  guestActionBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 22,
+    borderRadius: 14,
+    alignItems: 'center',
+  },
+  guestActionBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 13,
+  },
 
   footer: {
     flexDirection: 'row',

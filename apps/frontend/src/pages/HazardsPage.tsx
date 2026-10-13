@@ -19,6 +19,10 @@ import {
   Square,
   RotateCcw,
   Sparkles,
+  PlusCircle,
+  MapPin,
+  Users,
+  Info,
 } from 'lucide-react';
 
 export const HazardsPage: React.FC = () => {
@@ -42,6 +46,19 @@ export const HazardsPage: React.FC = () => {
   } | null>(null);
   const [resolutionNotes, setResolutionNotes] = useState('');
   const [submittingResolution, setSubmittingResolution] = useState(false);
+
+  // Manual Admin Hazard Pin Modal State (Task 13.11)
+  const [showAddHazardModal, setShowAddHazardModal] = useState(false);
+  const [newHazardTitle, setNewHazardTitle] = useState('');
+  const [newHazardCategory, setNewHazardCategory] = useState('lighting');
+  const [newHazardSeverity, setNewHazardSeverity] = useState(3);
+  const [newHazardLat, setNewHazardLat] = useState('30.3165');
+  const [newHazardLng, setNewHazardLng] = useState('78.0322');
+  const [newHazardDesc, setNewHazardDesc] = useState('');
+  const [submittingHazard, setSubmittingHazard] = useState(false);
+
+  // Community Confirmations Audit Modal State (Task 5.8)
+  const [auditTarget, setAuditTarget] = useState<HazardReport | null>(null);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -163,6 +180,43 @@ export const HazardsPage: React.FC = () => {
     }
   };
 
+  const handleCreateAdminHazard = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newHazardTitle.trim()) {
+      showToast('Please provide a hazard title');
+      return;
+    }
+    const lat = parseFloat(newHazardLat);
+    const lng = parseFloat(newHazardLng);
+    if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      showToast('Please provide valid coordinates (Lat: -90..90, Lng: -180..180)');
+      return;
+    }
+
+    setSubmittingHazard(true);
+    try {
+      const created = await reportService.createReport({
+        title: newHazardTitle.trim(),
+        category: newHazardCategory,
+        severity: newHazardSeverity,
+        latitude: lat,
+        longitude: lng,
+        description: newHazardDesc.trim() || undefined,
+      });
+
+      setReports((prev) => [created, ...prev]);
+      setShowAddHazardModal(false);
+      setNewHazardTitle('');
+      setNewHazardDesc('');
+      showToast('Official city hazard pin dispatched successfully!');
+    } catch (err: any) {
+      console.error('Failed to create hazard pin:', err);
+      showToast(err?.response?.data?.message || 'Failed to dispatch hazard pin');
+    } finally {
+      setSubmittingHazard(false);
+    }
+  };
+
   const toggleSelectReport = (id: string | number) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -224,14 +278,24 @@ export const HazardsPage: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={loadReports}
-          disabled={isLoading}
-          className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-colors disabled:opacity-50"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-          <span>Refresh Reports</span>
-        </button>
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => setShowAddHazardModal(true)}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-lg shadow-emerald-900/30 transition-all active:scale-95"
+          >
+            <PlusCircle className="w-3.5 h-3.5" />
+            <span>+ Add Hazard Pin</span>
+          </button>
+
+          <button
+            onClick={loadReports}
+            disabled={isLoading}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+            <span>Refresh Reports</span>
+          </button>
+        </div>
       </div>
 
       {/* Interactive Top StatCards */}
@@ -468,9 +532,14 @@ export const HazardsPage: React.FC = () => {
                           })}
                         </span>
                         <span>&bull;</span>
-                        <span className="text-emerald-400 font-semibold">
-                          {report.confirmationsCount || 0} confirms
-                        </span>
+                        <button
+                          onClick={() => setAuditTarget(report)}
+                          className="text-emerald-400 hover:text-emerald-300 font-semibold inline-flex items-center gap-1 hover:underline cursor-pointer"
+                          title="View Community Confirmation & Reporter Audit"
+                        >
+                          <Users className="w-3 h-3 text-emerald-400" />
+                          <span>{report.confirmationsCount || 0} confirms</span>
+                        </button>
                       </div>
                     </td>
 
@@ -690,6 +759,229 @@ export const HazardsPage: React.FC = () => {
               >
                 Open in Full Size <ExternalLink className="w-3.5 h-3.5" />
               </a>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Manual Admin Hazard Pin Dispatch Modal (Task 13.11) */}
+      <Modal
+        isOpen={showAddHazardModal}
+        onClose={() => setShowAddHazardModal(false)}
+        title="Official City Hazard Pin Dispatch"
+        maxWidth="lg"
+      >
+        <form onSubmit={handleCreateAdminHazard} className="space-y-4">
+          <div>
+            <label className="block text-xs font-mono font-medium text-gray-300 mb-1">
+              Hazard Title *
+            </label>
+            <input
+              type="text"
+              required
+              value={newHazardTitle}
+              onChange={(e) => setNewHazardTitle(e.target.value)}
+              placeholder="e.g., Non-functional Streetlight, Open Trench"
+              className="w-full px-3 py-2 bg-obsidian-900 border border-white/10 rounded-xl text-white text-xs placeholder:text-gray-500 focus:outline-none focus:border-indigo-500 font-sans"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-mono font-medium text-gray-300 mb-1">
+                Category *
+              </label>
+              <select
+                value={newHazardCategory}
+                onChange={(e) => setNewHazardCategory(e.target.value)}
+                className="w-full px-3 py-2 bg-obsidian-900 border border-white/10 rounded-xl text-white text-xs focus:outline-none focus:border-indigo-500 font-sans"
+              >
+                <option value="lighting">Poor Lighting</option>
+                <option value="road_hazard">Road Hazard</option>
+                <option value="waterlogging">Waterlogging</option>
+                <option value="isolated_area">Isolated Area</option>
+                <option value="traffic">Heavy Traffic</option>
+                <option value="other">Other Hazard</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-mono font-medium text-gray-300 mb-1">
+                Severity Level: <span className="text-amber-400 font-bold">{newHazardSeverity} / 5</span>
+              </label>
+              <input
+                type="range"
+                min="1"
+                max="5"
+                value={newHazardSeverity}
+                onChange={(e) => setNewHazardSeverity(parseInt(e.target.value, 10))}
+                className="w-full h-2 bg-obsidian-700 rounded-lg appearance-none cursor-pointer accent-indigo-500 mt-2"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-mono font-medium text-gray-300 mb-1">
+                Latitude *
+              </label>
+              <input
+                type="number"
+                step="any"
+                required
+                value={newHazardLat}
+                onChange={(e) => setNewHazardLat(e.target.value)}
+                className="w-full px-3 py-2 bg-obsidian-900 border border-white/10 rounded-xl text-white text-xs font-mono focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-mono font-medium text-gray-300 mb-1">
+                Longitude *
+              </label>
+              <input
+                type="number"
+                step="any"
+                required
+                value={newHazardLng}
+                onChange={(e) => setNewHazardLng(e.target.value)}
+                className="w-full px-3 py-2 bg-obsidian-900 border border-white/10 rounded-xl text-white text-xs font-mono focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+          </div>
+
+          {/* Quick Coordinate Helpers */}
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-gray-400 font-mono">Quick Set:</span>
+            <button
+              type="button"
+              onClick={() => {
+                setNewHazardLat('30.3165');
+                setNewHazardLng('78.0322');
+              }}
+              className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-[10px] text-indigo-300 font-mono border border-white/5"
+            >
+              📍 Dehradun City (30.3165, 78.0322)
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (navigator.geolocation) {
+                  navigator.geolocation.getCurrentPosition((pos) => {
+                    setNewHazardLat(pos.coords.latitude.toFixed(6));
+                    setNewHazardLng(pos.coords.longitude.toFixed(6));
+                  });
+                }
+              }}
+              className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-[10px] text-emerald-300 font-mono border border-white/5"
+            >
+              🎯 My Location
+            </button>
+          </div>
+
+          <div>
+            <label className="block text-xs font-mono font-medium text-gray-300 mb-1">
+              Description / Dispatch Directives (Optional)
+            </label>
+            <textarea
+              rows={3}
+              value={newHazardDesc}
+              onChange={(e) => setNewHazardDesc(e.target.value)}
+              placeholder="e.g., Reported by municipal field patrol; verified broken halogen street lamp near university campus road."
+              className="w-full px-3 py-2 bg-obsidian-900 border border-white/10 rounded-xl text-white text-xs placeholder:text-gray-500 focus:outline-none focus:border-indigo-500 font-sans"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2.5 pt-2 border-t border-white/10">
+            <button
+              type="button"
+              onClick={() => setShowAddHazardModal(false)}
+              disabled={submittingHazard}
+              className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 text-xs font-semibold transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submittingHazard}
+              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors flex items-center gap-1.5 disabled:opacity-50"
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span>{submittingHazard ? 'Dispatching...' : 'Dispatch Hazard Pin'}</span>
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Community Confirmation & Reporter Audit Modal (Task 5.8) */}
+      <Modal
+        isOpen={Boolean(auditTarget)}
+        onClose={() => setAuditTarget(null)}
+        title="Community Verification & Reporter Audit"
+        maxWidth="lg"
+      >
+        {auditTarget && (
+          <div className="space-y-4 text-xs font-sans">
+            <div className="p-3 rounded-xl bg-obsidian-900 border border-white/10 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-white text-sm">{auditTarget.title}</span>
+                <Badge
+                  variant={
+                    auditTarget.status === 'active'
+                      ? 'warning'
+                      : auditTarget.status === 'resolved'
+                      ? 'success'
+                      : 'danger'
+                  }
+                  size="sm"
+                >
+                  {auditTarget.status}
+                </Badge>
+              </div>
+              <p className="text-gray-300">{auditTarget.description || 'No description provided.'}</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-gray-300 font-mono">
+              <div className="p-2.5 rounded-lg bg-white/5 border border-white/5">
+                <span className="text-[10px] text-gray-500 block">REPORTER IDENTITY</span>
+                <span className="text-white font-semibold">{auditTarget.reporterName || 'SAFORA Citizen'}</span>
+              </div>
+              <div className="p-2.5 rounded-lg bg-white/5 border border-white/5">
+                <span className="text-[10px] text-gray-500 block">COMMUNITY CONFIRMATIONS</span>
+                <span className="text-emerald-400 font-bold text-sm">
+                  {auditTarget.confirmationsCount || 0} Citizens Verified
+                </span>
+              </div>
+              <div className="p-2.5 rounded-lg bg-white/5 border border-white/5">
+                <span className="text-[10px] text-gray-500 block">COORDINATES</span>
+                <span className="text-white">
+                  {auditTarget.latitude.toFixed(4)}, {auditTarget.longitude.toFixed(4)}
+                </span>
+              </div>
+              <div className="p-2.5 rounded-lg bg-white/5 border border-white/5">
+                <span className="text-[10px] text-gray-500 block">REPORTED TIMESTAMP</span>
+                <span className="text-white">
+                  {new Date(auditTarget.createdAt || Date.now()).toLocaleString('en-IN')}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center pt-2 border-t border-white/10">
+              <a
+                href={`https://maps.google.com/?q=${auditTarget.latitude},${auditTarget.longitude}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1 font-mono text-[11px]"
+              >
+                <MapPin className="w-3.5 h-3.5" /> View on Google Maps
+              </a>
+              <button
+                type="button"
+                onClick={() => setAuditTarget(null)}
+                className="px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-white font-semibold text-xs"
+              >
+                Close Audit
+              </button>
             </div>
           </div>
         )}

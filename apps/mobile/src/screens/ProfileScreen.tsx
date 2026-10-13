@@ -252,11 +252,40 @@ export const ProfileScreen: React.FC = () => {
   };
 
   const handleOpenAddModal = () => {
+    if (isGuest) {
+      Alert.alert(
+        '🔒 Sign In Required',
+        'To save personal emergency guardians and activate family tracking loops, please sign in or register an account.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Sign In / Register',
+            onPress: () =>
+              (navigation as any).navigate('Auth', { initialTab: 'register' }),
+          },
+        ],
+      );
+      return;
+    }
     setEditingContact(null);
     setShowContactModal(true);
   };
 
   const handleOpenEditModal = (contact: Contact) => {
+    if (isGuest) {
+      Alert.alert(
+        '🔒 Sign In Required',
+        'Emergency guardian settings are available for registered accounts.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Sign In',
+            onPress: () => (navigation as any).navigate('Auth'),
+          },
+        ],
+      );
+      return;
+    }
     setEditingContact(contact);
     setShowContactModal(true);
   };
@@ -1242,20 +1271,38 @@ export const ProfileScreen: React.FC = () => {
           </Text>
         </TouchableOpacity>
 
-        {/* Sign Out Button */}
-        <TouchableOpacity
-          style={[
-            styles.logoutBtn,
-            {
-              borderColor: colors.border,
-              backgroundColor: colors.backgroundCard,
-            },
-          ]}
-          onPress={handleLogout}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.logoutBtnText}>🚪 Sign Out</Text>
-        </TouchableOpacity>
+        {/* Sign Out or Sign In / Switch Account Button */}
+        {isGuest ? (
+          <TouchableOpacity
+            style={[
+              styles.logoutBtn,
+              {
+                borderColor: colors.primary,
+                backgroundColor: colors.backgroundCard,
+              },
+            ]}
+            onPress={() => (navigation as any).navigate('Auth')}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.logoutBtnText, { color: colors.primary }]}>
+              🚀 Sign In / Switch Account
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={[
+              styles.logoutBtn,
+              {
+                borderColor: colors.border,
+                backgroundColor: colors.backgroundCard,
+              },
+            ]}
+            onPress={handleLogout}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.logoutBtnText}>🚪 Sign Out</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
 
       {/* Edit Profile Modal */}

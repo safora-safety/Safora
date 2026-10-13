@@ -777,34 +777,44 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
                 },
               ]}
             >
-              {searchResults.map(item => (
-                <TouchableOpacity
-                  key={item.id}
-                  style={[
-                    styles.searchResultItem,
-                    { borderBottomColor: colors.border },
-                  ]}
-                  onPress={() => handleSelectPlace(item)}
-                >
-                  <Text style={styles.resultIcon}>📍</Text>
-                  <View style={{ flex: 1 }}>
-                    <Text
-                      style={[styles.resultName, { color: colors.textPrimary }]}
-                    >
-                      {item.name}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.resultSub,
-                        { color: colors.textSecondary },
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {item.placeName}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
+              <ScrollView
+                nestedScrollEnabled
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={true}
+                style={{ maxHeight: 220 }}
+              >
+                {searchResults.map(item => (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={[
+                      styles.searchResultItem,
+                      { borderBottomColor: colors.border },
+                    ]}
+                    onPress={() => handleSelectPlace(item)}
+                  >
+                    <Text style={styles.resultIcon}>📍</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[
+                          styles.resultName,
+                          { color: colors.textPrimary },
+                        ]}
+                      >
+                        {item.name}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.resultSub,
+                          { color: colors.textSecondary },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {item.placeName}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
             </View>
           )}
         </View>

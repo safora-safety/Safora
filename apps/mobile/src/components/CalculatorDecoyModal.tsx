@@ -9,6 +9,7 @@ import {
   SafeAreaView,
   StatusBar,
   Alert,
+  Platform,
 } from 'react-native';
 import { SosService } from '../services/sosService';
 import { getCurrentCoordinates } from '../services/locationService';
@@ -185,11 +186,17 @@ export const CalculatorDecoyModal: React.FC<CalculatorDecoyModalProps> = ({
       <SafeAreaView style={styles.container}>
         {/* Stealth Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.exitBtn}>
+          <TouchableOpacity
+            onPress={onClose}
+            style={styles.exitBtn}
+            hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+            activeOpacity={0.7}
+            accessibilityLabel="Close Calculator"
+          >
             <Text style={styles.exitText}>✕</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Calculator</Text>
-          <View style={{ width: 32 }} />
+          <View style={{ width: 42 }} />
         </View>
 
         {/* Calculator Display */}
@@ -256,19 +263,20 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 10,
+    paddingTop:
+      Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 14 : 14,
   },
   exitBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: '#1E293B',
     alignItems: 'center',
     justifyContent: 'center',
   },
   exitText: {
     color: '#94A3B8',
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
   },
   headerTitle: {
