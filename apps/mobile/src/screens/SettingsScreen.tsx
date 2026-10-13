@@ -382,8 +382,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   [
                     { text: 'Cancel', style: 'cancel' },
                     {
-                      text: 'Sign In / Register',
-                      onPress: () => navigation.navigate('Auth'),
+                      text: 'Sign In / Switch Account',
+                      onPress: () => navigation.navigate('AccountSelect'),
                     },
                   ],
                 );

@@ -364,10 +364,10 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
         [
           { text: 'Cancel', style: 'cancel' },
           {
-            text: 'Sign In / Register',
+            text: 'Sign In / Switch Account',
             onPress: () => {
               if (navigationRef.isReady()) {
-                navigationRef.navigate('Auth');
+                navigationRef.navigate('AccountSelect');
               }
             },
           },

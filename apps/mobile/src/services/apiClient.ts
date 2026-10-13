@@ -22,8 +22,14 @@ export function setUnauthorizedHandler(fn: () => void): void {
 // Attach JWT Bearer token if present
 apiClient.interceptors.request.use(async config => {
   try {
+    const isGuest = (await AsyncStorage.getItem('@safora_is_guest')) === 'true';
     const token = await AsyncStorage.getItem('@safora_token');
-    if (token && config.headers) {
+    if (
+      !isGuest &&
+      token &&
+      token !== 'guest-session-token' &&
+      config.headers
+    ) {
       config.headers.Authorization = `Bearer ${token}`;
     }
   } catch {
@@ -37,6 +43,17 @@ apiClient.interceptors.response.use(
   response => response,
   async error => {
     if (error.response?.status === 401) {
+      try {
+        const isGuest =
+          (await AsyncStorage.getItem('@safora_is_guest')) === 'true';
+        if (isGuest) {
+          // Do not kick out or clear session for guests
+          return Promise.reject(error);
+        }
+      } catch {
+        // Fallback
+      }
+
       const url = error.config?.url || '';
       const isAuthEndpoint =
         url.includes('/auth/login') || url.includes('/auth/register');

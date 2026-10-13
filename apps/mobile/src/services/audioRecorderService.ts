@@ -93,22 +93,20 @@ export class AudioRecorderService {
   }
 
   /**
-   * Starts a real-time 5-second streaming push pipeline.
-   * Audio is captured in consecutive 5-second slices. At the end of each slice,
-   * the chunk is uploaded immediately to Cloudinary and attached to the alert.
-   * If the phone powers down or app is killed at e.g. second 7, earlier chunks are
-   * already safely stored in Cloudinary and the database.
+   * Continuous 30-Second Ambient Audio Recording.
+   * Records continuously for 30 full seconds and uploads to Cloudinary upon completion.
+   * If the app is interrupted or backgrounded before 30s, the AppState listener flushes
+   * and uploads whatever audio was recorded up to that moment.
    */
-  static async startStreamingPipeline(
+  static async startRecording(
     alertId?: string | number,
     totalSeconds = TOTAL_DURATION_SEC,
-    chunkSeconds = CHUNK_INTERVAL_SEC,
   ): Promise<boolean> {
     try {
       const hasPermission = await this.isPermissionGranted();
       if (!hasPermission) {
         console.warn(
-          '[AudioRecorder] Microphone permission missing, skipping audio pipeline',
+          '[AudioRecorder] Microphone permission missing, skipping audio recording',
         );
         return false;
       }
@@ -117,21 +115,8 @@ export class AudioRecorderService {
       await this.stopSilent();
 
       currentPipelineAlertId = alertId || null;
-      chunkIndex = 0;
 
-      // Persist active session in AsyncStorage for cold-boot recovery
-      if (alertId) {
-        await AsyncStorage.setItem(
-          PENDING_SOS_AUDIO_KEY,
-          JSON.stringify({
-            alertId,
-            startTime: Date.now(),
-            chunkIndex: 0,
-          }),
-        ).catch(() => {});
-      }
-
-      // Register AppState kill/background listener to capture partial audio
+      // Register AppState listener to flush recorded audio if phone or app is interrupted
       if (!appStateSubscription) {
         appStateSubscription = AppState.addEventListener(
           'change',
@@ -141,65 +126,31 @@ export class AudioRecorderService {
               isRecording
             ) {
               console.log(
-                '[AudioRecorder] App backgrounded/interrupted — flushing active audio slice immediately',
+                '[AudioRecorder] App backgrounded/interrupted — flushing active audio recording immediately',
               );
-              await this.flushCurrentChunk(currentPipelineAlertId);
+              await this.stopAndUpload(currentPipelineAlertId);
             }
           },
         );
       }
 
-      // Start initial chunk recording
+      // Start continuous audio recording
       await Sound.startRecorder();
       isRecording = true;
 
-      const totalChunks = Math.ceil(totalSeconds / chunkSeconds);
-
-      // Recursive pipeline runner
-      const runPipelineSlice = async () => {
-        chunkIndex += 1;
-
-        if (chunkIndex >= totalChunks || !isRecording) {
-          // Finished full 30s session
+      // Timer to stop and upload full recording after totalSeconds
+      pipelineIntervalTimer = setTimeout(async () => {
+        if (isRecording) {
+          console.log(
+            `[AudioRecorder] Completed full ${totalSeconds}s continuous recording`,
+          );
           await this.stopAndUpload(currentPipelineAlertId);
-          this.cleanupPipeline();
-          return;
         }
+      }, totalSeconds * 1000);
 
-        pipelineIntervalTimer = setTimeout(async () => {
-          if (!isRecording) return;
-
-          try {
-            // Stop current 5s slice
-            const uri = await Sound.stopRecorder();
-
-            // Immediately restart recorder for next slice with minimal gap
-            if (isRecording) {
-              await Sound.startRecorder();
-            }
-
-            // Upload the completed slice in background
-            if (uri && currentPipelineAlertId) {
-              this.uploadAndAttachChunk(
-                currentPipelineAlertId,
-                uri,
-                chunkIndex,
-              );
-            }
-
-            // Continue to next slice
-            runPipelineSlice();
-          } catch (err) {
-            console.warn('[AudioRecorder] Error in pipeline slice cycle:', err);
-            this.cleanupPipeline();
-          }
-        }, chunkSeconds * 1000);
-      };
-
-      runPipelineSlice();
       return true;
     } catch (err) {
-      console.warn('[AudioRecorder] Failed to start audio pipeline:', err);
+      console.warn('[AudioRecorder] Failed to start audio recording:', err);
       isRecording = false;
       this.cleanupPipeline();
       return false;
@@ -207,10 +158,13 @@ export class AudioRecorderService {
   }
 
   /**
-   * Legacy startRecording alias: directs to streaming pipeline
+   * Compatibility alias
    */
-  static async startRecording(alertId?: string | number): Promise<boolean> {
-    return this.startStreamingPipeline(alertId);
+  static async startStreamingPipeline(
+    alertId?: string | number,
+    totalSeconds = TOTAL_DURATION_SEC,
+  ): Promise<boolean> {
+    return this.startRecording(alertId, totalSeconds);
   }
 
   /**

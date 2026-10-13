@@ -259,9 +259,8 @@ export const ProfileScreen: React.FC = () => {
         [
           { text: 'Cancel', style: 'cancel' },
           {
-            text: 'Sign In / Register',
-            onPress: () =>
-              (navigation as any).navigate('Auth', { initialTab: 'register' }),
+            text: 'Sign In / Switch Account',
+            onPress: () => (navigation as any).navigate('AccountSelect'),
           },
         ],
       );
@@ -279,8 +278,8 @@ export const ProfileScreen: React.FC = () => {
         [
           { text: 'Cancel', style: 'cancel' },
           {
-            text: 'Sign In',
-            onPress: () => (navigation as any).navigate('Auth'),
+            text: 'Sign In / Switch Account',
+            onPress: () => (navigation as any).navigate('AccountSelect'),
           },
         ],
       );
@@ -756,12 +755,10 @@ export const ProfileScreen: React.FC = () => {
             </Text>
             <TouchableOpacity
               style={styles.guestSwitchBtn}
-              onPress={() =>
-                navigation.navigate('Auth', { initialTab: 'register' })
-              }
+              onPress={() => navigation.navigate('AccountSelect')}
             >
               <Text style={[styles.guestSwitchText, { color: colors.primary }]}>
-                Create Verified Account / Sign In →
+                Sign In / Switch to User Account →
               </Text>
             </TouchableOpacity>
           </View>
@@ -1281,7 +1278,7 @@ export const ProfileScreen: React.FC = () => {
                 backgroundColor: colors.backgroundCard,
               },
             ]}
-            onPress={() => (navigation as any).navigate('Auth')}
+            onPress={() => (navigation as any).navigate('AccountSelect')}
             activeOpacity={0.8}
           >
             <Text style={[styles.logoutBtnText, { color: colors.primary }]}>

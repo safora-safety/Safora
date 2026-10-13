@@ -489,6 +489,9 @@ let lastSessionExpiredAlert = 0;
 
 setUnauthorizedHandler(() => {
   const state = useAuthStore.getState();
+  if (state.isGuest) {
+    return;
+  }
   const wasLoggedIn = state.isAuthenticated && !state.isGuest;
   disconnectSocket();
   useAuthStore.setState({

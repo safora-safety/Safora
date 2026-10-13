@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import {
   NavigationContainer,
@@ -70,7 +70,9 @@ export const RootNavigator: React.FC = () => {
   const needsTerms =
     isAuthenticated && !isGuest && user && (!hasAcceptedTerms || !hasAckAge);
 
-  // When authentication state changes dynamically (e.g. Guest mode tapped), switch immediately
+  const prevAuthRef = useRef(isAuthenticated);
+
+  // When authentication state changes dynamically (e.g. Guest mode tapped, user logs out), switch immediately
   useEffect(() => {
     if (!isHydrated) return;
     if (navigationRef.isReady()) {
@@ -86,14 +88,16 @@ export const RootNavigator: React.FC = () => {
             routes: [{ name: 'MainTabs' }],
           });
         }
-      } else {
+      } else if (prevAuthRef.current === true) {
+        const dest = hasSeenOnboarding ? 'AccountSelect' : 'Onboarding';
         navigationRef.reset({
           index: 0,
-          routes: [{ name: 'AccountSelect' }],
+          routes: [{ name: dest }],
         });
       }
+      prevAuthRef.current = isAuthenticated;
     }
-  }, [isAuthenticated, isHydrated, needsTerms]);
+  }, [isAuthenticated, isHydrated, needsTerms, hasSeenOnboarding]);
 
   // Show dark splash loader while rehydrating stored login session
   if (!isHydrated) {
