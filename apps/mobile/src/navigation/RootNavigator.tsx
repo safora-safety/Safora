@@ -86,6 +86,11 @@ export const RootNavigator: React.FC = () => {
             routes: [{ name: 'MainTabs' }],
           });
         }
+      } else {
+        navigationRef.reset({
+          index: 0,
+          routes: [{ name: 'AccountSelect' }],
+        });
       }
     }
   }, [isAuthenticated, isHydrated, needsTerms]);

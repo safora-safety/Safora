@@ -374,18 +374,18 @@ describe("SOS Guards & Authorization Security", () => {
   });
 
   describe("Upload Audio and Test Guardian Rate Limiters", () => {
-    it("should enforce uploadAudioRateLimiter max 5 requests", () => {
+    it("should enforce uploadAudioRateLimiter max 30 requests (streaming slices)", () => {
       const { uploadAudioRateLimiter } = require("../middleware/rateLimiter");
       const req: any = { ip: "192.168.1.10" };
       const res: any = { status: jest.fn().mockReturnThis(), json: jest.fn() };
       const next = jest.fn();
 
-      for (let i = 0; i < 5; i++) {
+      for (let i = 0; i < 30; i++) {
         uploadAudioRateLimiter(req, res, next);
       }
-      expect(next).toHaveBeenCalledTimes(5);
+      expect(next).toHaveBeenCalledTimes(30);
 
-      // 6th request is rejected
+      // 31st request is rejected
       uploadAudioRateLimiter(req, res, next);
       expect(res.status).toHaveBeenCalledWith(429);
       expect(res.json).toHaveBeenCalledWith(

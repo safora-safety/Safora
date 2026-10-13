@@ -13,6 +13,7 @@ import {
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useAuthStore } from '../store/authStore';
+import { GoogleLogo } from '../components/GoogleLogo';
 
 interface RegisterScreenProps {
   navigation: any;
@@ -389,9 +390,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
             <ActivityIndicator color={colors.primary} />
           ) : (
             <View style={styles.googleButtonContent}>
-              <View style={styles.googleIconCircle}>
-                <Text style={styles.googleIconLetter}>G</Text>
-              </View>
+              <GoogleLogo size={20} />
               <Text
                 style={[styles.googleButtonText, { color: colors.textPrimary }]}
               >

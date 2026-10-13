@@ -11,6 +11,7 @@ import {
   Modal,
   Image,
   BackHandler,
+  ScrollView,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import {
@@ -72,6 +73,8 @@ export const MapScreen: React.FC<MapScreenProps> = ({
   const [showGuestGuardModal, setShowGuestGuardModal] = useState(false);
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
   const [isSyncingPending, setIsSyncingPending] = useState(false);
+  const [selectedCategoryFilter, setSelectedCategoryFilter] =
+    useState<string>('all');
 
   // Multi-Modal Path Routing State (Car, 2-Wheeler, Walk)
   const [activeRoute, setActiveRoute] = useState<{
@@ -401,7 +404,10 @@ export const MapScreen: React.FC<MapScreenProps> = ({
           },
         ]
       : []),
-    ...hazards.map(item => ({
+    ...(selectedCategoryFilter === 'all'
+      ? hazards
+      : hazards.filter(h => h.category === selectedCategoryFilter)
+    ).map(item => ({
       id: item.id,
       latitude: item.latitude,
       longitude: item.longitude,
@@ -505,7 +511,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
             )}
           </View>
 
-          {/* Search Results Dropdown */}
+          {/* Search Results Dropdown (Scrollable) */}
           {searchResults.length > 0 && (
             <View
               style={[
@@ -516,36 +522,95 @@ export const MapScreen: React.FC<MapScreenProps> = ({
                 },
               ]}
             >
-              {searchResults.map(item => (
-                <TouchableOpacity
-                  key={item.id}
-                  style={[
-                    styles.searchResultItem,
-                    { borderBottomColor: colors.border },
-                  ]}
-                  onPress={() => handleSelectSearchResult(item)}
-                >
-                  <Text style={styles.resultIcon}>📍</Text>
-                  <View style={{ flex: 1 }}>
-                    <Text
-                      style={[styles.resultName, { color: colors.textPrimary }]}
-                    >
-                      {item.name}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.resultSub,
-                        { color: colors.textSecondary },
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {item.placeName}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
+              <ScrollView
+                nestedScrollEnabled
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={true}
+                style={{ maxHeight: 220 }}
+              >
+                {searchResults.map(item => (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={[
+                      styles.searchResultItem,
+                      { borderBottomColor: colors.border },
+                    ]}
+                    onPress={() => handleSelectSearchResult(item)}
+                  >
+                    <Text style={styles.resultIcon}>📍</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[
+                          styles.resultName,
+                          { color: colors.textPrimary },
+                        ]}
+                      >
+                        {item.name}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.resultSub,
+                          { color: colors.textSecondary },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {item.placeName}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
             </View>
           )}
+
+          {/* Hazard Category Filter Chips Bar (Task 6.3) */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.categoryFilterRow}
+            contentContainerStyle={styles.categoryFilterContent}
+          >
+            {[
+              { id: 'all', label: 'All', icon: '🛡️' },
+              { id: 'lighting', label: 'Lighting', icon: '💡' },
+              { id: 'road_hazard', label: 'Road Hazards', icon: '🚧' },
+              { id: 'waterlogging', label: 'Waterlogging', icon: '🌊' },
+              { id: 'isolated_area', label: 'Isolated', icon: '🌲' },
+              { id: 'traffic', label: 'Traffic', icon: '🚗' },
+              { id: 'other', label: 'Other', icon: '⚠️' },
+            ].map(cat => {
+              const active = selectedCategoryFilter === cat.id;
+              return (
+                <TouchableOpacity
+                  key={cat.id}
+                  style={[
+                    styles.categoryFilterChip,
+                    {
+                      backgroundColor: active
+                        ? colors.primary
+                        : colors.backgroundCard,
+                      borderColor: active ? colors.primary : colors.border,
+                    },
+                  ]}
+                  onPress={() => setSelectedCategoryFilter(cat.id)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.categoryFilterChipIcon}>{cat.icon}</Text>
+                  <Text
+                    style={[
+                      styles.categoryFilterChipText,
+                      {
+                        color: active ? '#FFFFFF' : colors.textPrimary,
+                        fontWeight: active ? '800' : '600',
+                      },
+                    ]}
+                  >
+                    {cat.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
         </View>
 
         {/* Offline Queued Hazard Reports Sync Banner */}
@@ -1078,6 +1143,35 @@ const styles = StyleSheet.create({
   resultIcon: { fontSize: 16 },
   resultName: { fontSize: 13, fontWeight: '700' },
   resultSub: { fontSize: 11, marginTop: 1 },
+
+  // Category Filter Chips styles
+  categoryFilterRow: {
+    marginTop: 8,
+  },
+  categoryFilterContent: {
+    gap: 8,
+    paddingRight: 12,
+  },
+  categoryFilterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    borderWidth: 1,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+  },
+  categoryFilterChipIcon: {
+    fontSize: 13,
+    marginRight: 5,
+  },
+  categoryFilterChipText: {
+    fontSize: 12,
+  },
 
   heatmapFab: {
     position: 'absolute',

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   SafeAreaView,
   StatusBar,
 } from 'react-native';
+import { FakeCallService, FakeCallLanguage } from '../services/FakeCallService';
 
 interface FakeCallModalProps {
   visible: boolean;
@@ -28,7 +29,13 @@ export const FakeCallModal: React.FC<FakeCallModalProps> = ({
   );
   const [callSeconds, setCallSeconds] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
-  const [isSpeaker, setIsSpeaker] = useState(true);
+  const [isSpeaker, setIsSpeaker] = useState(false);
+  const [language, setLanguage] = useState<FakeCallLanguage>('en');
+
+  // Load language preference
+  useEffect(() => {
+    FakeCallService.getPreferredLanguage().then(setLanguage);
+  }, [visible]);
 
   // Vibration pattern while ringing
   useEffect(() => {
@@ -37,7 +44,10 @@ export const FakeCallModal: React.FC<FakeCallModalProps> = ({
     } else {
       Vibration.cancel();
     }
-    return () => Vibration.cancel();
+    return () => {
+      Vibration.cancel();
+      FakeCallService.stopFakeCallAudio();
+    };
   }, [visible, callState]);
 
   // Call timer when connected
@@ -59,17 +69,36 @@ export const FakeCallModal: React.FC<FakeCallModalProps> = ({
       setIsMuted(false);
     } else {
       Vibration.cancel();
+      FakeCallService.stopFakeCallAudio();
     }
   }, [visible]);
 
   const handleAccept = () => {
     Vibration.cancel();
     setCallState('connected');
+    FakeCallService.startFakeCallAudio(language, isSpeaker);
   };
 
   const handleDecline = () => {
     Vibration.cancel();
+    FakeCallService.stopFakeCallAudio();
     onClose();
+  };
+
+  const toggleSpeaker = () => {
+    const next = !isSpeaker;
+    setIsSpeaker(next);
+    if (callState === 'connected') {
+      FakeCallService.startFakeCallAudio(language, next);
+    }
+  };
+
+  const selectLanguage = (lang: FakeCallLanguage) => {
+    setLanguage(lang);
+    FakeCallService.setPreferredLanguage(lang);
+    if (callState === 'connected') {
+      FakeCallService.startFakeCallAudio(lang, isSpeaker);
+    }
   };
 
   const formatDuration = (sec: number) => {
@@ -101,6 +130,50 @@ export const FakeCallModal: React.FC<FakeCallModalProps> = ({
               <Text style={styles.callerNameText}>{callerName}</Text>
               <Text style={styles.callerNumberText}>{callerNumber}</Text>
               <Text style={styles.callTypeText}>Incoming Cellular Call...</Text>
+            </View>
+
+            {/* Voice Script Language Selector */}
+            <View style={styles.langSelectorRow}>
+              <Text style={styles.langSelectorLabel}>
+                Voice Dialogue Script:
+              </Text>
+              <View style={styles.langPillContainer}>
+                <TouchableOpacity
+                  style={[
+                    styles.langPill,
+                    language === 'en' && styles.langPillActive,
+                  ]}
+                  onPress={() => selectLanguage('en')}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.langPillText,
+                      language === 'en' && styles.langPillTextActive,
+                    ]}
+                  >
+                    🇺🇸 English
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.langPill,
+                    language === 'hi' && styles.langPillActive,
+                  ]}
+                  onPress={() => selectLanguage('hi')}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.langPillText,
+                      language === 'hi' && styles.langPillTextActive,
+                    ]}
+                  >
+                    🇮🇳 Hindi
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             {/* Quick Actions Note */}
@@ -144,6 +217,10 @@ export const FakeCallModal: React.FC<FakeCallModalProps> = ({
               <Text style={styles.connectedDuration}>
                 {formatDuration(callSeconds)}
               </Text>
+              <Text style={styles.connectedLangBadge}>
+                {language === 'hi' ? '🇮🇳 Hindi Script' : '🇺🇸 English Script'} •{' '}
+                {isSpeaker ? '🔊 Speakerphone' : '👂 Earpiece Mode'}
+              </Text>
             </View>
 
             {/* In-call controls grid */}
@@ -165,15 +242,26 @@ export const FakeCallModal: React.FC<FakeCallModalProps> = ({
 
               <TouchableOpacity
                 style={[styles.gridBtn, isSpeaker && styles.gridBtnActive]}
-                onPress={() => setIsSpeaker(!isSpeaker)}
+                onPress={toggleSpeaker}
               >
-                <Text style={styles.gridBtnEmoji}>🔊</Text>
-                <Text style={styles.gridBtnLabel}>Speaker</Text>
+                <Text style={styles.gridBtnEmoji}>
+                  {isSpeaker ? '🔊' : '👂'}
+                </Text>
+                <Text style={styles.gridBtnLabel}>
+                  {isSpeaker ? 'Speaker On' : 'Earpiece'}
+                </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.gridBtn}>
-                <Text style={styles.gridBtnEmoji}>➕</Text>
-                <Text style={styles.gridBtnLabel}>Add call</Text>
+              <TouchableOpacity
+                style={styles.gridBtn}
+                onPress={() => selectLanguage(language === 'en' ? 'hi' : 'en')}
+              >
+                <Text style={styles.gridBtnEmoji}>
+                  {language === 'hi' ? '🇮🇳' : '🇺🇸'}
+                </Text>
+                <Text style={styles.gridBtnLabel}>
+                  {language === 'hi' ? 'Hindi' : 'English'}
+                </Text>
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.gridBtn}>
@@ -278,6 +366,57 @@ const styles = StyleSheet.create({
     color: '#10B981',
     fontWeight: '700',
     letterSpacing: 1,
+  },
+  connectedLangBadge: {
+    fontSize: 11,
+    color: '#94A3B8',
+    marginTop: 6,
+    fontWeight: '500',
+    letterSpacing: 0.3,
+  },
+  langSelectorRow: {
+    alignItems: 'center',
+    gap: 8,
+    marginVertical: 10,
+  },
+  langSelectorLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  langPillContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#0F172A',
+    borderRadius: 24,
+    padding: 3,
+    borderWidth: 1,
+    borderColor: '#1E293B',
+    gap: 4,
+  },
+  langPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: 'transparent',
+  },
+  langPillActive: {
+    backgroundColor: '#2563EB',
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  langPillText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  langPillTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
   tipBox: {
     backgroundColor: 'rgba(56, 189, 248, 0.08)',

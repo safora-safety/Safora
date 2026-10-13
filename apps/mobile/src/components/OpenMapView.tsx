@@ -626,6 +626,44 @@ export const OpenMapView = forwardRef<OpenMapViewRef, OpenMapViewProps>(
           >
             {isLayerMenuOpen ? (
               <View style={styles.layerExpandedMenu}>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    paddingHorizontal: 8,
+                    paddingVertical: 4,
+                    borderBottomWidth: 1,
+                    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+                    marginBottom: 4,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: '#94A3B8',
+                      fontSize: 10,
+                      fontWeight: '800',
+                      letterSpacing: 0.5,
+                    }}
+                  >
+                    MAP STYLE
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => setIsLayerMenuOpen(false)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Text
+                      style={{
+                        color: '#94A3B8',
+                        fontSize: 13,
+                        fontWeight: '700',
+                      }}
+                    >
+                      ✕
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
                 <TouchableOpacity
                   style={[
                     styles.layerOptionBtn,
@@ -715,13 +753,6 @@ export const OpenMapView = forwardRef<OpenMapViewRef, OpenMapViewProps>(
                     Street Map
                   </Text>
                 </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.layerCloseBtn}
-                  onPress={() => setIsLayerMenuOpen(false)}
-                >
-                  <Text style={styles.layerCloseText}>✕</Text>
-                </TouchableOpacity>
               </View>
             ) : (
               <TouchableOpacity
@@ -803,27 +834,28 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   layerExpandedMenu: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(15, 23, 42, 0.94)',
-    paddingVertical: 5,
-    paddingHorizontal: 7,
-    borderRadius: 24,
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    backgroundColor: 'rgba(15, 23, 42, 0.96)',
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.45,
     shadowRadius: 10,
-    elevation: 10,
+    elevation: 12,
+    minWidth: 140,
   },
   layerOptionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 6,
+    paddingVertical: 7,
     paddingHorizontal: 10,
-    borderRadius: 16,
-    marginHorizontal: 2,
+    borderRadius: 12,
+    marginVertical: 2,
   },
   layerOptionBtnActive: {
     backgroundColor: '#4F46E5',
