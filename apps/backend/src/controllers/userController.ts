@@ -30,6 +30,14 @@ export async function listUsers(
       total,
       page,
       totalPages: Math.ceil(total / limit),
+      pagination: {
+        page,
+        limit,
+        totalCount: total,
+        totalPages: Math.ceil(total / limit) || 1,
+        hasNextPage: page * limit < total,
+        hasPrevPage: page > 1,
+      },
     });
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);

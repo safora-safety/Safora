@@ -13,7 +13,7 @@ import {
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useAuthStore } from '../store/authStore';
-import { GoogleLogo } from '../components/GoogleLogo';
+import { GoogleLogo } from '../components/common/GoogleLogo';
 
 interface LoginScreenProps {
   navigation: any;

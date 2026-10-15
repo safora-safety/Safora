@@ -185,8 +185,8 @@ safora/
 │   │
 │   ├── frontend/               # Vite + React + Tailwind Admin Console (Port 5173)
 │   │   ├── src/
-│   │   │   ├── components/     # Command map, dispatch console, diagnostics
-│   │   │   ├── pages/          # Admin dashboard, incident moderation
+│   │   │   ├── components/     # Domain components (common, hazards, users)
+│   │   │   ├── pages/          # Admin dashboard, incident moderation, users
 │   │   │   └── services/       # Socket.IO client & API integration
 │   │   ├── .env
 │   │   └── package.json
@@ -194,6 +194,7 @@ safora/
 │   └── mobile/                 # React Native mobile application
 │       ├── android/            # Android Gradle project (New Arch, arm64-v8a ABI)
 │       ├── src/
+│       │   ├── components/     # Domain components (common, decoy, emergency, hazards, map, profile)
 │       │   ├── screens/        # UI screens (Home, Map, SafeWalk, Profile, Auth)
 │       │   ├── navigation/     # RootNavigator (Native Stack)
 │       │   ├── services/       # Location engine, API client (Axios)

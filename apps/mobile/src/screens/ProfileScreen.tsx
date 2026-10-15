@@ -13,8 +13,13 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { useAuthStore } from '../store/authStore';
-import { EditProfileModal } from '../components/EditProfileModal';
-import { ContactModal, EditableContact } from '../components/ContactModal';
+import { EditProfileModal } from '../components/profile/EditProfileModal';
+import {
+  ContactModal,
+  EditableContact,
+} from '../components/emergency/ContactModal';
+import { MedicalNotesCard } from '../components/profile/MedicalNotesCard';
+import { HelplinesSection } from '../components/profile/HelplinesSection';
 import { useTheme } from '../theme/ThemeContext';
 import { SosService } from '../services/sosService';
 
@@ -29,30 +34,6 @@ interface Contact {
   guardianUserId?: string | number | null;
   isHelpline?: boolean;
 }
-
-const DEFAULT_HELPLINES: Contact[] = [
-  {
-    id: 'police-112',
-    name: 'Police Emergency Response',
-    relationship: 'National Emergency Helpline',
-    phone: '112',
-    isHelpline: true,
-  },
-  {
-    id: 'ambulance-108',
-    name: 'Ambulance & Medical Emergency',
-    relationship: 'National Medical Dispatch',
-    phone: '108',
-    isHelpline: true,
-  },
-  {
-    id: 'women-helpline',
-    name: 'Women Safety Helpline',
-    relationship: '24/7 Citizen Women Helpline',
-    phone: '1090',
-    isHelpline: true,
-  },
-];
 
 const INITIAL_FAMILY_CONTACTS: Contact[] = [
   {
@@ -697,40 +678,11 @@ export const ProfileScreen: React.FC = () => {
         </View>
 
         {/* Emergency Medical Credentials Card */}
-        <TouchableOpacity
-          style={[
-            styles.medicalCard,
-            {
-              backgroundColor: colors.backgroundCard,
-              borderColor: colors.border,
-            },
-          ]}
-          onPress={() => setShowEditModal(true)}
-          activeOpacity={0.8}
-        >
-          <View style={styles.medicalHeader}>
-            <Text style={styles.medicalTitle}>🩸 Emergency Medical Info</Text>
-            <Text style={[styles.medicalActionText, { color: colors.primary }]}>
-              Update ›
-            </Text>
-          </View>
-          <View style={styles.medicalContent}>
-            <View style={styles.bloodChip}>
-              <Text style={styles.bloodChipText}>
-                {user?.bloodGroup
-                  ? `Blood: ${user.bloodGroup}`
-                  : 'Blood Group: Not Set'}
-              </Text>
-            </View>
-            <Text
-              style={[styles.medicalNotes, { color: colors.textSecondary }]}
-              numberOfLines={2}
-            >
-              {user?.emergencyNotes ||
-                'Tap to add allergy or critical medical notes for first responders'}
-            </Text>
-          </View>
-        </TouchableOpacity>
+        <MedicalNotesCard
+          bloodGroup={user?.bloodGroup}
+          emergencyNotes={user?.emergencyNotes}
+          onPressUpdate={() => setShowEditModal(true)}
+        />
 
         {/* Guest Mode Banner */}
         {isGuest && (
@@ -1172,63 +1124,7 @@ export const ProfileScreen: React.FC = () => {
         )}
 
         {/* Pinned Universal National Helplines */}
-        <View style={[styles.sectionHeader, { marginTop: 10 }]}>
-          <View>
-            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-              Universal Emergency Services
-            </Text>
-            <Text style={[styles.sectionSub, { color: colors.textSecondary }]}>
-              Verified 24/7 national citizen helplines
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.contactsList}>
-          {DEFAULT_HELPLINES.map(helpline => (
-            <View
-              key={helpline.id}
-              style={[
-                styles.contactItem,
-                {
-                  backgroundColor: colors.backgroundCard,
-                  borderColor: colors.border,
-                },
-              ]}
-            >
-              <View
-                style={[
-                  styles.contactIconCircle,
-                  { backgroundColor: 'rgba(239, 68, 68, 0.12)' },
-                ]}
-              >
-                <Text style={styles.contactIcon}>🚨</Text>
-              </View>
-
-              <View style={styles.contactDetails}>
-                <Text
-                  style={[styles.contactName, { color: colors.textPrimary }]}
-                >
-                  {helpline.name}
-                </Text>
-                <Text style={[styles.contactRel, { color: colors.textMuted }]}>
-                  {helpline.relationship}
-                </Text>
-                <Text style={[styles.contactPhone, { color: '#EF4444' }]}>
-                  Dial {helpline.phone}
-                </Text>
-              </View>
-
-              <TouchableOpacity
-                style={[styles.testBtn, styles.testBtnCall]}
-                onPress={() => testAlert(helpline)}
-              >
-                <Text style={[styles.testBtnText, { color: '#EF4444' }]}>
-                  📞 Call
-                </Text>
-              </TouchableOpacity>
-            </View>
-          ))}
-        </View>
+        <HelplinesSection onCall={testAlert} />
 
         {/* Quick Settings Shortcut */}
         <TouchableOpacity

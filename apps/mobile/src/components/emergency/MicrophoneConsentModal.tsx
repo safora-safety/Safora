@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity } from 'react-native';
-import { useTheme } from '../theme/ThemeContext';
+import { useTheme } from '../../theme/ThemeContext';
 
 interface MicrophoneConsentModalProps {
   visible: boolean;
@@ -257,3 +257,5 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
+
+export default MicrophoneConsentModal;

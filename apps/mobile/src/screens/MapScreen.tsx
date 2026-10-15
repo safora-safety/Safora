@@ -18,7 +18,7 @@ import {
   OpenMapView,
   OpenMapViewRef,
   MapMarkerItem,
-} from '../components/OpenMapView';
+} from '../components/map/OpenMapView';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuthStore } from '../store/authStore';
 import {
@@ -28,7 +28,7 @@ import {
 } from '../services/locationService';
 import { ReportService } from '../services/reportService';
 import { HazardReport } from '@safora/shared-types';
-import { ReportHazardModal } from '../components/ReportHazardModal';
+import { ReportHazardModal } from '../components/hazards/ReportHazardModal';
 import {
   searchPlaces,
   PlaceSearchResult,

@@ -20,7 +20,7 @@ import {
   OpenMapView,
   OpenMapViewRef,
   MapMarkerItem,
-} from '../components/OpenMapView';
+} from '../components/map/OpenMapView';
 import { useTheme } from '../theme/ThemeContext';
 import {
   getCurrentCoordinates,

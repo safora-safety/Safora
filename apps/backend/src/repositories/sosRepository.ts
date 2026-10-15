@@ -257,12 +257,24 @@ export class SosRepository {
     return result.rows[0];
   }
 
+  static async countNotificationsByUserId(
+    userId: string | number,
+  ): Promise<number> {
+    const result = await db.query(
+      `SELECT COUNT(*) FROM notifications WHERE user_id = $1;`,
+      [userId],
+    );
+    return parseInt(result.rows[0]?.count || "0", 10);
+  }
+
   static async findNotificationsByUserId(
     userId: string | number,
+    limit = 50,
+    offset = 0,
   ): Promise<NotificationRow[]> {
     const result = await db.query(
-      `SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50;`,
-      [userId],
+      `SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3;`,
+      [userId, limit, offset],
     );
     return result.rows;
   }
@@ -313,7 +325,20 @@ export class SosRepository {
     return result.rows[0] || null;
   }
 
-  static async findAllAlerts(limit = 100): Promise<
+  static async countAllAlerts(status?: string): Promise<number> {
+    const query = status
+      ? "SELECT COUNT(*) FROM sos_alerts WHERE status = $1;"
+      : "SELECT COUNT(*) FROM sos_alerts;";
+    const params = status ? [status] : [];
+    const result = await db.query(query, params);
+    return parseInt(result.rows[0]?.count || "0", 10);
+  }
+
+  static async findAllAlerts(
+    limit = 100,
+    offset = 0,
+    status?: string,
+  ): Promise<
     Array<
       SosAlertRow & {
         user_name?: string;
@@ -322,28 +347,48 @@ export class SosRepository {
       }
     >
   > {
-    const result = await db.query(
-      `SELECT 
-         s.id,
-         s.user_id,
-         u.name AS user_name,
-         u.phone AS user_phone,
-         u.email AS user_email,
-         s.journey_id,
-         s.latitude,
-         s.longitude,
-         s.accuracy,
-         s.battery_percentage,
-         s.status,
-         s.audio_url,
-         s.is_test,
-         s.created_at
-       FROM sos_alerts s
-       LEFT JOIN users u ON s.user_id = u.id
-       ORDER BY s.created_at DESC
-       LIMIT $1;`,
-      [limit],
-    );
+    const query = status
+      ? `SELECT 
+           s.id,
+           s.user_id,
+           u.name AS user_name,
+           u.phone AS user_phone,
+           u.email AS user_email,
+           s.journey_id,
+           s.latitude,
+           s.longitude,
+           s.accuracy,
+           s.battery_percentage,
+           s.status,
+           s.audio_url,
+           s.is_test,
+           s.created_at
+         FROM sos_alerts s
+         LEFT JOIN users u ON s.user_id = u.id
+         WHERE s.status = $2
+         ORDER BY s.created_at DESC
+         LIMIT $1 OFFSET $3;`
+      : `SELECT 
+           s.id,
+           s.user_id,
+           u.name AS user_name,
+           u.phone AS user_phone,
+           u.email AS user_email,
+           s.journey_id,
+           s.latitude,
+           s.longitude,
+           s.accuracy,
+           s.battery_percentage,
+           s.status,
+           s.audio_url,
+           s.is_test,
+           s.created_at
+         FROM sos_alerts s
+         LEFT JOIN users u ON s.user_id = u.id
+         ORDER BY s.created_at DESC
+         LIMIT $1 OFFSET $2;`;
+    const params: any[] = status ? [limit, status, offset] : [limit, offset];
+    const result = await db.query(query, params);
     return result.rows;
   }
 

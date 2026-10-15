@@ -5,9 +5,8 @@ services:
     plan: free
     branch: main
     autoDeploy: true
-    rootDir: apps/backend
-    buildCommand: npm install --include=dev && npm run build
-    startCommand: npm start
+    buildCommand: npm install && npm run build --workspace=packages/shared-types && npm run build --workspace=apps/backend
+    startCommand: npm start --workspace=apps/backend
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
@@ -42,7 +41,7 @@ services:
     plan: free
     branch: main
     autoDeploy: true
-    buildCommand: npm install && npm run build --workspace=@safora/frontend
+    buildCommand: npm install && npm run build --workspace=packages/shared-types && npm run build --workspace=@safora/frontend
     staticPublishPath: ./apps/frontend/dist
     routes:
       - type: rewrite

@@ -139,33 +139,40 @@ Response — each entry now reflects real tracked position instead of the journe
 ```
 Empty array `[]` when there are genuinely no active journeys — **the frontend must render an empty state for this, not fall back to sample data** (see `tasks.md` #3).
 
-### `GET /api/reports` / `GET /api/reports/nearby` (changed — public DTO)
-Response, non-staff caller:
+### `GET /api/reports` / `GET /api/reports/nearby` (changed — public DTO & Pagination)
+Optional query parameters: `page` (default: 1), `limit` (default: 20, max: 100), `status`, `category`.
+
+Response envelope (paginated):
 ```json
-[
-  {
-    "id": 123,
-    "category": "poor_lighting",
-    "severity": 4,
-    "description": "Streetlight out near the bus stop",
-    "photoUrl": "https://res.cloudinary.com/.../photo.jpg",
-    "location": { "lat": 30.3110, "lng": 78.0401 },
-    "confirmationsCount": 2,
-    "createdAt": "2026-10-28T19:04:00Z"
+{
+  "success": true,
+  "count": 20,
+  "reports": [
+    {
+      "id": 123,
+      "category": "poor_lighting",
+      "severity": 4,
+      "description": "Streetlight out near the bus stop",
+      "photoUrl": "https://res.cloudinary.com/.../photo.jpg",
+      "location": { "lat": 30.3110, "lng": 78.0401 },
+      "confirmationsCount": 2,
+      "createdAt": "2026-10-28T19:04:00Z"
+    }
+  ],
+  "pagination": {
+    "total": 142,
+    "page": 1,
+    "limit": 20,
+    "totalPages": 8,
+    "hasNext": true,
+    "hasPrev": false
   }
-]
+}
 ```
+*Note: For non-paginated requests or legacy endpoints, `reports` array is returned directly for seamless backward compatibility.*
+
 Same endpoint, staff caller (via `Authorization` header carrying a staff/admin JWT):
-```json
-[
-  {
-    "...": "all public fields, plus:",
-    "userId": 7,
-    "reporterName": "Aman S.",
-    "reporterEmail": "user@example.com"
-  }
-]
-```
+Includes all public fields plus `userId`, `reporterName`, and `reporterEmail`.
 
 ### `PATCH /api/auth/profile` (changed — new optional fields)
 Request now also accepts:

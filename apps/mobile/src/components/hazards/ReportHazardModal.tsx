@@ -16,13 +16,14 @@ import {
   Switch,
 } from 'react-native';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
-import { useTheme } from '../theme/ThemeContext';
+import { useTheme } from '../../theme/ThemeContext';
 import { HazardCategory, HazardReport } from '@safora/shared-types';
-import { ReportService } from '../services/reportService';
-import { reverseGeocode } from '../services/locationService';
-import { useAuthStore } from '../store/authStore';
-import { navigationRef } from '../navigation/RootNavigator';
-import { OpenMapView } from './OpenMapView';
+import { ReportService } from '../../services/reportService';
+import { reverseGeocode } from '../../services/locationService';
+import { useAuthStore } from '../../store/authStore';
+import { navigationRef } from '../../navigation/RootNavigator';
+import { OpenMapView } from '../map/OpenMapView';
+import { HazardCategoryChips } from './HazardCategoryChips';
 
 interface ReportHazardModalProps {
   visible: boolean;
@@ -30,15 +31,6 @@ interface ReportHazardModalProps {
   coordinates: { latitude: number; longitude: number };
   onReportCreated: (report: HazardReport) => void;
 }
-
-const CATEGORIES: { id: HazardCategory; label: string; icon: string }[] = [
-  { id: 'lighting', label: 'Poor Lighting', icon: '💡' },
-  { id: 'road_hazard', label: 'Road Trench / Hazard', icon: '🚧' },
-  { id: 'waterlogging', label: 'Waterlogging', icon: '🌊' },
-  { id: 'isolated_area', label: 'Isolated Trail', icon: '🌲' },
-  { id: 'traffic', label: 'Traffic Danger', icon: '🚗' },
-  { id: 'other', label: 'Other Hazard', icon: '⚠️' },
-];
 
 const SAMPLE_PHOTO_PRESETS = [
   {
@@ -418,69 +410,12 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
                 )}
 
                 {/* Category Selector */}
-                <View style={styles.group}>
-                  <Text style={[styles.label, { color: colors.textPrimary }]}>
-                    Hazard Category
-                  </Text>
-                  <View style={styles.categoryGrid}>
-                    {CATEGORIES.map(cat => (
-                      <TouchableOpacity
-                        key={cat.id}
-                        style={[
-                          styles.categoryCard,
-                          {
-                            backgroundColor:
-                              category === cat.id
-                                ? 'rgba(56, 189, 248, 0.15)'
-                                : colors.backgroundInput,
-                            borderColor:
-                              category === cat.id ? '#38BDF8' : colors.border,
-                          },
-                        ]}
-                        onPress={() => setCategory(cat.id)}
-                      >
-                        <Text style={styles.categoryIcon}>{cat.icon}</Text>
-                        <Text
-                          style={[
-                            styles.categoryLabel,
-                            {
-                              color:
-                                category === cat.id
-                                  ? '#38BDF8'
-                                  : colors.textSecondary,
-                            },
-                          ]}
-                        >
-                          {cat.label}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-
-                {/* Custom Category Field if "Other" is chosen */}
-                {category === 'other' && (
-                  <View style={styles.group}>
-                    <Text style={[styles.label, { color: colors.textPrimary }]}>
-                      Specify Hazard Name / Type{' '}
-                      <Text style={styles.opt}>(Optional)</Text>
-                    </Text>
-                    <TextInput
-                      style={[
-                        styles.input,
-                        {
-                          backgroundColor: colors.backgroundInput,
-                          borderColor: colors.border,
-                          color: colors.textPrimary,
-                        },
-                      ]}
-                      placeholder="e.g., Broken Footbridge, Exposed Electrical Cable"
-                      placeholderTextColor={colors.textMuted}
-                      value={customCategoryTitle}
-                      onChangeText={setCustomCategoryTitle}
-                    />
-                  </View>
-                )}
+                <HazardCategoryChips
+                  category={category}
+                  onSelectCategory={setCategory}
+                  customCategoryTitle={customCategoryTitle}
+                  onChangeCustomCategoryTitle={setCustomCategoryTitle}
+                />
 
                 {/* Location Pin with Interactive Mini Map (No typing numbers) */}
                 <View style={styles.group}>
@@ -1313,3 +1248,5 @@ const styles = StyleSheet.create({
   submitBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 13 },
   btnDisabled: { opacity: 0.6 },
 });
+
+export default ReportHazardModal;

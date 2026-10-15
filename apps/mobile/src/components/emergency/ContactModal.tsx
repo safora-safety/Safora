@@ -12,8 +12,8 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { useTheme } from '../theme/ThemeContext';
-import { SosService } from '../services/sosService';
+import { useTheme } from '../../theme/ThemeContext';
+import { SosService } from '../../services/sosService';
 
 export interface EditableContact {
   id?: string;
@@ -532,3 +532,5 @@ const styles = StyleSheet.create({
   },
   saveBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 13 },
 });
+
+export default ContactModal;

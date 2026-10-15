@@ -11,8 +11,8 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { useTheme } from '../theme/ThemeContext';
-import { AuthService } from '../services/authService';
+import { useTheme } from '../../theme/ThemeContext';
+import { AuthService } from '../../services/authService';
 
 interface ChangePasswordModalProps {
   visible: boolean;
@@ -434,3 +434,5 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
 });
+
+export default ChangePasswordModal;
