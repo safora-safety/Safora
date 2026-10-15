@@ -344,8 +344,11 @@ export function setupJourneySockets(io: Server): void {
     socket.on("sos:join", async (data: { alertId: string | number }) => {
       if (!data?.alertId) return;
 
+      const alertIdNum = Number(data.alertId);
+      if (isNaN(alertIdNum)) return;
+
       try {
-        const alert = await SosRepository.findById(data.alertId);
+        const alert = await SosRepository.findById(alertIdNum);
         if (!alert) {
           socket.emit("error", { message: "SOS alert not found" });
           return;
@@ -397,8 +400,13 @@ export function setupJourneySockets(io: Server): void {
           return;
         }
 
+        const alertIdNum = Number(data.alertId);
+        if (isNaN(alertIdNum)) {
+          return;
+        }
+
         try {
-          const alert = await SosRepository.findById(data.alertId);
+          const alert = await SosRepository.findById(alertIdNum);
           if (!alert || String(alert.user_id) !== String(user.id)) {
             socket.emit("error", {
               message: "Forbidden: Cannot stream audio for unowned SOS alert",

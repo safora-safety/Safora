@@ -337,6 +337,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
       setIsSirenActive(true);
     }
 
+    if (!isLoudSiren) {
+      AudioRecorderService.startStreamingPipeline().catch(() => {});
+    }
+
     let onlineSuccess = false;
     let contactsCount = 0;
     let alertId: string | number | undefined;
@@ -351,14 +355,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
         onlineSuccess = !res.isOffline;
         contactsCount = res.contactsNotified || 0;
         alertId = res.alert.id;
+        if (!isLoudSiren) {
+          AudioRecorderService.setAlertId(alertId);
+        }
       }
     } catch {
       onlineSuccess = false;
-    }
-
-    // Launch continuous 5-second real-time streaming audio pipeline
-    if (alertId && !isLoudSiren) {
-      AudioRecorderService.startStreamingPipeline(alertId).catch(() => {});
     }
 
     // Determine target primary contact for carrier SMS

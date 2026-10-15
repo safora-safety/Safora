@@ -105,6 +105,14 @@ export function emitSosAudioChunk(data: {
 }): void {
   if (socket?.connected) {
     socket.emit('sos:audio_chunk', data);
+  } else if (socket) {
+    socket.once('connect', () => {
+      socket?.emit('sos:audio_chunk', data);
+    });
+  } else {
+    console.warn(
+      '[Socket.IO Mobile] Socket not initialized for sos:audio_chunk',
+    );
   }
 }
 
