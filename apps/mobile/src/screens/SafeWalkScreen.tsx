@@ -287,16 +287,8 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
       setDeviation(false, null);
       Vibration.vibrate([0, 1000, 500, 1000]);
 
-      // Audio Recording (TRG-6-lite) — Prioritize lock-screen native recorder when foreground service is active
-      if (Platform.OS === 'android' && NativeModules.SafeWalkService) {
-        NativeModules.SafeWalkService.recordSosAudio(
-          String(journeyId || 'auto_sos'),
-        ).catch(() => {
-          AudioRecorderService.startRecording().catch(() => {});
-        });
-      } else {
-        AudioRecorderService.startRecording().catch(() => {});
-      }
+      // Start dual-pipeline audio recording
+      AudioRecorderService.startRecording().catch(() => {});
 
       SosService.triggerSOS({
         latitude: userPos.latitude,
@@ -310,6 +302,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
           );
 
           if (res?.alert?.id) {
+            AudioRecorderService.setAlertId(res.alert.id);
             setTimeout(() => {
               AudioRecorderService.stopAndUpload(res.alert.id).catch(() => {});
             }, 30000);
@@ -592,16 +585,8 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
               }
             });
 
-            // Audio Recording (TRG-6-lite) — Prioritize lock-screen native recorder when foreground service is active
-            if (Platform.OS === 'android' && NativeModules.SafeWalkService) {
-              NativeModules.SafeWalkService.recordSosAudio(
-                String(journeyId || 'manual_sos'),
-              ).catch(() => {
-                AudioRecorderService.startRecording().catch(() => {});
-              });
-            } else {
-              AudioRecorderService.startRecording().catch(() => {});
-            }
+            // Start dual-pipeline audio recording
+            AudioRecorderService.startRecording().catch(() => {});
 
             try {
               const res = await SosService.triggerSOS({
@@ -615,6 +600,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
               );
 
               if (res?.alert?.id) {
+                AudioRecorderService.setAlertId(res.alert.id);
                 setTimeout(() => {
                   AudioRecorderService.stopAndUpload(res.alert.id).catch(
                     () => {},

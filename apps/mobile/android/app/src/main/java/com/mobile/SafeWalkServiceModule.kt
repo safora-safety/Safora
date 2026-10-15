@@ -51,11 +51,21 @@ class SafeWalkServiceModule(private val reactContext: ReactApplicationContext) :
 
         fun emitEvent(eventName: String, params: Any?) {
             try {
-                reactContextRef?.get()
-                    ?.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-                    ?.emit(eventName, params)
+                val context = reactContextRef?.get() ?: return
+                if (!context.hasActiveReactInstance()) {
+                    android.util.Log.w("SafeWalkServiceModule", "ReactContext has no active instance, dropping $eventName")
+                    return
+                }
+                context.runOnJSQueueThread {
+                    try {
+                        context.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                            ?.emit(eventName, params)
+                    } catch (e: Exception) {
+                        android.util.Log.w("SafeWalkServiceModule", "Failed to emit $eventName on JS thread: ${e.message}")
+                    }
+                }
             } catch (e: Exception) {
-                android.util.Log.w("SafeWalkServiceModule", "Failed to emit $eventName: ${e.message}")
+                android.util.Log.w("SafeWalkServiceModule", "Failed to schedule $eventName: ${e.message}")
             }
         }
     }

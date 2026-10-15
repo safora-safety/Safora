@@ -97,6 +97,9 @@ export const CalculatorDecoyModal: React.FC<CalculatorDecoyModalProps> = ({
         try {
           const coords = await getCurrentCoordinates();
           const alertId = await dispatchSilentSosWithRetry(coords, 3);
+          if (alertId) {
+            AudioRecorderService.setAlertId(alertId);
+          }
 
           // Schedule silent stop & upload after 30s
           setTimeout(() => {

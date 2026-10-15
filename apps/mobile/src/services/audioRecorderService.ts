@@ -128,10 +128,20 @@ export class AudioRecorderService {
         'onSosAudioChunk',
         (chunk: any) => {
           if (chunk && chunk.data) {
+            const resolvedId =
+              chunk.alertId &&
+              chunk.alertId !== 'emergency' &&
+              chunk.alertId !== 'sos_emergency'
+                ? chunk.alertId
+                : currentPipelineAlertId;
+
             console.log(
-              `[AudioRecorder] Emitting live audio slice #${chunk.seq} over Socket.IO`,
+              `[AudioRecorder] Emitting live audio slice #${chunk.seq} (alert ${resolvedId}) over Socket.IO`,
             );
-            emitSosAudioChunk(chunk);
+            emitSosAudioChunk({
+              ...chunk,
+              alertId: resolvedId || chunk.alertId,
+            });
           }
         },
       );
@@ -140,29 +150,38 @@ export class AudioRecorderService {
       masterCompletionSubscription = DeviceEventEmitter.addListener(
         'onSosAudioMasterCompleted',
         async ({ alertId: finishedAlertId, filePath, success }: any) => {
+          const targetAlertId =
+            finishedAlertId &&
+            finishedAlertId !== 'emergency' &&
+            finishedAlertId !== 'sos_emergency'
+              ? finishedAlertId
+              : currentPipelineAlertId;
+
           console.log(
-            `[AudioRecorder] Native master audio completed (${filePath}, success=${success})`,
+            `[AudioRecorder] Native master audio completed for alert ${targetAlertId} (${filePath}, success=${success})`,
           );
-          if (success && filePath && finishedAlertId) {
+          if (success && filePath && targetAlertId) {
             await AudioRecorderService.uploadAndAttachMaster(
-              finishedAlertId,
+              targetAlertId,
               filePath,
             );
           }
         },
       );
 
-      // Register AppState listener to flush recorded audio if phone or app is interrupted
+      // Register AppState listener ONLY for fallback JS recorder (native service runs in foreground)
       if (!appStateSubscription) {
         appStateSubscription = AppState.addEventListener(
           'change',
           async (nextAppState: AppStateStatus) => {
+            // Only stop if pure JS recording without foreground service
             if (
               (nextAppState === 'background' || nextAppState === 'inactive') &&
-              isRecording
+              isRecording &&
+              !isNativeAudioActive
             ) {
               console.log(
-                '[AudioRecorder] App backgrounded/interrupted — flushing active audio recording immediately',
+                '[AudioRecorder] App backgrounded in JS fallback mode — flushing audio recording immediately',
               );
               await this.stopAndUpload(currentPipelineAlertId);
             }
@@ -220,6 +239,18 @@ export class AudioRecorderService {
       this.cleanupPipeline();
       return false;
     }
+  }
+
+  /**
+   * Dynamically associate the active audio pipeline with an asynchronous alert ID
+   */
+  static setAlertId(alertId: string | number): void {
+    if (!alertId) return;
+    currentPipelineAlertId = alertId;
+    joinSosAlertRoom(alertId);
+    console.log(
+      `[AudioRecorder] Pipeline associated with alert ID: ${alertId}`,
+    );
   }
 
   /**
