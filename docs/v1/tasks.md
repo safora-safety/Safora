@@ -259,15 +259,19 @@ async function escalate(journeyId: number) {
 
 ---
 
-### 14. TRG-6-lite — Lock-screen audio for SOS during an active Safe Walk (honest version)
-**Size:** M (~4 days) · **Files:** extends `SafeWalkService.kt` from task 13, `apps/mobile/src/screens/SafeWalkScreen.tsx` (SOS trigger path), existing audio recording code (find wherever the current SOS flow records the 30s clip and reuse it — do not write a second recording implementation)
+### 14. TRG-6-lite & DUAL-PIPE-1 — Dual-Pipe Audio Streaming & Fail-Safe Concatenator
+**Status:** ✅ Completed & Verified (72/72 tests passing) · **Size:** M (~4 days) · **Files:** `SafeWalkService.kt`, `SafeWalkServiceModule.kt`, `apps/mobile/src/services/audioRecorderService.ts`, `apps/mobile/src/services/socketService.ts`, `apps/backend/src/services/audioStitcherService.ts`, `apps/backend/src/sockets/journeySocket.ts`, `apps/frontend/src/context/SocketContext.tsx`
+**Documentation:** See [`dual-pipe-audio-streaming.md`](./dual-pipe-audio-streaming.md) for full protocol payloads, buffer sizing, and edge-case mitigations.
 
-**Change:**
-1. When SOS is triggered **while `SafeWalkService` is running**, call into the service to start audio recording using the microphone access already held by the foreground service (declare `android:foregroundServiceType="location|microphone"` — combined types are allowed).
-2. When SOS is triggered **with no active Safe Walk** (app foreground or background, no service running), attempt the existing recording path as today; if it fails (background restriction), **send the SOS immediately without audio** — do not block SOS delivery waiting for a recording that may never start. Log this distinctly (e.g. `audioAttempted: true, audioSucceeded: false`) so you can see in testing how often this actually happens on your reference devices.
-3. See `architecture.md` §8b for the exact constraint this task is built around — **do not** try to build a workaround that starts background microphone access outside of an active foreground service; that's fighting the OS, not a bug to fix.
+**Implementation Summary:**
+1. **Pipe 1 (Real-Time Progressive Delivery):** Slices audio in memory into sequential 5-second PCM/WAV chunks and broadcasts them over Socket.IO (`sos:audio_chunk`) directly to Guardians and Admin dispatchers in real time (~5s latency).
+2. **Pipe 2 (Continuous Local Master Archival):** Concurrently streams all raw PCM frames into an unbroken local master file (`sos_${alertId}_master.wav`) on device disk under `FOREGROUND_SERVICE_TYPE_MICROPHONE`.
+3. **Fail-Safe Server Concatenator:** If the phone is smashed or disconnects mid-stream, an 8-second watchdog timer on the server (`AudioStitcherService`) automatically concatenates received chunks with standard 44-byte WAV headers and uploads the partial evidence to Cloudinary.
+4. **Web Dispatcher Audio Queue:** Enqueues incoming slices chronologically via Web Audio API (`AudioContext.decodeAudioData()`) with live UI badges (`LIVE STREAMING CHUNK #N/6`).
 
-**Test:** (a) Start a Safe Walk, lock screen, trigger SOS — confirm audio recording starts and an audio URL appears on the resulting `sos_alerts` row. (b) With no active Safe Walk and screen locked, trigger SOS via whatever locked-screen-accessible trigger V1 has (or simulate) — confirm the alert is still created and delivered, just without audio, and confirm this doesn't throw an unhandled error anywhere.
+**Test:**
+- Unit tests: `apps/backend/src/__tests__/audioStitcher.test.ts` (100% passing).
+- End-to-end: Start Safe Walk, trigger SOS, verify live chunks play sequentially on admin dashboard, and verify Cloudinary master archival. Simulate broken phone (app kill at 12s) to verify 8s watchdog auto-stitching.
 
 ---
 

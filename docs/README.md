@@ -11,6 +11,7 @@ docs/
 
 ## Reading order
 1. `v1/README.md` → `v1/tasks.md` (V1 specifications & delivered features)
-2. `v1/architecture.md`, `v1/api.md`, `v1/database.md` (technical design)
-3. For post-submission roadmap: `v2/README.md` → `v2/roadmap.md`
-4. `v3/README.md` for faculty viva when asked about future research scope (`v3/`).
+2. `v1/architecture.md`, `v1/api.md`, `v1/database.md`, `v1/dual-pipe-audio-streaming.md` (technical design & protocols)
+3. `v1_manual_testing_checklist.md` (granular manual QA checklist across physical devices)
+4. For post-submission roadmap: `v2/README.md` → `v2/roadmap.md`
+5. `v3/README.md` for faculty viva when asked about future research scope (`v3/`).

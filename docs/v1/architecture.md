@@ -48,10 +48,10 @@ flowchart LR
 
 | Layer | Existing (unchanged) | New in V1 |
 |---|---|---|
-| Mobile | Screens, offline hazard queue, map, route preview, SOS countdown, decoy/fake-call | Socket.IO client, photo picker, heatmap layer, honest loading/error state on the Home safety-score card |
-| Backend | Auth, hazard CRUD, SOS trigger, corridor-check math in `journeyService` | Breadcrumb persistence, `journey:location` socket emission actually consumed, watchdog tick (deviation rule only), `confirm-safe` endpoint, public-report DTO stripped of identity |
+| Mobile | Screens, offline hazard queue, map, route preview, SOS countdown, decoy/fake-call | Socket.IO client, photo picker, heatmap layer, honest loading/error state on the Home safety-score card, **Dual-Pipe Native Audio Engine (`SafeWalkService.kt`)** streaming 5s PCM/WAV slices over Socket.IO while capturing continuous master file |
+| Backend | Auth, hazard CRUD, SOS trigger, corridor-check math in `journeyService` | Breadcrumb persistence, `journey:location` socket emission actually consumed, watchdog tick (deviation rule only), `confirm-safe` endpoint, public-report DTO stripped of identity, **`AudioStitcherService`** with 8s fail-safe watchdog, RIFF/WAVE concatenation, and live audio chunk relay |
 | Database | `users`, `reports`, `trusted_contacts`, `journeys`, `sos_alerts`, `notifications` | `journey_breadcrumbs`; `journeys.deviated_at`, `journeys.escalated_at`; `users.age`, `users.age_notice_ack`, `users.terms_accepted_at` |
-| Admin | Dashboard, SOS queue, hazard moderation | Real (not sample) Safe Walk radar; sample-data fallback removed |
+| Admin | Dashboard, SOS queue, hazard moderation | Real (not sample) Safe Walk radar; sample-data fallback removed; **Web Audio API chronological queue player** for live 5s audio slice playback |
 | Maps/geocoding | Leaflet + OSM/Esri tiles, Photon/MapTiler search | **Unchanged** — the OpenFreeMap migration and search tuning are V2 |
 | Routing | OSRM demo server, single geometry for all modes | **Unchanged** — real per-mode routing is V2 |
 
@@ -161,14 +161,16 @@ Android generally does not allow an app to **start** microphone access from the 
 ### 8c. ETA/distance notification (the "like Google Maps" ask, scoped to V1)
 This is the **simple version**, not turn-by-turn navigation (that needs real per-mode routing, which is `MAP-4`/`MAP-5` — a V2 item, and the same work item that's the reason all three route modes currently show identical car geometry, `mobile-app-features.md`). V1's version: the foreground service's notification updates periodically with straight-line-to-destination distance and a rough ETA computed from the existing calibrated speed constants (`docs/v2/map-routing-search.md` §4 documents these as "offline fallback only" for V2 — in V1 they're still the primary source, since real per-mode routing isn't built yet). No turn-by-turn instructions, no voice — just "320m to go, ~4 min," refreshed on each location update.
 
-### 8d. Sequence — how this changes the existing Safe Walk flow
+### 8d. Sequence — Safe Walk with Dual-Pipe SOS Audio Delivery
 
 ```mermaid
 sequenceDiagram
     participant W as Walker's phone
     participant FS as SafeWalkService (foreground)
     participant API as Backend API
-    participant WD as Watchdog tick
+    participant SIO as Socket.IO
+    participant AS as AudioStitcher / Watchdog
+    participant ADM as Admin / Guardians
 
     W->>FS: start (on POST /journeys/start success)
     FS->>FS: show persistent notification "Safe Walk active"
@@ -176,13 +178,30 @@ sequenceDiagram
         FS->>API: PATCH /journeys/:id/location
         FS->>FS: update notification (distance/ETA)
     end
-    alt SOS triggered while FS is running
-        W->>FS: trigger SOS
-        FS->>FS: start audio recording (foreground-service mic access already held)
-        FS->>API: POST /sos (with audio once recorded)
-    else SOS triggered with no active Safe Walk
-        W->>API: POST /sos
-        API-->>W: alert created, no audio (recording could not start from background)
+    alt SOS triggered (Immediate Alert + Parallel Dual-Pipe Audio)
+        W->>API: POST /api/sos (lat, lng, battery — immediate 0s delivery)
+        API->>SIO: broadcast sos:alert (Alert card pops up immediately)
+        W->>FS: startEmergencyAudio(alertId)
+        par Pipe 1: Progressive Live Streaming
+            loop every 5 seconds (up to 30s)
+                FS->>SIO: emit sos:audio_chunk (5s slice #1..6)
+                SIO->>ADM: emit sos:live_audio_chunk
+                ADM->>ADM: Web Audio API queue plays chunk chronologically
+                SIO->>AS: buffer chunk in temporary staging
+            end
+        and Pipe 2: Continuous Local Master Archival
+            FS->>FS: append raw 16kHz PCM to unbroken master WAV file
+        end
+        alt Happy Path: Normal 30s Completion
+            FS->>API: PATCH /api/sos/:id/audio (upload unbroken master WAV)
+            API->>AS: handleMasterUploaded(alertId) → disarm watchdog & delete staging
+            API->>SIO: broadcast sos:audio (final audio evidence link)
+        else Failure Path: Phone Smashed / Interrupted at e.g. 12s
+            Note over AS: Watchdog timeout (8s without chunk arrival)
+            AS->>AS: stitch received chunks (0-10s) with 44-byte WAV header
+            AS->>API: upload interrupted_stitched.wav to Cloudinary
+            API->>SIO: broadcast sos:audio (partial stitched evidence)
+        end
     end
     W->>FS: complete/cancel walk
     FS->>FS: stop service, remove notification

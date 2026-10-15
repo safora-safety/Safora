@@ -15,21 +15,98 @@ export interface InboundSosAlert {
   timestamp: string;
 }
 
+export interface LiveAudioChunk {
+  alertId: string | number;
+  seq: number;
+  totalChunksExpected?: number;
+  durationSec?: number;
+  mimeType?: string;
+  data: string;
+  isLast: boolean;
+  timestamp: string;
+}
+
 interface SocketContextType {
   socket: Socket | null;
   isConnected: boolean;
   activeEmergency: InboundSosAlert | null;
+  latestLiveAudioChunk: LiveAudioChunk | null;
   dismissEmergency: () => void;
   broadcastTestSos: (lat: number, lng: number) => Promise<void>;
+  joinAlertRoom: (alertId: string | number) => void;
+  leaveAlertRoom: (alertId: string | number) => void;
 }
 
 const SocketContext = createContext<SocketContextType | undefined>(undefined);
+
+// In-memory ordered audio queue for continuous progressive playback
+let webAudioContext: AudioContext | null = null;
+const audioQueue: { seq: number; buffer: AudioBuffer }[] = [];
+let isPlayingFromQueue = false;
+
+function getWebAudioContext(): AudioContext {
+  if (!webAudioContext || webAudioContext.state === 'closed') {
+    webAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+  }
+  if (webAudioContext.state === 'suspended') {
+    webAudioContext.resume().catch(() => {});
+  }
+  return webAudioContext;
+}
+
+function processAudioQueue() {
+  if (audioQueue.length === 0) {
+    isPlayingFromQueue = false;
+    return;
+  }
+
+  isPlayingFromQueue = true;
+  const nextItem = audioQueue.shift()!;
+  try {
+    const ctx = getWebAudioContext();
+    const source = ctx.createBufferSource();
+    source.buffer = nextItem.buffer;
+    source.connect(ctx.destination);
+    source.onended = () => {
+      processAudioQueue();
+    };
+    source.start();
+  } catch (err) {
+    console.warn('[SocketContext] Error playing queued audio chunk:', err);
+    processAudioQueue();
+  }
+}
+
+async function enqueueAndPlayChunk(chunk: LiveAudioChunk) {
+  try {
+    const soundEnabled = localStorage.getItem('safora_sound_alerts') !== 'false';
+    if (!soundEnabled || !chunk.data) return;
+
+    const ctx = getWebAudioContext();
+    const binary = window.atob(chunk.data);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+
+    const decoded = await ctx.decodeAudioData(bytes.buffer.slice(0));
+    audioQueue.push({ seq: chunk.seq, buffer: decoded });
+    audioQueue.sort((a, b) => a.seq - b.seq);
+
+    if (!isPlayingFromQueue) {
+      processAudioQueue();
+    }
+  } catch (err) {
+    console.warn('[SocketContext] Audio decoding failed for live chunk:', err);
+  }
+}
 
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { token } = useAuth();
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [activeEmergency, setActiveEmergency] = useState<InboundSosAlert | null>(null);
+  const [latestLiveAudioChunk, setLatestLiveAudioChunk] = useState<LiveAudioChunk | null>(null);
 
   useEffect(() => {
     const s = socketService.connect(token);
@@ -53,7 +130,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const soundEnabled = localStorage.getItem('safora_sound_alerts') !== 'false';
       if (soundEnabled) {
         try {
-          const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+          const audioCtx = getWebAudioContext();
           const osc = audioCtx.createOscillator();
           const gain = audioCtx.createGain();
           osc.type = 'sawtooth';
@@ -71,7 +148,16 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     });
 
-    // Listen for audio evidence attachment without triggering siren/alarm
+    // Listen for progressive 5-second live audio slices streamed from device
+    s.on('sos:live_audio_chunk', (chunk: LiveAudioChunk) => {
+      console.log(
+        `[Socket] LIVE AUDIO CHUNK #${chunk.seq} received for alert ${chunk.alertId}`,
+      );
+      setLatestLiveAudioChunk(chunk);
+      enqueueAndPlayChunk(chunk);
+    });
+
+    // Listen for final stitched / master audio evidence attachment
     s.on('sos:audio', (data: { alertId: string | number; audioUrl: string }) => {
       console.log('[Socket] AUDIO ATTACHED TO SOS ALERT:', data);
       setActiveEmergency(prev => {
@@ -86,6 +172,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       s.off('connect', onConnect);
       s.off('disconnect', onDisconnect);
       s.off('sos:alert');
+      s.off('sos:live_audio_chunk');
       s.off('sos:audio');
       socketService.disconnect();
     };
@@ -93,6 +180,18 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const dismissEmergency = () => {
     setActiveEmergency(null);
+  };
+
+  const joinAlertRoom = (alertId: string | number) => {
+    if (socket) {
+      socket.emit('sos:join', { alertId });
+    }
+  };
+
+  const leaveAlertRoom = (alertId: string | number) => {
+    if (socket) {
+      socket.emit('sos:leave', { alertId });
+    }
   };
 
   const broadcastTestSos = async (lat: number, lng: number) => {
@@ -110,8 +209,11 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         socket,
         isConnected,
         activeEmergency,
+        latestLiveAudioChunk,
         dismissEmergency,
         broadcastTestSos,
+        joinAlertRoom,
+        leaveAlertRoom,
       }}
     >
       {children}
@@ -126,3 +228,4 @@ export const useSocket = (): SocketContextType => {
   }
   return context;
 };
+

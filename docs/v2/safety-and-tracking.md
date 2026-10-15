@@ -454,12 +454,14 @@ Running without the React Native bridge matters: the JS engine may not be alive 
 - **Battery managers:** Xiaomi/MIUI needs Autostart and no battery restrictions; Oppo/Vivo/OnePlus/Huawei clean up aggressively; settings can reset after system updates [R17]. Onboarding checklist (TRG-2): request battery-optimisation exemption, open the OEM autostart screen, link to the device-specific guide. The **server watchdog remains the safety net** (§4).
 
 ### Locked-screen audio evidence (TRG-6, spike 🔬)
+> **V1 Proven Implementation:** Approach A was built, tested, and verified in V1 via `SafeWalkService.kt` under `FOREGROUND_SERVICE_TYPE_MICROPHONE` with the Dual-Pipe Audio Streaming Engine (5s progressive Socket.IO slices + continuous local master file + 8s server watchdog). In V2, this engine is already operational for active Safe Walks; V2 scope only needs to extend it to cold hardware triggers (volume pattern / Quick Settings tile) when no walk is currently active.
+
 A microphone foreground service generally cannot be started from the background [R12]. Test three approaches and record results per device:
-| Approach | Idea | Expected risk |
-|---|---|---|
-| A | Guard service started while the app was visible keeps its while-in-use access; on trigger it starts the recorder | May work on some Android versions; kill by OEM |
-| B | Trigger launches a transparent activity shown over the lock screen; the recorder starts from that visible activity | Needs full-screen-intent permission on Android 14+ |
-| C | Send SOS without audio immediately; record later when the screen wakes | Always works; loses early audio |
+| Approach | Idea | Expected risk | Status |
+|---|---|---|---|
+| A | Guard/SafeWalk service started while the app was visible keeps its while-in-use access; on trigger it starts the dual-sink recorder | Proven in V1 | ✅ Implemented in V1 (`SafeWalkService.kt`) |
+| B | Trigger launches a transparent activity shown over the lock screen; the recorder starts from that visible activity | Needs full-screen-intent permission on Android 14+ | 🗓 V2 Standalone Triggers |
+| C | Send SOS without audio immediately; record later when the screen wakes | Always works; loses early audio | Fallback strategy |
 **Decision rule:** ship whichever of A/B works on ≥ 80 % of the reference devices; otherwise ship C and state the limit in the UI. SOS delivery never waits for audio.
 
 ### Acceptance criteria

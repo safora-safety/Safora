@@ -14,9 +14,16 @@ if (!JWT_SECRET) {
 }
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 
-const GOOGLE_CLIENT_ID =
+const GOOGLE_CLIENT_IDS = (
+  process.env.GOOGLE_CLIENT_IDS ||
   process.env.GOOGLE_CLIENT_ID ||
-  "586932371847-8kr8epdn0u64jdma6e6s8is1hdodv5pt.apps.googleusercontent.com";
+  "586932371847-8kr8epdn0u64jdma6e6s8is1hdodv5pt.apps.googleusercontent.com"
+)
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+const GOOGLE_CLIENT_ID = GOOGLE_CLIENT_IDS[0];
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 export class AuthService {
@@ -40,7 +47,8 @@ export class AuthService {
     try {
       const ticket = await googleClient.verifyIdToken({
         idToken: idToken.trim(),
-        audience: GOOGLE_CLIENT_ID,
+        audience:
+          GOOGLE_CLIENT_IDS.length > 1 ? GOOGLE_CLIENT_IDS : GOOGLE_CLIENT_ID,
       });
       const googlePayload = ticket.getPayload();
       if (!googlePayload) {
@@ -68,6 +76,12 @@ export class AuthService {
             data.error_description || "Invalid tokeninfo response",
           );
         }
+
+        // Audience validation: Ensure token was issued specifically for Safora
+        if (!data.aud || !GOOGLE_CLIENT_IDS.includes(data.aud)) {
+          throw new Error("Token was not issued for this application");
+        }
+
         payload = {
           sub: data.sub,
           email: data.email,
@@ -76,8 +90,13 @@ export class AuthService {
           email_verified:
             data.email_verified === "true" || data.email_verified === true,
         };
-      } catch {
-        const msg = err instanceof Error ? err.message : String(err);
+      } catch (fallbackErr: unknown) {
+        const msg =
+          fallbackErr instanceof Error
+            ? fallbackErr.message
+            : err instanceof Error
+              ? err.message
+              : String(err);
         throw new AppError(`Google authentication failed: ${msg}`, 401);
       }
     }
@@ -87,6 +106,11 @@ export class AuthService {
         "Google account does not provide an email address",
         400,
       );
+    }
+
+    // Require verified email: Prevent account takeover or linking unverified accounts
+    if (payload.email_verified !== true) {
+      throw new AppError("Google account email is not verified", 401);
     }
 
     const email = payload.email.toLowerCase().trim();

@@ -2,6 +2,8 @@ import { Server, Socket } from "socket.io";
 import jwt from "jsonwebtoken";
 import { UserRepository } from "../repositories/userRepository";
 import { JourneyRepository } from "../repositories/journeyRepository";
+import { SosRepository } from "../repositories/sosRepository";
+import { AudioStitcherService } from "../services/audioStitcherService";
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -72,6 +74,48 @@ export function broadcastSosAudio(data: {
     console.log(
       `[Socket.IO] Verified SOS audio attachment broadcast for alert ${data.alertId}`,
     );
+  }
+}
+
+export function broadcastSosLiveAudioChunk(data: {
+  alertId: string | number;
+  seq: number;
+  totalChunksExpected?: number;
+  durationSec?: number;
+  mimeType?: string;
+  data: string;
+  isLast: boolean;
+  timestamp?: string;
+  guardianUserIds?: (string | number)[];
+}): void {
+  if (socketServerInstance) {
+    const payload = {
+      alertId: data.alertId,
+      seq: data.seq,
+      totalChunksExpected: data.totalChunksExpected || 6,
+      durationSec: data.durationSec || 5.0,
+      mimeType: data.mimeType || "audio/wav",
+      data: data.data,
+      isLast: Boolean(data.isLast),
+      timestamp: data.timestamp || new Date().toISOString(),
+    };
+
+    // 1. Alert-scoped room (for listeners joined via sos:join)
+    socketServerInstance
+      .to(`sos:alert:${data.alertId}`)
+      .emit("sos:live_audio_chunk", payload);
+
+    // 2. Staff operations command room
+    socketServerInstance.to("staff").emit("sos:live_audio_chunk", payload);
+
+    // 3. Registered guardian user personal channels
+    if (data.guardianUserIds && data.guardianUserIds.length > 0) {
+      for (const gid of data.guardianUserIds) {
+        socketServerInstance
+          .to(`user:${gid}`)
+          .emit("sos:live_audio_chunk", payload);
+      }
+    }
   }
 }
 
@@ -292,6 +336,117 @@ export function setupJourneySockets(io: Server): void {
           socket.emit("error", {
             message: "Failed to broadcast journey location",
           });
+        }
+      },
+    );
+
+    // Join a scoped room for an active SOS alert (Owner, Staff, or verified Guardian only)
+    socket.on("sos:join", async (data: { alertId: string | number }) => {
+      if (!data?.alertId) return;
+
+      try {
+        const alert = await SosRepository.findById(data.alertId);
+        if (!alert) {
+          socket.emit("error", { message: "SOS alert not found" });
+          return;
+        }
+
+        const isOwner = String(alert.user_id) === String(user.id);
+        const isStaff = user.role === "admin" || user.role === "moderator";
+        const isGuardian =
+          !isOwner &&
+          !isStaff &&
+          (await SosRepository.isUserGuardian(alert.user_id, user.id));
+
+        if (!isOwner && !isStaff && !isGuardian) {
+          socket.emit("error", {
+            message: "Forbidden: Not authorized to join this SOS channel",
+          });
+          return;
+        }
+
+        const room = `sos:alert:${data.alertId}`;
+        socket.join(room);
+        console.log(
+          `[Socket.IO] Client ${socket.id} (${user.email}) joined SOS room ${room}`,
+        );
+      } catch {
+        socket.emit("error", { message: "Failed to join SOS room" });
+      }
+    });
+
+    socket.on("sos:leave", (data: { alertId: string | number }) => {
+      if (!data?.alertId) return;
+      socket.leave(`sos:alert:${data.alertId}`);
+    });
+
+    // Mobile client streams 5s audio chunk (Pipe 1)
+    socket.on(
+      "sos:audio_chunk",
+      async (data: {
+        alertId: string | number;
+        seq: number;
+        totalChunksExpected?: number;
+        durationSec?: number;
+        mimeType?: string;
+        data: string;
+        isLast: boolean;
+        sampleRate?: number;
+      }) => {
+        if (!data?.alertId || !data?.data || typeof data.seq !== "number") {
+          return;
+        }
+
+        try {
+          const alert = await SosRepository.findById(data.alertId);
+          if (!alert || String(alert.user_id) !== String(user.id)) {
+            socket.emit("error", {
+              message: "Forbidden: Cannot stream audio for unowned SOS alert",
+            });
+            return;
+          }
+
+          // Fetch guardians to broadcast live slice to their personal rooms
+          const guardianUserIds = await SosRepository.findGuardianUserIds(
+            alert.user_id,
+          );
+
+          // 1. Instantly forward live audio slice to alert room, staff, and guardians
+          broadcastSosLiveAudioChunk({
+            alertId: data.alertId,
+            seq: data.seq,
+            totalChunksExpected: data.totalChunksExpected,
+            durationSec: data.durationSec,
+            mimeType: data.mimeType,
+            data: data.data,
+            isLast: data.isLast,
+            guardianUserIds,
+          });
+
+          // 2. Acknowledge back to emitting mobile client
+          socket.emit("sos:audio_chunk_ack", {
+            alertId: data.alertId,
+            seq: data.seq,
+            receivedAt: new Date().toISOString(),
+          });
+
+          // 3. Disk staging & server watchdog management (auto-stitch fallback if client dies)
+          AudioStitcherService.handleIncomingChunk({
+            alertId: data.alertId,
+            userId: user.id,
+            seq: data.seq,
+            dataBase64: data.data,
+            isLast: Boolean(data.isLast),
+            sampleRate: data.sampleRate,
+          }).catch((err) => {
+            console.warn(
+              `[Socket.IO] Error staging audio chunk for alert ${data.alertId}:`,
+              err,
+            );
+          });
+        } catch (err) {
+          console.error(`[Socket.IO] Error processing sos:audio_chunk:`, err);
+          socket.emit("error", { message: "Failed to process audio chunk" });
         }
       },
     );

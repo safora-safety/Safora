@@ -81,11 +81,11 @@ This project follows a staged plan (`docs/v1/` → `docs/v2/` → `docs/v3/`). *
 | Safety-score heatmap on the map screen | ✅ Complete | DBSCAN clusters with dynamic radius and color spectrum (Task 8) |
 | Background tracking with screen locked & lock-screen SOS audio | ✅ Complete | Kotlin Foreground Service with JWT bearer token bridge (Tasks 13–15) |
 | Admin Command Center — 100% interactive controls | ✅ Complete | Clickable StatCards, live API ping latency, batch moderation, service probes |
-| Admin "live" Safe Walk radar | ✅ Complete | Sample-data fallback removed; real breadcrumb corridor telemetry only (SEC-9) |
 | One-tap Dual-Mode SOS & Audible Panic Siren | ✅ Complete | High-decibel audible alarm vs stealth covert audio recording, standalone panic card |
+| Dual-Pipe SOS Audio & Fail-Safe Server Watchdog | ✅ Complete | 5s progressive PCM slices over Socket.IO, continuous local master file, 8s server fail-safe concatenator (Task 14, 72 unit tests) |
 | Mobile User Password Update | ✅ Complete | In-app modal for credentials change with validation and feedback |
 
-Full implementation details, test suites, and CI matrix are documented in **[`docs/v1/tasks.md`](docs/v1/tasks.md)** and **[`docs/v1/mobile-app-features.md`](docs/v1/mobile-app-features.md)**.
+Full implementation details, test suites, and CI matrix are documented in **[`docs/v1/tasks.md`](docs/v1/tasks.md)**, **[`docs/v1/dual-pipe-audio-streaming.md`](docs/v1/dual-pipe-audio-streaming.md)**, and **[`docs/v1/mobile-app-features.md`](docs/v1/mobile-app-features.md)**.
 
 ---
 
@@ -95,7 +95,7 @@ Documentation is organised into three stages, plus an archive of earlier drafts:
 
 | Folder | Contents |
 |---|---|
-| 🚀 **[`docs/v1/`](docs/v1/)** | **This submission.** Architecture, API, database schema, safety algorithms, mobile features, admin panel, setup, task list, and testing/submission checklist for the current build. |
+| 🚀 **[`docs/v1/`](docs/v1/)** | **This submission.** Architecture, API, database schema, safety algorithms, mobile features, dual-pipe audio streaming, admin panel, setup, task list, and testing/submission checklist for the current build. |
 | 🗺️ **[`docs/v2/`](docs/v2/)** | Product roadmap beyond the submission: accounts hardening, real per-mode routing & voice guidance, no-unlock SOS triggers, staged chat, Hindi/Uttarakhand localisation, weather & earthquake data, security/privacy/DPDP compliance. |
 | 🔭 **[`docs/v3/`](docs/v3/)** | Research notes on the synopsis's future-scope items (AI safe-route scoring, offline mesh SOS messaging, AI hazard image detection) — honestly scoped, not scheduled. |
 | 🗄️ **[`docs/archive/`](docs/archive/)** | Earlier documentation drafts, kept for reference during the transition to the v1/v2/v3 structure. |

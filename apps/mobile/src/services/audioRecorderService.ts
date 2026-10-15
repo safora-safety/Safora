@@ -3,18 +3,23 @@ import {
   Platform,
   AppState,
   AppStateStatus,
+  DeviceEventEmitter,
+  NativeModules,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Sound } from 'react-native-nitro-sound';
 import { SosService } from './sosService';
+import { emitSosAudioChunk, joinSosAlertRoom } from './socketService';
 
 let isRecording = false;
+let isNativeAudioActive = false;
 let currentPipelineAlertId: string | number | null = null;
 let pipelineIntervalTimer: any = null;
 let appStateSubscription: any = null;
-let chunkIndex = 0;
+let chunkSubscription: any = null;
+let masterCompletionSubscription: any = null;
+
 const TOTAL_DURATION_SEC = 30;
-const CHUNK_INTERVAL_SEC = 5;
 const PENDING_SOS_AUDIO_KEY = '@safora_pending_sos_audio';
 const MIC_PERMISSION_PROMPTED_KEY = '@safora_mic_permission_prompted';
 
@@ -93,10 +98,9 @@ export class AudioRecorderService {
   }
 
   /**
-   * Continuous 30-Second Ambient Audio Recording.
-   * Records continuously for 30 full seconds and uploads to Cloudinary upon completion.
-   * If the app is interrupted or backgrounded before 30s, the AppState listener flushes
-   * and uploads whatever audio was recorded up to that moment.
+   * Dual-Pipe Emergency Audio Recording:
+   * Pipe 1: Slices 5-second PCM/WAV chunks and emits them over Socket.IO (sos:audio_chunk).
+   * Pipe 2: Maintains continuous 30-second unbroken master WAV recording for Cloudinary archival.
    */
   static async startRecording(
     alertId?: string | number,
@@ -115,6 +119,38 @@ export class AudioRecorderService {
       await this.stopSilent();
 
       currentPipelineAlertId = alertId || null;
+      if (alertId) {
+        joinSosAlertRoom(alertId);
+      }
+
+      // 1. Listen for native 5s audio slice events (Pipe 1)
+      chunkSubscription = DeviceEventEmitter.addListener(
+        'onSosAudioChunk',
+        (chunk: any) => {
+          if (chunk && chunk.data) {
+            console.log(
+              `[AudioRecorder] Emitting live audio slice #${chunk.seq} over Socket.IO`,
+            );
+            emitSosAudioChunk(chunk);
+          }
+        },
+      );
+
+      // 2. Listen for native master 30s completion (Pipe 2)
+      masterCompletionSubscription = DeviceEventEmitter.addListener(
+        'onSosAudioMasterCompleted',
+        async ({ alertId: finishedAlertId, filePath, success }: any) => {
+          console.log(
+            `[AudioRecorder] Native master audio completed (${filePath}, success=${success})`,
+          );
+          if (success && filePath && finishedAlertId) {
+            await AudioRecorderService.uploadAndAttachMaster(
+              finishedAlertId,
+              filePath,
+            );
+          }
+        },
+      );
 
       // Register AppState listener to flush recorded audio if phone or app is interrupted
       if (!appStateSubscription) {
@@ -134,19 +170,48 @@ export class AudioRecorderService {
         );
       }
 
-      // Start continuous audio recording
-      await Sound.startRecorder();
-      isRecording = true;
-
-      // Timer to stop and upload full recording after totalSeconds
-      pipelineIntervalTimer = setTimeout(async () => {
-        if (isRecording) {
-          console.log(
-            `[AudioRecorder] Completed full ${totalSeconds}s continuous recording`,
+      // 3. Start native foreground service dual-sink audio recorder
+      if (
+        Platform.OS === 'android' &&
+        NativeModules.SafeWalkService?.startEmergencyAudio
+      ) {
+        try {
+          await NativeModules.SafeWalkService.startEmergencyAudio(
+            String(alertId || 'sos_emergency'),
           );
-          await this.stopAndUpload(currentPipelineAlertId);
+          isNativeAudioActive = true;
+          isRecording = true;
+          console.log(
+            `[AudioRecorder] Dual-sink native audio started for alert ${alertId}`,
+          );
+        } catch (nativeErr) {
+          console.warn(
+            '[AudioRecorder] Native recorder error, falling back to NitroSound:',
+            nativeErr,
+          );
+          await Sound.startRecorder();
+          isNativeAudioActive = false;
+          isRecording = true;
         }
-      }, totalSeconds * 1000);
+      } else {
+        // Fallback for non-Android / emulator
+        await Sound.startRecorder();
+        isNativeAudioActive = false;
+        isRecording = true;
+      }
+
+      // Safety fallback timer to stop recording if not stopped by native completion
+      pipelineIntervalTimer = setTimeout(
+        async () => {
+          if (isRecording) {
+            console.log(
+              `[AudioRecorder] Completed full ${totalSeconds}s continuous recording`,
+            );
+            await this.stopAndUpload(currentPipelineAlertId);
+          }
+        },
+        (totalSeconds + 2) * 1000,
+      );
 
       return true;
     } catch (err) {
@@ -168,45 +233,34 @@ export class AudioRecorderService {
   }
 
   /**
-   * Upload an individual audio slice and link to SOS alert
+   * Upload the 30-second master audio recording to Cloudinary and link to alert
    */
-  private static async uploadAndAttachChunk(
+  private static async uploadAndAttachMaster(
     alertId: string | number,
-    uri: string,
-    idx: number,
+    filePath: string,
   ): Promise<string | null> {
     try {
-      console.log(`[AudioRecorder] Uploading 5s audio chunk #${idx}...`);
+      console.log(
+        `[AudioRecorder] Uploading complete 30s master evidence: ${filePath}`,
+      );
+      const uri = filePath.startsWith('file://')
+        ? filePath
+        : `file://${filePath}`;
       const { audioUrl } = await SosService.uploadAudio(uri);
       if (audioUrl && alertId) {
         await SosService.attachAudioToAlert(alertId, audioUrl);
         console.log(
-          `[AudioRecorder] Chunk #${idx} attached successfully:`,
+          `[AudioRecorder] Master audio evidence successfully attached to alert ${alertId}:`,
           audioUrl,
         );
       }
       return audioUrl;
     } catch (err) {
-      console.warn(`[AudioRecorder] Failed to upload chunk #${idx}:`, err);
+      console.warn(
+        '[AudioRecorder] Failed to upload master audio evidence:',
+        err,
+      );
       return null;
-    }
-  }
-
-  /**
-   * Flush active chunk on app interruption or backgrounding
-   */
-  private static async flushCurrentChunk(
-    alertId?: string | number | null,
-  ): Promise<void> {
-    if (!isRecording) return;
-    try {
-      isRecording = false;
-      const uri = await Sound.stopRecorder();
-      if (uri && alertId) {
-        await this.uploadAndAttachChunk(alertId, uri, 999);
-      }
-    } catch (err) {
-      console.warn('[AudioRecorder] Failed to flush chunk:', err);
     }
   }
 
@@ -217,17 +271,32 @@ export class AudioRecorderService {
     alertId?: string | number | null,
   ): Promise<string | null> {
     const targetAlert = alertId || currentPipelineAlertId;
-    this.cleanupPipeline();
 
-    if (!isRecording) return null;
+    if (!isRecording) {
+      this.cleanupPipeline();
+      return null;
+    }
 
     try {
       isRecording = false;
+
+      if (
+        isNativeAudioActive &&
+        NativeModules.SafeWalkService?.stopEmergencyAudio
+      ) {
+        await NativeModules.SafeWalkService.stopEmergencyAudio().catch(
+          () => {},
+        );
+        this.cleanupPipeline();
+        return null;
+      }
+
       const uri = await Sound.stopRecorder();
+      this.cleanupPipeline();
       if (!uri) return null;
 
       if (targetAlert) {
-        return await this.uploadAndAttachChunk(targetAlert, uri, 100);
+        return await this.uploadAndAttachMaster(targetAlert, uri);
       }
       return null;
     } catch (err) {
@@ -235,6 +304,7 @@ export class AudioRecorderService {
         '[AudioRecorder] Failed to stop & upload audio evidence:',
         err,
       );
+      this.cleanupPipeline();
       return null;
     }
   }
@@ -243,18 +313,32 @@ export class AudioRecorderService {
    * Stop recording silently without uploading (for aborts/cancellations)
    */
   static async stopSilent(): Promise<void> {
-    this.cleanupPipeline();
-    if (!isRecording) return;
+    if (!isRecording) {
+      this.cleanupPipeline();
+      return;
+    }
+
     try {
       isRecording = false;
-      await Sound.stopRecorder();
+      if (
+        isNativeAudioActive &&
+        NativeModules.SafeWalkService?.stopEmergencyAudio
+      ) {
+        await NativeModules.SafeWalkService.stopEmergencyAudio().catch(
+          () => {},
+        );
+      } else {
+        await Sound.stopRecorder().catch(() => {});
+      }
     } catch {
       // Ignore
+    } finally {
+      this.cleanupPipeline();
     }
   }
 
   /**
-   * Clean up timers, state, and storage references
+   * Clean up timers, state, subscriptions, and storage references
    */
   private static cleanupPipeline(): void {
     if (pipelineIntervalTimer) {
@@ -265,6 +349,15 @@ export class AudioRecorderService {
       appStateSubscription.remove();
       appStateSubscription = null;
     }
+    if (chunkSubscription) {
+      chunkSubscription.remove();
+      chunkSubscription = null;
+    }
+    if (masterCompletionSubscription) {
+      masterCompletionSubscription.remove();
+      masterCompletionSubscription = null;
+    }
+    isNativeAudioActive = false;
     currentPipelineAlertId = null;
     AsyncStorage.removeItem(PENDING_SOS_AUDIO_KEY).catch(() => {});
   }

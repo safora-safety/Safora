@@ -94,6 +94,48 @@ export function onSosAlert(cb: (payload: any) => void): () => void {
   };
 }
 
+export function emitSosAudioChunk(data: {
+  alertId: string | number;
+  seq: number;
+  totalChunksExpected?: number;
+  durationSec?: number;
+  mimeType?: string;
+  data: string;
+  isLast: boolean;
+}): void {
+  if (socket?.connected) {
+    socket.emit('sos:audio_chunk', data);
+  }
+}
+
+export function onSosAudioChunkAck(cb: (payload: any) => void): () => void {
+  if (!socket) return () => {};
+  socket.on('sos:audio_chunk_ack', cb);
+  return () => {
+    socket?.off('sos:audio_chunk_ack', cb);
+  };
+}
+
+export function joinSosAlertRoom(alertId: string | number): void {
+  if (socket) {
+    socket.emit('sos:join', { alertId });
+  }
+}
+
+export function leaveSosAlertRoom(alertId: string | number): void {
+  if (socket) {
+    socket.emit('sos:leave', { alertId });
+  }
+}
+
+export function onSosLiveAudioChunk(cb: (payload: any) => void): () => void {
+  if (!socket) return () => {};
+  socket.on('sos:live_audio_chunk', cb);
+  return () => {
+    socket?.off('sos:live_audio_chunk', cb);
+  };
+}
+
 export function disconnectSocket(): void {
   activeRooms.clear();
   if (socket) {

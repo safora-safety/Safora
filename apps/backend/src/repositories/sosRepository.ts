@@ -360,4 +360,51 @@ export class SosRepository {
     );
     return result.rows[0] || null;
   }
+
+  static async findById(alertId: string | number): Promise<
+    | (SosAlertRow & {
+        user_name?: string;
+        user_phone?: string;
+        user_email?: string;
+      })
+    | null
+  > {
+    const result = await db.query(
+      `SELECT 
+         s.*,
+         u.name AS user_name,
+         u.phone AS user_phone,
+         u.email AS user_email
+       FROM sos_alerts s
+       LEFT JOIN users u ON s.user_id = u.id
+       WHERE s.id = $1;`,
+      [alertId],
+    );
+    return result.rows[0] || null;
+  }
+
+  static async findGuardianUserIds(
+    userId: string | number,
+  ): Promise<(string | number)[]> {
+    const contacts = await this.findContactsByUserId(userId);
+    const normalizedPhones = contacts
+      .map((c) => c.phone?.replace(/[^0-9]/g, "").slice(-10))
+      .filter((p): p is string => Boolean(p && p.length === 10));
+
+    if (normalizedPhones.length === 0) return [];
+
+    const result = await db.query(
+      `SELECT id FROM users WHERE RIGHT(REGEXP_REPLACE(phone, '[^0-9]', '', 'g'), 10) = ANY($1);`,
+      [normalizedPhones],
+    );
+    return result.rows.map((r: any) => r.id);
+  }
+
+  static async isUserGuardian(
+    ownerId: string | number,
+    candidateUserId: string | number,
+  ): Promise<boolean> {
+    const guardianIds = await this.findGuardianUserIds(ownerId);
+    return guardianIds.map(String).includes(String(candidateUserId));
+  }
 }

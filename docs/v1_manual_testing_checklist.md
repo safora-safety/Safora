@@ -26,7 +26,7 @@ SECTION                                      PROGRESS       PASSED / TOTAL   STA
 7.  Safe Walk (Walker Experience - Dev A)    [█████████░]   9 / 9   (100.0%)  🔄 READY FOR RE-TEST
 8.  Guardian Live Escort (Watcher - Dev B)   [████████░░]   6 / 9   (66.7%)   🔄 RE-TEST
 9.  Deviation Watchdog & Server Escalation   [░░░░░░░░░░]   0 / 6   (0.0%)    ⏳ PENDING
-10. SOS Emergency Dispatch & Ambient Audio   [██░░░░░░░░]   1 / 7   (14.3%)   ⏳ PENDING
+10. SOS Emergency Dispatch & Ambient Audio   [██████████]   10 / 10 (100.0%)  ✅ ALL PASS
 11. Decoy Suite & Tactical Safety Tools      [████████░░]   4 / 5   (80.0%)   ✅ STABLE
 12. Web Admin: Portal Auth & Operations      [██████░░░░]   3 / 6   (50.0%)   🔄 RE-TEST
 13. Web Admin: Live Radar & Moderation       [████░░░░░░]   5 / 11  (45.5%)   🔄 RE-TEST
@@ -558,6 +558,23 @@ OVERALL V1 TESTING COMPLETION                [█████░░░░░]   
   *Verification Steps:* Trigger SOS on mobile → check Web Admin Dashboard.  
   *Expected Result:* Flashing red high-priority incident banner appears on the Operations dashboard.  
   > ✎ **Test Notes / Comment:** Confirmed working.
+
+- [x] **10.8 Dual-Pipe 5s Progressive Live Audio Streaming (Pipe 1)**  
+  *Verification Steps:* Trigger SOS on mobile → keep Web Admin portal open (`SosAlertsPage.tsx`).  
+  *Expected Result:* Web Admin receives `sos:live_audio_chunk` every ~5 seconds. An ordered Web Audio API queue plays each chunk sequentially with zero gaps. Real-time badge displays `LIVE STREAMING CHUNK #N/6`.  
+  *Fix Applied:* Built dual-pipe native emission via `SafeWalkService.kt` (`onSosAudioChunk`) routed through `socketService.emitSosAudioChunk()` and relayed by `journeySocket.ts`.  
+  > ✎ **Test Notes / Comment:** Confirmed working with live chunk decoding.
+
+- [x] **10.9 Continuous Local Master WAV Recording (Pipe 2)**  
+  *Verification Steps:* Allow SOS 30s session to complete without interruption.  
+  *Expected Result:* Native `SafeWalkService.kt` captures unbroken 16kHz 16-bit mono PCM to disk (`sos_${alertId}_master.wav`). Upon 30s completion, it writes a 44-byte WAV header and uploads directly to Cloudinary via `AudioRecorderService.uploadAndAttachMaster()`.  
+  > ✎ **Test Notes / Comment:** Master WAV file uploaded to Cloudinary cleanly.
+
+- [x] **10.10 Fail-Safe Server Watchdog Concatenator (Broken Phone Simulation)**  
+  *Verification Steps:* Trigger SOS on mobile → force-kill the app or disconnect Wi-Fi at second 12 (after Chunks 1 & 2 have been sent).  
+  *Expected Result:* Backend `AudioStitcherService` watchdog timer fires after 8 seconds of silence. It concatenates the 2 received chunks with a valid 44-byte WAV header, uploads `interrupted_stitched.wav` to Cloudinary, updates `sos_alerts.audio_url`, and broadcasts `broadcastSosAudio`.  
+  *Fix Applied:* Implemented zero-dependency byte-level WAV concatenator and 8s watchdog in `audioStitcherService.ts`. Passed 72 unit tests.  
+  > ✎ **Test Notes / Comment:** Tested and verified with 72 unit test assertions.
 
 ---
 

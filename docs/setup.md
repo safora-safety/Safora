@@ -34,11 +34,17 @@ DATABASE_URL_DIRECT=postgresql://user:password@ep-sample.region.neon.tech/safora
 # Security & JWT (use a long random phrase in production)
 JWT_SECRET=your_secure_random_jwt_secret_phrase
 
-# Push Notifications (Optional for local dev)
+# Watchdog Tick Endpoint Auth (V1)
+INTERNAL_TICK_SECRET=your_long_random_internal_secret
+
+# Push Notifications (Firebase Admin SDK)
 FCM_SERVER_KEY=sample_fcm_key
 
-# Media Storage (Optional for photo attachments)
+# Media Storage (Cloudinary - Photos & Master SOS Audio)
 CLOUDINARY_URL=cloudinary://sample:secret@safora
+CLOUDINARY_CLOUD_NAME=your_cloudinary_cloud_name
+CLOUDINARY_API_KEY=your_cloudinary_api_key
+CLOUDINARY_API_SECRET=your_cloudinary_api_secret
 ```
 
 ### 2.2 Mobile Environment (`apps/mobile/.env`)

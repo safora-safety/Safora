@@ -13,6 +13,7 @@ import { NotificationModel } from "../models/Notification";
 import { db } from "../config/database";
 import { CloudinaryService } from "./cloudinaryService";
 import { broadcastSosAlert, broadcastSosAudio } from "../sockets/journeySocket";
+import { AudioStitcherService } from "./audioStitcherService";
 
 export class SosService {
   static async triggerSOS(data: {
@@ -370,6 +371,9 @@ export class SosService {
     userId: string | number,
     audioUrl: string,
   ): Promise<SosAlert> {
+    // Disarm server-side chunk stitching watchdog since complete master recording arrived
+    AudioStitcherService.handleMasterUploaded(alertId);
+
     const row = await SosRepository.updateAudioUrl(alertId, userId, audioUrl);
     if (!row) {
       throw new AppError("SOS alert not found or unauthorized", 404);
