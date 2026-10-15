@@ -70,18 +70,33 @@ export class ReportService {
     return ReportModel.fromRow(row);
   }
 
+  static async getReportsPaginated(
+    limit = 500,
+    status?: string,
+    offset = 0,
+    category?: string,
+  ): Promise<{ reports: HazardReport[]; totalCount: number }> {
+    const boundedLimit = Math.min(1000, Math.max(1, limit));
+    const [rows, totalCount] = await Promise.all([
+      ReportRepository.findAll(boundedLimit, status, offset, category),
+      ReportRepository.countAll(status, category),
+    ]);
+    const reports = rows.map((r) => ReportModel.fromRow(r));
+    return { reports, totalCount };
+  }
+
   static async getReports(
     limit = 500,
     status?: string,
+    offset = 0,
+    category?: string,
   ): Promise<HazardReport[]> {
-    const boundedLimit = Math.min(1000, Math.max(1, limit));
-    const cacheKey = `reports_list_${boundedLimit}_${status || "all"}`;
-    const cached = MemoryCache.get<HazardReport[]>(cacheKey);
-    if (cached) return cached;
-
-    const rows = await ReportRepository.findAll(boundedLimit, status);
-    const reports = rows.map((r) => ReportModel.fromRow(r));
-    MemoryCache.set(cacheKey, reports, 20);
+    const { reports } = await this.getReportsPaginated(
+      limit,
+      status,
+      offset,
+      category,
+    );
     return reports;
   }
 

@@ -142,14 +142,14 @@ Chat (M7) and Hindi/local polish (M8) come **after** v1. If you cannot commit 4 
 
 ### Phase 4 — No-unlock triggers (M6)
 
-| ID | Item | Size | Depends |
-|---|---|:---:|---|
-| TRG-1 | Native Kotlin module: secure token store, native SOS sender (HTTPS + SMS) | L | SEC-5, TRK-8 |
-| TRG-2 | "Guard" foreground service + battery/autostart checklist | L | TRG-1 |
-| TRG-3 | Quick Settings tile, notification action, widget | M | TRG-1 |
-| TRG-6 | Spike: locked-screen audio evidence (3 approaches, real devices) | M | TRG-2 |
-| TRG-4 | Volume-pattern trigger through an AccessibilityService (opt-in) | L | TRG-2 |
-| TRG-5 | Shake trigger (opt-in) | S | TRG-2 |
+| ID | Item | Size | Depends | Note |
+|---|---|:---:|---|---|
+| TRG-1 | Native Kotlin module: secure token store, native SOS sender (HTTPS + SMS) | L | SEC-5, TRK-8 | |
+| TRG-2 | "Guard" standalone foreground service + battery/autostart checklist | M | TRG-1 | Safe Walk foreground service already proven & operational in V1 (`SafeWalkService.kt`) |
+| TRG-3 | Quick Settings tile, notification action, widget | M | TRG-1 | Standalone trigger outside active walks |
+| TRG-6 | Cold locked-screen audio evidence (standalone triggers) | S | TRG-2 | Dual-Pipe audio streaming already proven & operational in V1 for Safe Walks |
+| TRG-4 | Volume-pattern trigger through an AccessibilityService (opt-in) | L | TRG-2 | |
+| TRG-5 | Shake trigger (opt-in) | S | TRG-2 | |
 
 ### Phase 5 — Chat (M7, staged)
 

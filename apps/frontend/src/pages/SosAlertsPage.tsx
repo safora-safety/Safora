@@ -19,7 +19,7 @@ export const SosAlertsPage: React.FC = () => {
   const [alerts, setAlerts] = useState<AdminSosAlert[]>([]);
   const [selectedAlert, setSelectedAlert] = useState<AdminSosAlert | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const { socket, activeEmergency } = useSocket();
+  const { socket, activeEmergency, latestLiveAudioChunk } = useSocket();
 
   const loadAlerts = async (silent = false) => {
     if (!silent) setIsLoading(true);
@@ -380,11 +380,41 @@ export const SosAlertsPage: React.FC = () => {
                 </p>
               </div>
 
-              {/* Cloudinary Ambient Audio Evidence Scrubber */}
+              {/* Ambient Audio Evidence (Live Streaming Slices or Final Master Recording) */}
               <div className="space-y-2">
-                <span className="text-xs font-mono uppercase tracking-wider text-gray-400 font-semibold">
-                  Ambient Audio Evidence
-                </span>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-mono uppercase tracking-wider text-gray-400 font-semibold">
+                    Ambient Audio Evidence
+                  </span>
+                  {latestLiveAudioChunk &&
+                    String(latestLiveAudioChunk.alertId) ===
+                      String(selectedAlert.id) &&
+                    !selectedAlert.audioUrl && (
+                      <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-950/80 border border-red-500/50 text-[11px] font-bold text-red-200">
+                        <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                        LIVE STREAMING CHUNK #{latestLiveAudioChunk.seq}/
+                        {latestLiveAudioChunk.totalChunksExpected || 6}
+                      </span>
+                    )}
+                </div>
+
+                {latestLiveAudioChunk &&
+                  String(latestLiveAudioChunk.alertId) ===
+                    String(selectedAlert.id) &&
+                  !selectedAlert.audioUrl && (
+                    <div className="p-3 rounded-xl bg-red-950/40 border border-red-500/30 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Volume2 className="w-4 h-4 text-red-400 animate-pulse" />
+                        <span className="text-xs text-red-200">
+                          Playing 5-second ambient audio slices in real time
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-mono text-red-300">
+                        Buffer: {latestLiveAudioChunk.seq * 5}s / 30s
+                      </span>
+                    </div>
+                  )}
+
                 <AudioPlayer
                   audioUrl={selectedAlert.audioUrl || undefined}
                   title={`SOS Ambient Recording — ${selectedAlert.userName || 'Citizen'}`}

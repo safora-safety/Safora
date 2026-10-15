@@ -57,11 +57,12 @@ No `userId`, `reporterName`, `email` or `phone`. The staff DTO is unchanged and 
 | GET | `/active` (staff) | **changed:** now returns the real `last_location`/`last_seen_at` instead of the journey's origin point; admin radar reads this |
 | GET | `/` (staff) | existing |
 
-## SOS — `/api/sos` (existing, unchanged)
-
+## SOS — `/api/sos`
 `POST /` · `GET /alerts` (staff) · `PATCH /:id/status` (staff) · `PATCH /:id/audio` · `POST /upload-audio` · `GET /check-guardian` · `POST /test-guardian` · `GET/POST /contacts` · `PUT/DELETE /contacts/:id`
 
-**Note:** the watchdog's automatic deviation escalation creates an `sos_alerts` row with `source='watchdog'` through the same internal service the manual `POST /` route uses, so it appears in the existing SOS queue and admin UI with no separate code path.
+**Note:**
+- The watchdog's automatic deviation escalation creates an `sos_alerts` row with `source='watchdog'` through the same internal service the manual `POST /` route uses, so it appears in the existing SOS queue and admin UI with no separate code path.
+- `PATCH /:id/audio` now calls `AudioStitcherService.handleMasterUploaded(alertId)` to disarm the server-side watchdog timer and purge temporary disk staging when the pristine 30-second master recording arrives from mobile.
 
 ## Notifications — `/api/notifications` (existing, unchanged)
 
@@ -79,9 +80,14 @@ No `userId`, `reporterName`, `email` or `phone`. The staff DTO is unchanged and 
 |---|---|---|
 | `journey:location` | server → room `journey:{id}` | **changed:** now actually emitted (payload: `{lat, lng, speed?, battery?, recordedAt}`) |
 | `sos:alert` | server → rooms `staff`, `user:{id}` | existing |
-| `sos:audio` | server → room `staff` | existing |
+| `sos:audio` | server → rooms `staff`, `user:{id}` | **changed:** broadcasts final master/stitched Cloudinary audio attachment |
+| `sos:audio_chunk` | mobile → server | **new in V1:** streams 5s progressive PCM/WAV audio slices (`{alertId, seq, data, isLast}`) |
+| `sos:audio_chunk_ack` | server → mobile | **new in V1:** receipt acknowledgment for each audio slice |
+| `sos:live_audio_chunk` | server → rooms `sos:alert:{id}`, `staff`, `user:{gid}` | **new in V1:** relays live audio slices in real time to dispatchers and guardians |
+| `sos:join` / `sos:leave` | client ⇄ server | **new in V1:** scoped room subscription for live alert audio (owner, staff, or verified guardian) |
 
-Handshake: JWT in `socket.io-client`'s `auth` option (server already validates this — the change in V1 is that the **mobile app now actually connects**, using the dependency already listed in `package.json` but never imported).
+Handshake: JWT in `socket.io-client`'s `auth` option (server validates HS256 JWT and sets `socket.data.user`).
+See [`dual-pipe-audio-streaming.md`](./dual-pipe-audio-streaming.md) for full protocol payloads, buffer sizing, and edge-case mitigations.
 
 ## Health/diagnostics — unchanged
 `GET /api/health` · `GET /api/diagnostics`
@@ -133,33 +139,40 @@ Response — each entry now reflects real tracked position instead of the journe
 ```
 Empty array `[]` when there are genuinely no active journeys — **the frontend must render an empty state for this, not fall back to sample data** (see `tasks.md` #3).
 
-### `GET /api/reports` / `GET /api/reports/nearby` (changed — public DTO)
-Response, non-staff caller:
+### `GET /api/reports` / `GET /api/reports/nearby` (changed — public DTO & Pagination)
+Optional query parameters: `page` (default: 1), `limit` (default: 20, max: 100), `status`, `category`.
+
+Response envelope (paginated):
 ```json
-[
-  {
-    "id": 123,
-    "category": "poor_lighting",
-    "severity": 4,
-    "description": "Streetlight out near the bus stop",
-    "photoUrl": "https://res.cloudinary.com/.../photo.jpg",
-    "location": { "lat": 30.3110, "lng": 78.0401 },
-    "confirmationsCount": 2,
-    "createdAt": "2026-10-28T19:04:00Z"
+{
+  "success": true,
+  "count": 20,
+  "reports": [
+    {
+      "id": 123,
+      "category": "poor_lighting",
+      "severity": 4,
+      "description": "Streetlight out near the bus stop",
+      "photoUrl": "https://res.cloudinary.com/.../photo.jpg",
+      "location": { "lat": 30.3110, "lng": 78.0401 },
+      "confirmationsCount": 2,
+      "createdAt": "2026-10-28T19:04:00Z"
+    }
+  ],
+  "pagination": {
+    "total": 142,
+    "page": 1,
+    "limit": 20,
+    "totalPages": 8,
+    "hasNext": true,
+    "hasPrev": false
   }
-]
+}
 ```
+*Note: For non-paginated requests or legacy endpoints, `reports` array is returned directly for seamless backward compatibility.*
+
 Same endpoint, staff caller (via `Authorization` header carrying a staff/admin JWT):
-```json
-[
-  {
-    "...": "all public fields, plus:",
-    "userId": 7,
-    "reporterName": "Aman S.",
-    "reporterEmail": "user@example.com"
-  }
-]
-```
+Includes all public fields plus `userId`, `reporterName`, and `reporterEmail`.
 
 ### `PATCH /api/auth/profile` (changed — new optional fields)
 Request now also accepts:

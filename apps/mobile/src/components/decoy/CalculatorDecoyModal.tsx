@@ -11,9 +11,9 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-import { SosService } from '../services/sosService';
-import { getCurrentCoordinates } from '../services/locationService';
-import { AudioRecorderService } from '../services/audioRecorderService';
+import { SosService } from '../../services/sosService';
+import { getCurrentCoordinates } from '../../services/locationService';
+import { AudioRecorderService } from '../../services/audioRecorderService';
 
 interface CalculatorDecoyModalProps {
   visible: boolean;
@@ -337,3 +337,5 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 });
+
+export default CalculatorDecoyModal;

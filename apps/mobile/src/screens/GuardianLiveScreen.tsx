@@ -14,7 +14,7 @@ import {
   OpenMapView,
   OpenMapViewRef,
   MapMarkerItem,
-} from '../components/OpenMapView';
+} from '../components/map/OpenMapView';
 import {
   onJourneyLocation,
   onJourneyEnded,

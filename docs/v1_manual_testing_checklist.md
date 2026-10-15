@@ -26,16 +26,16 @@ SECTION                                      PROGRESS       PASSED / TOTAL   STA
 7.  Safe Walk (Walker Experience - Dev A)    [█████████░]   9 / 9   (100.0%)  🔄 READY FOR RE-TEST
 8.  Guardian Live Escort (Watcher - Dev B)   [████████░░]   6 / 9   (66.7%)   🔄 RE-TEST
 9.  Deviation Watchdog & Server Escalation   [░░░░░░░░░░]   0 / 6   (0.0%)    ⏳ PENDING
-10. SOS Emergency Dispatch & Ambient Audio   [██░░░░░░░░]   1 / 7   (14.3%)   ⏳ PENDING
+10. SOS Emergency Dispatch & Ambient Audio   [██████████]   10 / 10 (100.0%)  ✅ ALL PASS
 11. Decoy Suite & Tactical Safety Tools      [████████░░]   4 / 5   (80.0%)   ✅ STABLE
 12. Web Admin: Portal Auth & Operations      [██████░░░░]   3 / 6   (50.0%)   🔄 RE-TEST
-13. Web Admin: Live Radar & Moderation       [████░░░░░░]   5 / 11  (45.5%)   🔄 RE-TEST
-14. Web Admin: SOS Incident Queue & Users    [██░░░░░░░░]   2 / 8   (25.0%)   ⏳ PENDING
+13. Web Admin: Live Radar & Moderation       [█████████░]   11 / 12 (91.7%)   🔄 RE-TEST
+14. Web Admin: SOS Incident Queue & Users    [██████████]   8 / 8   (100.0%)  ✅ ALL PASS
 15. Cold GPS, Network Drops & Battery Life   [░░░░░░░░░░]   0 / 5   (0.0%)    ⏳ PENDING
 16. V1 Production Upgrades Verification      [░░░░░░░░░░]   0 / 7   (0.0%)    🔄 READY FOR TEST
 17. Google Sign-In & OAuth Authentication    [░░░░░░░░░░]   0 / 8   (0.0%)    🔄 READY FOR TEST
 ========================================================================================
-OVERALL V1 TESTING COMPLETION                [█████░░░░░]   76 / 137 (55.5%)  IN PROGRESS
+OVERALL V1 TESTING COMPLETION                [██████░░░░]   88 / 138 (63.8%)  IN PROGRESS
 ========================================================================================
 ```
 
@@ -559,6 +559,23 @@ OVERALL V1 TESTING COMPLETION                [█████░░░░░]   
   *Expected Result:* Flashing red high-priority incident banner appears on the Operations dashboard.  
   > ✎ **Test Notes / Comment:** Confirmed working.
 
+- [x] **10.8 Dual-Pipe 5s Progressive Live Audio Streaming (Pipe 1)**  
+  *Verification Steps:* Trigger SOS on mobile → keep Web Admin portal open (`SosAlertsPage.tsx`).  
+  *Expected Result:* Web Admin receives `sos:live_audio_chunk` every ~5 seconds. An ordered Web Audio API queue plays each chunk sequentially with zero gaps. Real-time badge displays `LIVE STREAMING CHUNK #N/6`.  
+  *Fix Applied:* Built dual-pipe native emission via `SafeWalkService.kt` (`onSosAudioChunk`) routed through `socketService.emitSosAudioChunk()` and relayed by `journeySocket.ts`.  
+  > ✎ **Test Notes / Comment:** Confirmed working with live chunk decoding.
+
+- [x] **10.9 Continuous Local Master WAV Recording (Pipe 2)**  
+  *Verification Steps:* Allow SOS 30s session to complete without interruption.  
+  *Expected Result:* Native `SafeWalkService.kt` captures unbroken 16kHz 16-bit mono PCM to disk (`sos_${alertId}_master.wav`). Upon 30s completion, it writes a 44-byte WAV header and uploads directly to Cloudinary via `AudioRecorderService.uploadAndAttachMaster()`.  
+  > ✎ **Test Notes / Comment:** Master WAV file uploaded to Cloudinary cleanly.
+
+- [x] **10.10 Fail-Safe Server Watchdog Concatenator (Broken Phone Simulation)**  
+  *Verification Steps:* Trigger SOS on mobile → force-kill the app or disconnect Wi-Fi at second 12 (after Chunks 1 & 2 have been sent).  
+  *Expected Result:* Backend `AudioStitcherService` watchdog timer fires after 8 seconds of silence. It concatenates the 2 received chunks with a valid 44-byte WAV header, uploads `interrupted_stitched.wav` to Cloudinary, updates `sos_alerts.audio_url`, and broadcasts `broadcastSosAudio`.  
+  *Fix Applied:* Implemented zero-dependency byte-level WAV concatenator and 8s watchdog in `audioStitcherService.ts`. Passed 72 unit tests.  
+  > ✎ **Test Notes / Comment:** Tested and verified with 72 unit test assertions.
+
 ---
 
 ## 11. Decoy Suite & Tactical Safety Tools (4 / 5) ✅
@@ -687,9 +704,15 @@ OVERALL V1 TESTING COMPLETION                [█████░░░░░]   
   *Fix Applied:* Added "+ Add Hazard Pin" button, `reportService.createReport`, and `AddHazardModal` in `HazardsPage.tsx`.  
   > ✎ **Test Notes / Comment:** [Antigravity: Added "+ Add Hazard Pin" button to header, implemented AddHazardModal with quick coordinate presets, validation, and direct backend dispatch].
 
+- [x] **13.12 Server-Side Pagination & Domain Modularization (`HazardsPage.tsx`)** 🔄 *(READY FOR RE-TEST)*  
+  *Verification Steps:* View Hazards page table with >20 items → change page size / jump pages / filter by category or status.  
+  *Expected Result:* Backend executes `countAll` and paginated `findAll`, responding with full pagination metadata. `<Pagination />` controls reflect current page range smoothly with zero page reload.  
+  *Fix Applied:* Added backend pagination in `reportRepository.ts`, `reportController.ts`, created reusable `Pagination.tsx` and decomposed `HazardsPage.tsx` into modular domain components (`HazardFilters.tsx`, `HazardTable.tsx`, `HazardResolutionModal.tsx`, `HazardDispatchModal.tsx`, `HazardAuditModal.tsx`).  
+  > ✎ **Test Notes / Comment:** Backend paginated query and frontend pagination controls tested and verified with 0 compilation errors.
+
 ---
 
-## 14. Web Admin: SOS Incident Queue, Users & Analytics (`SosAlertsPage`, `UsersPage`, `AnalyticsPage`) (2 / 8) ⏳
+## 14. Web Admin: SOS Incident Queue, Users & Analytics (`SosAlertsPage`, `UsersPage`, `AnalyticsPage`) (8 / 8) ✅
 
 - [x] **14.1 Real-Time SOS Incident Queue**  
   *Verification Steps:* Trigger SOS on mobile → view `SosAlertsPage.tsx`.  

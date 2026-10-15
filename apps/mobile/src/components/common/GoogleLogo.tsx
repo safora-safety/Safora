@@ -1,7 +1,7 @@
 import React from 'react';
 import { Image, ImageStyle, StyleProp, StyleSheet, View } from 'react-native';
 
-const googleLogoSource = require('../assets/google_logo.png');
+const googleLogoSource = require('../../assets/google_logo.png');
 
 interface GoogleLogoProps {
   size?: number;
@@ -25,3 +25,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 });
+
+export default GoogleLogo;

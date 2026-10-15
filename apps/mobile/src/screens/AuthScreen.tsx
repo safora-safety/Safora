@@ -12,7 +12,7 @@ import {
   StatusBar,
 } from 'react-native';
 import { useAuthStore } from '../store/authStore';
-import { GoogleLogo } from '../components/GoogleLogo';
+import { GoogleLogo } from '../components/common/GoogleLogo';
 
 interface AuthScreenProps {
   navigation: any;

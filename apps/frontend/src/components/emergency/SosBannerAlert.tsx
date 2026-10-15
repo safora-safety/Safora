@@ -4,10 +4,14 @@ import { Flame, AlertOctagon, X, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export const SosBannerAlert: React.FC = () => {
-  const { activeEmergency, dismissEmergency } = useSocket();
+  const { activeEmergency, dismissEmergency, latestLiveAudioChunk } = useSocket();
   const navigate = useNavigate();
 
   if (!activeEmergency) return null;
+
+  const isLiveAudioStreaming =
+    latestLiveAudioChunk &&
+    String(latestLiveAudioChunk.alertId) === String(activeEmergency.alertId);
 
   return (
     <div className="bg-red-950/90 border-b-2 border-red-500 backdrop-blur-md px-6 py-3 flex items-center justify-between text-white sticky top-16 z-40 animate-pulse-slow shadow-red-900/40 shadow-xl">
@@ -23,6 +27,13 @@ export const SosBannerAlert: React.FC = () => {
             <span className="px-2 py-0.5 rounded-full bg-red-600 text-[10px] font-mono font-black">
               LIVE BEACON
             </span>
+            {isLiveAudioStreaming && (
+              <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-600/90 text-[10px] font-mono font-bold animate-pulse">
+                <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                AUDIO CHUNK {latestLiveAudioChunk.seq}/
+                {latestLiveAudioChunk.totalChunksExpected || 6}
+              </span>
+            )}
           </div>
           <p className="text-xs text-red-300">
             User <span className="font-semibold text-white">{activeEmergency.userName || activeEmergency.userId}</span> triggered an emergency alert at GPS [

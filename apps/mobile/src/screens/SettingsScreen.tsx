@@ -13,7 +13,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuthStore } from '../store/authStore';
-import { ChangePasswordModal } from '../components/ChangePasswordModal';
+import { ChangePasswordModal } from '../components/profile/ChangePasswordModal';
 import { AudioRecorderService } from '../services/audioRecorderService';
 
 interface SettingsScreenProps {

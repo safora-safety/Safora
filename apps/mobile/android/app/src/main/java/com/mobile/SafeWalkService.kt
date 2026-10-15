@@ -10,7 +10,14 @@ import android.content.Intent
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
+import android.media.AudioFormat
+import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.util.Base64
+import com.facebook.react.bridge.Arguments
+import java.io.ByteArrayOutputStream
+import java.io.FileOutputStream
+import java.io.RandomAccessFile
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
@@ -43,6 +50,7 @@ class SafeWalkService : Service(), LocationListener {
         const val ACTION_START = "com.mobile.action.START_SAFE_WALK"
         const val ACTION_STOP = "com.mobile.action.STOP_SAFE_WALK"
         const val ACTION_RECORD_AUDIO = "com.mobile.action.RECORD_AUDIO"
+        const val ACTION_STOP_AUDIO = "com.mobile.action.STOP_AUDIO"
         const val ACTION_TRIGGER_SOS = "com.mobile.action.TRIGGER_SOS"
 
         const val EXTRA_JOURNEY_ID = "journey_id"
@@ -71,7 +79,9 @@ class SafeWalkService : Service(), LocationListener {
     private var locationManager: LocationManager? = null
     private var notificationManager: NotificationManager? = null
 
-    private var mediaRecorder: MediaRecorder? = null
+    private var isRecordingAudio = false
+    private var audioRecordThread: Thread? = null
+    private var audioRecord: AudioRecord? = null
     private var currentAudioFile: File? = null
 
     private val httpClient by lazy {
@@ -106,6 +116,9 @@ class SafeWalkService : Service(), LocationListener {
             ACTION_RECORD_AUDIO -> {
                 val alertId = intent.getStringExtra(EXTRA_ALERT_ID) ?: "emergency"
                 startLockScreenAudio(alertId)
+            }
+            ACTION_STOP_AUDIO -> {
+                stopAudioRecording()
             }
             ACTION_TRIGGER_SOS -> {
                 triggerEmergencySosNatively()
@@ -381,51 +394,216 @@ class SafeWalkService : Service(), LocationListener {
         }
     }
 
-    // Task 5.2 TRG-6-lite: Start 30s audio recording using the active foreground service's microphone access
+    // Dual-Sink Audio Engine: Slices 5s PCM chunks over Socket.IO and saves unbroken master WAV
     fun startLockScreenAudio(alertId: String): String? {
         try {
             stopAudioRecording()
 
             val outputDir = File(cacheDir, "emergency_audio").apply { if (!exists()) mkdirs() }
-            currentAudioFile = File(outputDir, "sos_${alertId}_lockscreen.m4a")
+            currentAudioFile = File(outputDir, "sos_${alertId}_master.wav")
 
-            mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                MediaRecorder(applicationContext)
-            } else {
-                @Suppress("DEPRECATION")
-                MediaRecorder()
+            val sampleRate = 16000
+            val channelConfig = AudioFormat.CHANNEL_IN_MONO
+            val audioFormat = AudioFormat.ENCODING_PCM_16BIT
+            val minBufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
+            val bufferSize = minBufferSize.coerceAtLeast(4096)
+
+            audioRecord = AudioRecord(
+                MediaRecorder.AudioSource.MIC,
+                sampleRate,
+                channelConfig,
+                audioFormat,
+                bufferSize * 2
+            )
+
+            if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
+                Log.w(TAG, "AudioRecord failed to initialize")
+                return null
+            }
+
+            audioRecord?.startRecording()
+            isRecordingAudio = true
+
+            audioRecordThread = Thread {
+                val buffer = ByteArray(bufferSize)
+                var totalBytesRecorded = 0
+                val chunkBuffer = ByteArrayOutputStream(160000)
+                var chunkSeq = 1
+                val maxDurationMs = 30000L
+                val startTime = System.currentTimeMillis()
+                val fileOut = FileOutputStream(currentAudioFile)
+                fileOut.write(ByteArray(44)) // WAV header placeholder
+
+                try {
+                    while (isRecordingAudio && (System.currentTimeMillis() - startTime < maxDurationMs)) {
+                        val read = audioRecord?.read(buffer, 0, buffer.size) ?: 0
+                        if (read > 0) {
+                            fileOut.write(buffer, 0, read)
+                            chunkBuffer.write(buffer, 0, read)
+                            totalBytesRecorded += read
+
+                            // When 5 seconds of PCM accumulated (~160,000 bytes at 16kHz 16-bit mono)
+                            if (chunkBuffer.size() >= 160000) {
+                                val pcmBytes = chunkBuffer.toByteArray()
+                                chunkBuffer.reset()
+                                val chunkWav = createWavHeaderBytes(pcmBytes.size, 16000, 1, 16) + pcmBytes
+                                val base64Chunk = Base64.encodeToString(chunkWav, Base64.NO_WRAP)
+
+                                val map = Arguments.createMap().apply {
+                                    putString("alertId", alertId)
+                                    putInt("seq", chunkSeq)
+                                    putInt("totalChunksExpected", 6)
+                                    putDouble("durationSec", 5.0)
+                                    putString("mimeType", "audio/wav")
+                                    putString("data", base64Chunk)
+                                    putBoolean("isLast", false)
+                                }
+                                SafeWalkServiceModule.emitEvent("onSosAudioChunk", map)
+                                chunkSeq++
+                            }
+                        }
+                    }
+
+                    // Flush any remaining partial bytes if recording ended early or at 30s
+                    if (chunkBuffer.size() > 0) {
+                        val pcmBytes = chunkBuffer.toByteArray()
+                        chunkBuffer.reset()
+                        val chunkWav = createWavHeaderBytes(pcmBytes.size, 16000, 1, 16) + pcmBytes
+                        val base64Chunk = Base64.encodeToString(chunkWav, Base64.NO_WRAP)
+
+                        val map = Arguments.createMap().apply {
+                            putString("alertId", alertId)
+                            putInt("seq", chunkSeq)
+                            putInt("totalChunksExpected", chunkSeq)
+                            putDouble("durationSec", pcmBytes.size / 32000.0)
+                            putString("mimeType", "audio/wav")
+                            putString("data", base64Chunk)
+                            putBoolean("isLast", true)
+                        }
+                        SafeWalkServiceModule.emitEvent("onSosAudioChunk", map)
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Audio recording thread error: ${e.message}")
+                } finally {
+                    try {
+                        fileOut.flush()
+                        fileOut.close()
+                    } catch (_: Exception) {}
+
+                    // Overwrite the 44-byte WAV header on the continuous master file
+                    if (currentAudioFile != null && totalBytesRecorded > 0) {
+                        try {
+                            val raf = RandomAccessFile(currentAudioFile, "rw")
+                            raf.seek(0)
+                            raf.write(createWavHeaderBytes(totalBytesRecorded, 16000, 1, 16))
+                            raf.close()
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Failed to write master WAV header: ${e.message}")
+                        }
+                    }
+
+                    try {
+                        audioRecord?.stop()
+                        audioRecord?.release()
+                    } catch (_: Exception) {}
+                    audioRecord = null
+                    isRecordingAudio = false
+
+                    // Notify mobile JS that master recording is complete and ready for Cloudinary upload
+                    val completionMap = Arguments.createMap().apply {
+                        putString("alertId", alertId)
+                        putString("filePath", currentAudioFile?.absolutePath ?: "")
+                        putBoolean("success", totalBytesRecorded > 0)
+                    }
+                    SafeWalkServiceModule.emitEvent("onSosAudioMasterCompleted", completionMap)
+                }
             }.apply {
-                setAudioSource(MediaRecorder.AudioSource.MIC)
-                setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                setAudioEncodingBitRate(64000)
-                setAudioSamplingRate(44100)
-                setOutputFile(currentAudioFile?.absolutePath)
-                prepare()
+                priority = Thread.MAX_PRIORITY
                 start()
             }
 
-            Log.i(TAG, "Lock-screen audio recording started: ${currentAudioFile?.absolutePath}")
+            Log.i(TAG, "Dual-sink audio recording started: ${currentAudioFile?.absolutePath}")
             return currentAudioFile?.absolutePath
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to start lock-screen audio: ${e.message}")
+            Log.w(TAG, "Failed to start dual-sink audio: ${e.message}")
             return null
         }
     }
 
     fun stopAudioRecording(): String? {
         val path = currentAudioFile?.absolutePath
+        isRecordingAudio = false
         try {
-            mediaRecorder?.apply {
-                stop()
-                release()
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Error stopping mediaRecorder: ${e.message}")
-        } finally {
-            mediaRecorder = null
-        }
+            audioRecordThread?.join(1000)
+        } catch (_: Exception) {}
+        audioRecordThread = null
         return path
+    }
+
+    private fun createWavHeaderBytes(
+        dataLength: Int,
+        sampleRate: Int = 16000,
+        channels: Int = 1,
+        bitsPerSample: Int = 16
+    ): ByteArray {
+        val header = ByteArray(44)
+        val byteRate = sampleRate * channels * bitsPerSample / 8
+        val blockAlign = channels * bitsPerSample / 8
+        val totalLength = dataLength + 36
+
+        // "RIFF"
+        header[0] = 'R'.code.toByte()
+        header[1] = 'I'.code.toByte()
+        header[2] = 'F'.code.toByte()
+        header[3] = 'F'.code.toByte()
+        header[4] = (totalLength and 0xff).toByte()
+        header[5] = ((totalLength shr 8) and 0xff).toByte()
+        header[6] = ((totalLength shr 16) and 0xff).toByte()
+        header[7] = ((totalLength shr 24) and 0xff).toByte()
+
+        // "WAVE"
+        header[8] = 'W'.code.toByte()
+        header[9] = 'A'.code.toByte()
+        header[10] = 'V'.code.toByte()
+        header[11] = 'E'.code.toByte()
+
+        // "fmt "
+        header[12] = 'f'.code.toByte()
+        header[13] = 'm'.code.toByte()
+        header[14] = 't'.code.toByte()
+        header[15] = ' '.code.toByte()
+        header[16] = 16
+        header[17] = 0
+        header[18] = 0
+        header[19] = 0
+        header[20] = 1 // PCM
+        header[21] = 0
+        header[22] = channels.toByte()
+        header[23] = 0
+        header[24] = (sampleRate and 0xff).toByte()
+        header[25] = ((sampleRate shr 8) and 0xff).toByte()
+        header[26] = ((sampleRate shr 16) and 0xff).toByte()
+        header[27] = ((sampleRate shr 24) and 0xff).toByte()
+        header[28] = (byteRate and 0xff).toByte()
+        header[29] = ((byteRate shr 8) and 0xff).toByte()
+        header[30] = ((byteRate shr 16) and 0xff).toByte()
+        header[31] = ((byteRate shr 24) and 0xff).toByte()
+        header[32] = blockAlign.toByte()
+        header[33] = 0
+        header[34] = bitsPerSample.toByte()
+        header[35] = 0
+
+        // "data"
+        header[36] = 'd'.code.toByte()
+        header[37] = 'a'.code.toByte()
+        header[38] = 't'.code.toByte()
+        header[39] = 'a'.code.toByte()
+        header[40] = (dataLength and 0xff).toByte()
+        header[41] = ((dataLength shr 8) and 0xff).toByte()
+        header[42] = ((dataLength shr 16) and 0xff).toByte()
+        header[43] = ((dataLength shr 24) and 0xff).toByte()
+
+        return header
     }
 
     private fun stopSafeWalk() {

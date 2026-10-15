@@ -71,8 +71,13 @@ export async function getAllJourneys(
 ): Promise<void> {
   try {
     const limit = Math.min(200, parseInt(String(req.query.limit || "100"), 10));
+    const page = parseInt(String(req.query.page || "1"), 10);
+    const offset = Math.max(0, (page - 1) * limit);
     const status = req.query.status as string | undefined;
-    const rows = await JourneyRepository.findAll(limit, status);
+    const [rows, totalCount] = await Promise.all([
+      JourneyRepository.findAll(limit, status, offset),
+      JourneyRepository.countAll(status),
+    ]);
     const journeys = rows.map((r) => {
       const realLat =
         r.last_lat != null ? Number(r.last_lat) : Number(r.origin_lat);
@@ -126,6 +131,14 @@ export async function getAllJourneys(
       success: true,
       count: journeys.length,
       journeys,
+      pagination: {
+        page,
+        limit,
+        totalCount,
+        totalPages: Math.ceil(totalCount / limit) || 1,
+        hasNextPage: page * limit < totalCount,
+        hasPrevPage: page > 1,
+      },
     });
   } catch (err) {
     next(err);

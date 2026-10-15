@@ -1,10 +1,20 @@
 import { apiClient } from './api';
 import { HazardReport, HazardStatus } from '@safora/shared-types';
 
+export interface PaginationMetadata {
+  page: number;
+  limit: number;
+  totalCount: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPrevPage: boolean;
+}
+
 export interface ReportsResponse {
   success: boolean;
   count: number;
   reports: HazardReport[];
+  pagination?: PaginationMetadata;
 }
 
 export interface SafetyScoreResponse {
@@ -33,6 +43,22 @@ export const reportService = {
   async getReports(limit: number = 100): Promise<HazardReport[]> {
     const response = await apiClient.get<ReportsResponse>(`/reports?limit=${limit}`);
     return response.data.reports || [];
+  },
+
+  async getReportsPaginated(
+    page: number = 1,
+    limit: number = 25,
+    status?: string,
+    category?: string
+  ): Promise<{ reports: HazardReport[]; pagination?: PaginationMetadata }> {
+    const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (status && status !== 'all') params.append('status', status);
+    if (category && category !== 'all') params.append('category', category);
+    const response = await apiClient.get<ReportsResponse>(`/reports?${params.toString()}`);
+    return {
+      reports: response.data.reports || [],
+      pagination: response.data.pagination,
+    };
   },
 
   async getNearbyReports(lat: number, lng: number, radiusMeters: number = 5000): Promise<HazardReport[]> {

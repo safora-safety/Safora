@@ -14,7 +14,7 @@ import {
 import { colors } from '../theme/colors';
 import { useAuthStore } from '../store/authStore';
 import { AudioRecorderService } from '../services/audioRecorderService';
-import { MicrophoneConsentModal } from '../components/MicrophoneConsentModal';
+import { MicrophoneConsentModal } from '../components/emergency/MicrophoneConsentModal';
 
 const { width } = Dimensions.get('window');
 

@@ -9,6 +9,7 @@ PostgreSQL + PostGIS on Neon. Schema is created inline in `initDatabase()` — V
 - `trusted_contacts` — id, user_id, name, email, phone
 - `journeys` — id, user_id, origin/destination points, status, started_at, completed_at
 - `sos_alerts` — id, user_id, location, battery, audio_url, status, source, created_at
+  - *Note on `audio_url`:* Populated via one of two paths: (1) **Happy Path:** Mobile uploads pristine 30s master WAV directly to Cloudinary and updates `audio_url` via `PATCH /api/sos/:id/audio`. (2) **Fail-Safe Path:** If mobile phone is destroyed/interrupted mid-stream, `AudioStitcherService` 8s watchdog concatenates received chunks into `interrupted_stitched.wav`, uploads to Cloudinary, and sets `audio_url`.
 - `notifications` — id, user_id, type, payload, read_at, created_at
 
 ## 2. New/changed in V1

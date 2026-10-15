@@ -13,6 +13,7 @@ import { NotificationModel } from "../models/Notification";
 import { db } from "../config/database";
 import { CloudinaryService } from "./cloudinaryService";
 import { broadcastSosAlert, broadcastSosAudio } from "../sockets/journeySocket";
+import { AudioStitcherService } from "./audioStitcherService";
 
 export class SosService {
   static async triggerSOS(data: {
@@ -347,9 +348,30 @@ export class SosService {
 
   static async getNotifications(
     userId: string | number,
+    limit = 50,
+    offset = 0,
   ): Promise<SosNotification[]> {
-    const rows = await SosRepository.findNotificationsByUserId(userId);
+    const rows = await SosRepository.findNotificationsByUserId(
+      userId,
+      limit,
+      offset,
+    );
     return rows.map((r) => NotificationModel.fromRow(r));
+  }
+
+  static async getNotificationsPaginated(
+    userId: string | number,
+    limit = 50,
+    offset = 0,
+  ): Promise<{ notifications: SosNotification[]; totalCount: number }> {
+    const [rows, totalCount] = await Promise.all([
+      SosRepository.findNotificationsByUserId(userId, limit, offset),
+      SosRepository.countNotificationsByUserId(userId),
+    ]);
+    return {
+      notifications: rows.map((r) => NotificationModel.fromRow(r)),
+      totalCount,
+    };
   }
 
   static async markNotificationRead(
@@ -370,6 +392,9 @@ export class SosService {
     userId: string | number,
     audioUrl: string,
   ): Promise<SosAlert> {
+    // Disarm server-side chunk stitching watchdog since complete master recording arrived
+    AudioStitcherService.handleMasterUploaded(alertId);
+
     const row = await SosRepository.updateAudioUrl(alertId, userId, audioUrl);
     if (!row) {
       throw new AppError("SOS alert not found or unauthorized", 404);
@@ -388,8 +413,12 @@ export class SosService {
     return alert;
   }
 
-  static async getAllAlerts(limit = 100): Promise<any[]> {
-    const rows = await SosRepository.findAllAlerts(limit);
+  static async getAllAlerts(
+    limit = 100,
+    offset = 0,
+    status?: string,
+  ): Promise<any[]> {
+    const rows = await SosRepository.findAllAlerts(limit, offset, status);
     return rows.map((r) => ({
       id: r.id,
       userId: r.user_id,
@@ -407,6 +436,39 @@ export class SosService {
       isTest: Boolean(r.is_test),
       createdAt: r.created_at,
     }));
+  }
+
+  static async getAllAlertsPaginated(
+    limit = 100,
+    offset = 0,
+    status?: string,
+  ): Promise<{ alerts: any[]; totalCount: number }> {
+    const [rows, totalCount] = await Promise.all([
+      SosRepository.findAllAlerts(limit, offset, status),
+      SosRepository.countAllAlerts(status),
+    ]);
+    return {
+      alerts: rows.map((r) => ({
+        id: r.id,
+        userId: r.user_id,
+        userName: r.user_name || "Anonymous Citizen",
+        userPhone: r.user_phone || undefined,
+        userEmail: r.user_email || undefined,
+        journeyId: r.journey_id,
+        latitude: Number(r.latitude),
+        longitude: Number(r.longitude),
+        accuracy: r.accuracy != null ? Number(r.accuracy) : undefined,
+        batteryPercentage:
+          r.battery_percentage != null
+            ? Number(r.battery_percentage)
+            : undefined,
+        status: r.status,
+        audioUrl: r.audio_url || undefined,
+        isTest: Boolean(r.is_test),
+        createdAt: r.created_at,
+      })),
+      totalCount,
+    };
   }
 
   static async updateStatus(

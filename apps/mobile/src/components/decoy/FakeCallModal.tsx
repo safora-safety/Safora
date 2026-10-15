@@ -9,7 +9,10 @@ import {
   SafeAreaView,
   StatusBar,
 } from 'react-native';
-import { FakeCallService, FakeCallLanguage } from '../services/FakeCallService';
+import {
+  FakeCallService,
+  FakeCallLanguage,
+} from '../../services/FakeCallService';
 
 interface FakeCallModalProps {
   visible: boolean;
@@ -503,3 +506,5 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
 });
+
+export default FakeCallModal;

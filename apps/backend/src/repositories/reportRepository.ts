@@ -14,21 +14,45 @@ export interface CreateReportData {
 }
 
 export class ReportRepository {
-  static async findAll(limit = 500, status?: string): Promise<ReportRow[]> {
-    const query = status
-      ? `SELECT r.*, u.name as reporter_name
+  static async countAll(status?: string, category?: string): Promise<number> {
+    let query = "SELECT COUNT(*) FROM reports WHERE 1=1";
+    const params: any[] = [];
+    let idx = 1;
+    if (status) {
+      query += ` AND status = $${idx++}`;
+      params.push(status);
+    }
+    if (category) {
+      query += ` AND category = $${idx++}`;
+      params.push(category);
+    }
+    const result = await db.query(query, params);
+    return parseInt(result.rows[0]?.count || "0", 10);
+  }
+
+  static async findAll(
+    limit = 500,
+    status?: string,
+    offset = 0,
+    category?: string,
+  ): Promise<ReportRow[]> {
+    let query = `SELECT r.*, u.name as reporter_name
          FROM reports r
          LEFT JOIN users u ON r.user_id = u.id
-         WHERE r.status = $2
-         ORDER BY r.created_at DESC
-         LIMIT $1;`
-      : `SELECT r.*, u.name as reporter_name
-         FROM reports r
-         LEFT JOIN users u ON r.user_id = u.id
-         ORDER BY r.created_at DESC
-         LIMIT $1;`;
-    const params: any[] = [limit];
-    if (status) params.push(status);
+         WHERE 1=1`;
+    const params: any[] = [];
+    let idx = 1;
+    if (status) {
+      query += ` AND r.status = $${idx++}`;
+      params.push(status);
+    }
+    if (category) {
+      query += ` AND r.category = $${idx++}`;
+      params.push(category);
+    }
+    query += ` ORDER BY r.created_at DESC LIMIT $${idx++} OFFSET $${idx++};`;
+    params.push(limit, offset);
+
     const result = await db.query(query, params);
     return result.rows;
   }

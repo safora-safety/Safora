@@ -23,8 +23,8 @@ import {
 import { ReportService } from '../services/reportService';
 import { SosService } from '../services/sosService';
 import { SafetyScoreResponse } from '@safora/shared-types';
-import { FakeCallModal } from '../components/FakeCallModal';
-import { CalculatorDecoyModal } from '../components/CalculatorDecoyModal';
+import { FakeCallModal } from '../components/decoy/FakeCallModal';
+import { CalculatorDecoyModal } from '../components/decoy/CalculatorDecoyModal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AudioRecorderService } from '../services/audioRecorderService';
 import { JourneyService } from '../services/journeyService';

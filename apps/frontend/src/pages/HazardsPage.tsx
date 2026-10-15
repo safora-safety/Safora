@@ -1,28 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { reportService } from '../services/reportService';
 import { HazardReport, HazardStatus } from '@safora/shared-types';
-import { Badge } from '../components/common/Badge';
 import { StatCard } from '../components/common/StatCard';
 import { Modal } from '../components/common/Modal';
+import { HazardFilters } from '../components/hazards/HazardFilters';
+import { HazardTable } from '../components/hazards/HazardTable';
+import { HazardResolutionModal } from '../components/hazards/HazardResolutionModal';
+import { HazardDispatchModal } from '../components/hazards/HazardDispatchModal';
+import { HazardAuditModal } from '../components/hazards/HazardAuditModal';
 import {
   AlertTriangle,
-  Search,
-  Filter,
   CheckCircle,
   XCircle,
   Clock,
   ExternalLink,
   ShieldCheck,
   RefreshCw,
-  MessageSquare,
-  CheckSquare,
-  Square,
-  RotateCcw,
   Sparkles,
   PlusCircle,
-  MapPin,
-  Users,
-  Info,
 } from 'lucide-react';
 
 export const HazardsPage: React.FC = () => {
@@ -38,6 +33,10 @@ export const HazardsPage: React.FC = () => {
   const [selectedIds, setSelectedIds] = useState<Set<string | number>>(new Set());
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Table Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+
   // Resolution Notes Modal State
   const [resolveTarget, setResolveTarget] = useState<{
     id?: string | number;
@@ -47,7 +46,7 @@ export const HazardsPage: React.FC = () => {
   const [resolutionNotes, setResolutionNotes] = useState('');
   const [submittingResolution, setSubmittingResolution] = useState(false);
 
-  // Manual Admin Hazard Pin Modal State (Task 13.11)
+  // Manual Admin Hazard Pin Modal State
   const [showAddHazardModal, setShowAddHazardModal] = useState(false);
   const [newHazardTitle, setNewHazardTitle] = useState('');
   const [newHazardCategory, setNewHazardCategory] = useState('lighting');
@@ -57,7 +56,7 @@ export const HazardsPage: React.FC = () => {
   const [newHazardDesc, setNewHazardDesc] = useState('');
   const [submittingHazard, setSubmittingHazard] = useState(false);
 
-  // Community Confirmations Audit Modal State (Task 5.8)
+  // Community Confirmations Audit Modal State
   const [auditTarget, setAuditTarget] = useState<HazardReport | null>(null);
 
   const showToast = (msg: string) => {
@@ -113,13 +112,11 @@ export const HazardsPage: React.FC = () => {
     }
   };
 
-  // Open the Resolution Modal for a single report
   const openResolveModal = (report: HazardReport) => {
     setResolveTarget({ id: report.id, isBatch: false, title: report.title });
     setResolutionNotes(report.resolutionNotes || '');
   };
 
-  // Open the Resolution Modal for selected batch
   const openBatchResolveModal = () => {
     if (selectedIds.size === 0) return;
     setResolveTarget({ isBatch: true, title: `${selectedIds.size} Selected Hazards` });
@@ -230,20 +227,27 @@ export const HazardsPage: React.FC = () => {
   };
 
   // Filter pipeline
-  const filteredReports = reports.filter((r) => {
-    const matchesSearch =
-      r.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (r.description && r.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (r.reporterName && r.reporterName.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredReports = useMemo(() => {
+    return reports.filter((r) => {
+      const matchesSearch =
+        r.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (r.description && r.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (r.reporterName && r.reporterName.toLowerCase().includes(searchTerm.toLowerCase()));
 
-    const matchesCategory =
-      selectedCategory === 'all' || r.category === selectedCategory;
+      const matchesCategory =
+        selectedCategory === 'all' || r.category === selectedCategory;
 
-    const matchesStatus =
-      selectedStatus === 'all' || r.status === selectedStatus;
+      const matchesStatus =
+        selectedStatus === 'all' || r.status === selectedStatus;
 
-    return matchesSearch && matchesCategory && matchesStatus;
-  });
+      return matchesSearch && matchesCategory && matchesStatus;
+    });
+  }, [reports, searchTerm, selectedCategory, selectedStatus]);
+
+  const paginatedReports = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    return filteredReports.slice(startIndex, startIndex + pageSize);
+  }, [filteredReports, currentPage, pageSize]);
 
   const allFilteredSelected =
     filteredReports.length > 0 &&
@@ -357,273 +361,52 @@ export const HazardsPage: React.FC = () => {
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="p-4 rounded-2xl bg-obsidian-850 border border-white/10 flex flex-wrap gap-4 items-center justify-between">
-        {/* Search Input */}
-        <div className="relative flex-1 min-w-[240px]">
-          <Search className="w-4 h-4 text-gray-500 absolute left-3.5 top-3" />
-          <input
-            type="text"
-            placeholder="Search by title, description, or reporter..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 rounded-xl bg-obsidian-900 border border-white/10 focus:border-indigo-500 text-sm text-white placeholder-gray-500 outline-none"
-          />
-        </div>
+      <HazardFilters
+        searchTerm={searchTerm}
+        onSearchChange={(val) => {
+          setSearchTerm(val);
+          setCurrentPage(1);
+        }}
+        selectedCategory={selectedCategory}
+        onCategoryChange={(val) => {
+          setSelectedCategory(val);
+          setCurrentPage(1);
+        }}
+        selectedStatus={selectedStatus}
+        onStatusChange={(val) => {
+          setSelectedStatus(val);
+          setCurrentPage(1);
+        }}
+        onReset={() => {
+          setSelectedCategory('all');
+          setSelectedStatus('all');
+          setSearchTerm('');
+          setCurrentPage(1);
+        }}
+      />
 
-        {/* Category Filter */}
-        <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-gray-400" />
-          <select
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-            className="px-3 py-2 rounded-xl bg-obsidian-900 border border-white/10 text-xs text-white outline-none"
-          >
-            <option value="all">All Categories</option>
-            <option value="lighting">Poor Lighting</option>
-            <option value="road_hazard">Road Hazard</option>
-            <option value="waterlogging">Waterlogging</option>
-            <option value="isolated_area">Isolated Area</option>
-            <option value="traffic">Heavy Traffic</option>
-            <option value="other">Other</option>
-          </select>
-
-          {/* Status Filter */}
-          <select
-            value={selectedStatus}
-            onChange={(e) => setSelectedStatus(e.target.value)}
-            className="px-3 py-2 rounded-xl bg-obsidian-900 border border-white/10 text-xs text-white outline-none"
-          >
-            <option value="all">All Statuses</option>
-            <option value="active">Active / Pending</option>
-            <option value="resolved">Resolved</option>
-            <option value="fake">Flagged Fake</option>
-            <option value="duplicate">Duplicate</option>
-          </select>
-
-          {(selectedCategory !== 'all' || selectedStatus !== 'all' || searchTerm) && (
-            <button
-              onClick={() => {
-                setSelectedCategory('all');
-                setSelectedStatus('all');
-                setSearchTerm('');
-              }}
-              className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors text-xs flex items-center gap-1"
-              title="Reset Filters"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Reports Table */}
-      <div className="rounded-2xl bg-obsidian-850 border border-white/10 overflow-hidden shadow-xl">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-obsidian-800/90 text-gray-400 uppercase font-mono tracking-wider border-b border-white/10">
-              <tr>
-                <th className="py-3.5 px-4 w-10 text-center">
-                  <button
-                    onClick={toggleSelectAllFiltered}
-                    className="text-gray-400 hover:text-white transition-colors"
-                    title={allFilteredSelected ? 'Deselect all' : 'Select all matching'}
-                  >
-                    {allFilteredSelected ? (
-                      <CheckSquare className="w-4 h-4 text-indigo-400" />
-                    ) : (
-                      <Square className="w-4 h-4" />
-                    )}
-                  </button>
-                </th>
-                <th className="py-3.5 px-4">Photo</th>
-                <th className="py-3.5 px-4">Hazard Details</th>
-                <th className="py-3.5 px-4">Category</th>
-                <th className="py-3.5 px-4">Severity</th>
-                <th className="py-3.5 px-4">Location</th>
-                <th className="py-3.5 px-4">Status</th>
-                <th className="py-3.5 px-4 text-right">Moderator Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5">
-              {filteredReports.length === 0 && !isLoading && (
-                <tr>
-                  <td colSpan={8} className="py-12 text-center text-gray-500 font-mono">
-                    No matching hazard reports found.
-                  </td>
-                </tr>
-              )}
-
-              {filteredReports.map((report) => {
-                const isSelected = selectedIds.has(report.id);
-                return (
-                  <tr
-                    key={`report-row-${report.id}`}
-                    className={`transition-colors ${
-                      isSelected ? 'bg-indigo-950/20' : 'hover:bg-obsidian-750/50'
-                    }`}
-                  >
-                    {/* Checkbox */}
-                    <td className="py-3 px-4 text-center">
-                      <button
-                        onClick={() => toggleSelectReport(report.id)}
-                        className="text-gray-400 hover:text-white transition-colors"
-                      >
-                        {isSelected ? (
-                          <CheckSquare className="w-4 h-4 text-indigo-400" />
-                        ) : (
-                          <Square className="w-4 h-4" />
-                        )}
-                      </button>
-                    </td>
-
-                    {/* Thumbnail */}
-                    <td className="py-3 px-4">
-                      {report.photoUrl ? (
-                        <img
-                          src={report.photoUrl}
-                          alt="Thumbnail"
-                          onClick={() => setInspectedPhoto(report.photoUrl!)}
-                          className="w-12 h-12 object-cover rounded-lg border border-white/10 cursor-pointer hover:scale-105 transition-transform"
-                        />
-                      ) : (
-                        <div className="w-12 h-12 rounded-lg bg-obsidian-800 border border-white/5 flex items-center justify-center text-[10px] text-gray-500 font-mono">
-                          No Img
-                        </div>
-                      )}
-                    </td>
-
-                    {/* Title & Reporter & Source */}
-                    <td className="py-3 px-4 max-w-sm">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <div className="font-semibold text-white text-sm">{report.title}</div>
-                        {report.source && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-medium uppercase tracking-wider bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
-                            {report.source.replace('_', ' ')}
-                          </span>
-                        )}
-                      </div>
-                      {report.description && (
-                        <p className="text-gray-300 text-xs mt-1 leading-relaxed">
-                          {report.description}
-                        </p>
-                      )}
-                      {report.resolutionNotes && (
-                        <div className="mt-1.5 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-300 font-mono flex items-start gap-1.5">
-                          <MessageSquare className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-amber-400" />
-                          <div>
-                            <span className="font-bold text-amber-200 uppercase tracking-wider mr-1">
-                              Resolution:
-                            </span>
-                            {report.resolutionNotes}
-                          </div>
-                        </div>
-                      )}
-                      <div className="text-[11px] text-gray-500 mt-1.5 font-mono flex items-center gap-2 flex-wrap">
-                        <span className="text-indigo-400 font-semibold">
-                          {report.reporterName || 'SAFORA Citizen'}
-                        </span>
-                        <span>&bull;</span>
-                        <span>
-                          {new Date(report.createdAt || Date.now()).toLocaleDateString('en-IN', {
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </span>
-                        <span>&bull;</span>
-                        <button
-                          onClick={() => setAuditTarget(report)}
-                          className="text-emerald-400 hover:text-emerald-300 font-semibold inline-flex items-center gap-1 hover:underline cursor-pointer"
-                          title="View Community Confirmation & Reporter Audit"
-                        >
-                          <Users className="w-3 h-3 text-emerald-400" />
-                          <span>{report.confirmationsCount || 0} confirms</span>
-                        </button>
-                      </div>
-                    </td>
-
-                    {/* Category */}
-                    <td className="py-3 px-4 whitespace-nowrap">
-                      <span className="font-mono text-gray-300 capitalize">
-                        {report.category.replace('_', ' ')}
-                      </span>
-                    </td>
-
-                    {/* Severity */}
-                    <td className="py-3 px-4 whitespace-nowrap">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-mono font-bold text-amber-400">{report.severity}/5</span>
-                        <div className="w-12 h-1.5 bg-obsidian-700 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-amber-500"
-                            style={{ width: `${(report.severity / 5) * 100}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                    </td>
-
-                    {/* Location */}
-                    <td className="py-3 px-4 whitespace-nowrap font-mono text-gray-300">
-                      {report.latitude.toFixed(4)}, {report.longitude.toFixed(4)}
-                    </td>
-
-                    {/* Status Badge */}
-                    <td className="py-3 px-4 whitespace-nowrap">
-                      <Badge
-                        variant={
-                          report.status === 'active'
-                            ? 'warning'
-                            : report.status === 'resolved'
-                            ? 'success'
-                            : 'danger'
-                        }
-                        size="sm"
-                      >
-                        {report.status}
-                      </Badge>
-                    </td>
-
-                    {/* Actions */}
-                    <td className="py-3 px-4 whitespace-nowrap text-right space-x-1.5">
-                      {report.status !== 'resolved' && (
-                        <button
-                          disabled={moderatingId === report.id}
-                          onClick={() => openResolveModal(report)}
-                          className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 font-semibold transition-colors disabled:opacity-50"
-                          title="Mark Resolved with Notes"
-                        >
-                          Resolve
-                        </button>
-                      )}
-                      {report.status !== 'fake' && (
-                        <button
-                          disabled={moderatingId === report.id}
-                          onClick={() => handleModerateSingle(report.id, 'fake')}
-                          className="px-2.5 py-1 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-400 font-semibold transition-colors disabled:opacity-50"
-                          title="Mark Fake / Malicious"
-                        >
-                          Fake
-                        </button>
-                      )}
-                      {report.status !== 'duplicate' && (
-                        <button
-                          disabled={moderatingId === report.id}
-                          onClick={() => handleModerateSingle(report.id, 'duplicate')}
-                          className="px-2.5 py-1 rounded-lg bg-gray-700/50 hover:bg-gray-700 border border-white/10 text-gray-300 font-semibold transition-colors disabled:opacity-50"
-                          title="Mark Duplicate"
-                        >
-                          Duplicate
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/* Reports Table Component */}
+      <HazardTable
+        reports={paginatedReports}
+        totalMatchingCount={filteredReports.length}
+        isLoading={isLoading}
+        selectedIds={selectedIds}
+        allFilteredSelected={allFilteredSelected}
+        onToggleSelectAll={toggleSelectAllFiltered}
+        onToggleSelect={toggleSelectReport}
+        onInspectPhoto={(url) => setInspectedPhoto(url)}
+        onOpenAudit={(report) => setAuditTarget(report)}
+        onOpenResolve={(report) => openResolveModal(report)}
+        onModerateStatus={(id, status) => handleModerateSingle(id, status)}
+        moderatingId={moderatingId}
+        currentPage={currentPage}
+        pageSize={pageSize}
+        onPageChange={(p) => setCurrentPage(p)}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setCurrentPage(1);
+        }}
+      />
 
       {/* Floating Batch Action Bar */}
       {selectedIds.size > 0 && (
@@ -668,72 +451,14 @@ export const HazardsPage: React.FC = () => {
       )}
 
       {/* Resolution Notes Modal */}
-      <Modal
-        isOpen={Boolean(resolveTarget)}
+      <HazardResolutionModal
+        target={resolveTarget}
         onClose={() => setResolveTarget(null)}
-        title={`Resolve Hazard: ${resolveTarget?.title || ''}`}
-        maxWidth="lg"
-      >
-        <div className="space-y-4">
-          <p className="text-xs text-gray-400">
-            Document dispatch action, municipal maintenance report, or verification details for auditing and citizen visibility:
-          </p>
-
-          <div>
-            <label className="block text-xs font-mono text-gray-300 mb-1.5">
-              Resolution Notes (Optional)
-            </label>
-            <textarea
-              value={resolutionNotes}
-              onChange={(e) => setResolutionNotes(e.target.value)}
-              placeholder="e.g. Streetlight luminaire replaced by municipal electric dept. Tested operational."
-              rows={3}
-              className="w-full px-3.5 py-2.5 rounded-xl bg-obsidian-900 border border-white/10 focus:border-indigo-500 text-xs text-white placeholder-gray-500 outline-none resize-none"
-            />
-          </div>
-
-          {/* Quick preset chips */}
-          <div className="space-y-1.5">
-            <span className="text-[11px] font-mono text-gray-400">Quick Presets:</span>
-            <div className="flex flex-wrap gap-1.5">
-              {[
-                'Repaired by Municipal Maintenance crew',
-                'Hazard cleared & corridor verified safe',
-                'Lighting restored to standard intensity',
-                'Road obstacle removed by traffic police',
-                'False alarm / cleared on physical patrol',
-              ].map((preset) => (
-                <button
-                  key={preset}
-                  type="button"
-                  onClick={() => setResolutionNotes(preset)}
-                  className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 border border-white/5 text-[11px] text-gray-300 transition-colors"
-                >
-                  {preset}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2.5 pt-2 border-t border-white/10">
-            <button
-              onClick={() => setResolveTarget(null)}
-              disabled={submittingResolution}
-              className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 text-xs font-semibold transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleConfirmResolution}
-              disabled={submittingResolution}
-              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors flex items-center gap-1.5"
-            >
-              <CheckCircle className="w-3.5 h-3.5" />
-              <span>{submittingResolution ? 'Saving...' : 'Confirm Resolution'}</span>
-            </button>
-          </div>
-        </div>
-      </Modal>
+        notes={resolutionNotes}
+        onChangeNotes={setResolutionNotes}
+        onConfirm={handleConfirmResolution}
+        isSubmitting={submittingResolution}
+      />
 
       {/* Photo Inspector Modal */}
       <Modal
@@ -764,228 +489,33 @@ export const HazardsPage: React.FC = () => {
         )}
       </Modal>
 
-      {/* Manual Admin Hazard Pin Dispatch Modal (Task 13.11) */}
-      <Modal
+      {/* Manual Admin Hazard Pin Dispatch Modal */}
+      <HazardDispatchModal
         isOpen={showAddHazardModal}
         onClose={() => setShowAddHazardModal(false)}
-        title="Official City Hazard Pin Dispatch"
-        maxWidth="lg"
-      >
-        <form onSubmit={handleCreateAdminHazard} className="space-y-4">
-          <div>
-            <label className="block text-xs font-mono font-medium text-gray-300 mb-1">
-              Hazard Title *
-            </label>
-            <input
-              type="text"
-              required
-              value={newHazardTitle}
-              onChange={(e) => setNewHazardTitle(e.target.value)}
-              placeholder="e.g., Non-functional Streetlight, Open Trench"
-              className="w-full px-3 py-2 bg-obsidian-900 border border-white/10 rounded-xl text-white text-xs placeholder:text-gray-500 focus:outline-none focus:border-indigo-500 font-sans"
-            />
-          </div>
+        onSubmit={handleCreateAdminHazard}
+        title={newHazardTitle}
+        onChangeTitle={setNewHazardTitle}
+        category={newHazardCategory}
+        onChangeCategory={setNewHazardCategory}
+        severity={newHazardSeverity}
+        onChangeSeverity={setNewHazardSeverity}
+        latitude={newHazardLat}
+        onChangeLatitude={setNewHazardLat}
+        longitude={newHazardLng}
+        onChangeLongitude={setNewHazardLng}
+        description={newHazardDesc}
+        onChangeDescription={setNewHazardDesc}
+        isSubmitting={submittingHazard}
+      />
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-mono font-medium text-gray-300 mb-1">
-                Category *
-              </label>
-              <select
-                value={newHazardCategory}
-                onChange={(e) => setNewHazardCategory(e.target.value)}
-                className="w-full px-3 py-2 bg-obsidian-900 border border-white/10 rounded-xl text-white text-xs focus:outline-none focus:border-indigo-500 font-sans"
-              >
-                <option value="lighting">Poor Lighting</option>
-                <option value="road_hazard">Road Hazard</option>
-                <option value="waterlogging">Waterlogging</option>
-                <option value="isolated_area">Isolated Area</option>
-                <option value="traffic">Heavy Traffic</option>
-                <option value="other">Other Hazard</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-mono font-medium text-gray-300 mb-1">
-                Severity Level: <span className="text-amber-400 font-bold">{newHazardSeverity} / 5</span>
-              </label>
-              <input
-                type="range"
-                min="1"
-                max="5"
-                value={newHazardSeverity}
-                onChange={(e) => setNewHazardSeverity(parseInt(e.target.value, 10))}
-                className="w-full h-2 bg-obsidian-700 rounded-lg appearance-none cursor-pointer accent-indigo-500 mt-2"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-mono font-medium text-gray-300 mb-1">
-                Latitude *
-              </label>
-              <input
-                type="number"
-                step="any"
-                required
-                value={newHazardLat}
-                onChange={(e) => setNewHazardLat(e.target.value)}
-                className="w-full px-3 py-2 bg-obsidian-900 border border-white/10 rounded-xl text-white text-xs font-mono focus:outline-none focus:border-indigo-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-mono font-medium text-gray-300 mb-1">
-                Longitude *
-              </label>
-              <input
-                type="number"
-                step="any"
-                required
-                value={newHazardLng}
-                onChange={(e) => setNewHazardLng(e.target.value)}
-                className="w-full px-3 py-2 bg-obsidian-900 border border-white/10 rounded-xl text-white text-xs font-mono focus:outline-none focus:border-indigo-500"
-              />
-            </div>
-          </div>
-
-          {/* Quick Coordinate Helpers */}
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] text-gray-400 font-mono">Quick Set:</span>
-            <button
-              type="button"
-              onClick={() => {
-                setNewHazardLat('30.3165');
-                setNewHazardLng('78.0322');
-              }}
-              className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-[10px] text-indigo-300 font-mono border border-white/5"
-            >
-              📍 Dehradun City (30.3165, 78.0322)
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (navigator.geolocation) {
-                  navigator.geolocation.getCurrentPosition((pos) => {
-                    setNewHazardLat(pos.coords.latitude.toFixed(6));
-                    setNewHazardLng(pos.coords.longitude.toFixed(6));
-                  });
-                }
-              }}
-              className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-[10px] text-emerald-300 font-mono border border-white/5"
-            >
-              🎯 My Location
-            </button>
-          </div>
-
-          <div>
-            <label className="block text-xs font-mono font-medium text-gray-300 mb-1">
-              Description / Dispatch Directives (Optional)
-            </label>
-            <textarea
-              rows={3}
-              value={newHazardDesc}
-              onChange={(e) => setNewHazardDesc(e.target.value)}
-              placeholder="e.g., Reported by municipal field patrol; verified broken halogen street lamp near university campus road."
-              className="w-full px-3 py-2 bg-obsidian-900 border border-white/10 rounded-xl text-white text-xs placeholder:text-gray-500 focus:outline-none focus:border-indigo-500 font-sans"
-            />
-          </div>
-
-          <div className="flex justify-end gap-2.5 pt-2 border-t border-white/10">
-            <button
-              type="button"
-              onClick={() => setShowAddHazardModal(false)}
-              disabled={submittingHazard}
-              className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 text-xs font-semibold transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={submittingHazard}
-              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors flex items-center gap-1.5 disabled:opacity-50"
-            >
-              <PlusCircle className="w-3.5 h-3.5" />
-              <span>{submittingHazard ? 'Dispatching...' : 'Dispatch Hazard Pin'}</span>
-            </button>
-          </div>
-        </form>
-      </Modal>
-
-      {/* Community Confirmation & Reporter Audit Modal (Task 5.8) */}
-      <Modal
-        isOpen={Boolean(auditTarget)}
+      {/* Community Confirmation & Reporter Audit Modal */}
+      <HazardAuditModal
+        target={auditTarget}
         onClose={() => setAuditTarget(null)}
-        title="Community Verification & Reporter Audit"
-        maxWidth="lg"
-      >
-        {auditTarget && (
-          <div className="space-y-4 text-xs font-sans">
-            <div className="p-3 rounded-xl bg-obsidian-900 border border-white/10 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-white text-sm">{auditTarget.title}</span>
-                <Badge
-                  variant={
-                    auditTarget.status === 'active'
-                      ? 'warning'
-                      : auditTarget.status === 'resolved'
-                      ? 'success'
-                      : 'danger'
-                  }
-                  size="sm"
-                >
-                  {auditTarget.status}
-                </Badge>
-              </div>
-              <p className="text-gray-300">{auditTarget.description || 'No description provided.'}</p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 text-gray-300 font-mono">
-              <div className="p-2.5 rounded-lg bg-white/5 border border-white/5">
-                <span className="text-[10px] text-gray-500 block">REPORTER IDENTITY</span>
-                <span className="text-white font-semibold">{auditTarget.reporterName || 'SAFORA Citizen'}</span>
-              </div>
-              <div className="p-2.5 rounded-lg bg-white/5 border border-white/5">
-                <span className="text-[10px] text-gray-500 block">COMMUNITY CONFIRMATIONS</span>
-                <span className="text-emerald-400 font-bold text-sm">
-                  {auditTarget.confirmationsCount || 0} Citizens Verified
-                </span>
-              </div>
-              <div className="p-2.5 rounded-lg bg-white/5 border border-white/5">
-                <span className="text-[10px] text-gray-500 block">COORDINATES</span>
-                <span className="text-white">
-                  {auditTarget.latitude.toFixed(4)}, {auditTarget.longitude.toFixed(4)}
-                </span>
-              </div>
-              <div className="p-2.5 rounded-lg bg-white/5 border border-white/5">
-                <span className="text-[10px] text-gray-500 block">REPORTED TIMESTAMP</span>
-                <span className="text-white">
-                  {new Date(auditTarget.createdAt || Date.now()).toLocaleString('en-IN')}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center pt-2 border-t border-white/10">
-              <a
-                href={`https://maps.google.com/?q=${auditTarget.latitude},${auditTarget.longitude}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1 font-mono text-[11px]"
-              >
-                <MapPin className="w-3.5 h-3.5" /> View on Google Maps
-              </a>
-              <button
-                type="button"
-                onClick={() => setAuditTarget(null)}
-                className="px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-white font-semibold text-xs"
-              >
-                Close Audit
-              </button>
-            </div>
-          </div>
-        )}
-      </Modal>
+      />
     </div>
   );
 };
+
+export default HazardsPage;

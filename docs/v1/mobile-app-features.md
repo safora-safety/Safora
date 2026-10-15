@@ -47,15 +47,17 @@ Screen-by-screen, marking what's existing vs new/changed for V1.
 | **Server-side deviation alert** | **New** — if the phone-side countdown is missed (or the app is killed), the backend watchdog escalates automatically within about 60 seconds of the deviation (see `safety-algorithms.md` §4) |
 | Lost-contact / overdue-arrival alerts, check-in timer | **Not in V1** — V2 |
 | **Background tracking with screen locked** | **New (added 22 Sep 2026)** — a native foreground service (`architecture.md` §8) keeps location updates flowing when the screen locks, so the deviation watchdog stays reliable instead of silently degrading once the app backgrounds |
-| **Lock-screen audio during SOS** | **New, with an honest limitation** — works when SOS is triggered during an active Safe Walk (foreground service already running); when triggered with no active walk and the screen locked, the alert still sends GPS/battery but audio may not record — this is an Android platform restriction, not a bug (`architecture.md` §8b) |
+| **Lock-screen audio during SOS** | **New (Dual-Pipe Native Engine)** — runs via `SafeWalkService.kt` foreground service with `FOREGROUND_SERVICE_TYPE_MICROPHONE`. Concurrently slices 5s progressive WAV chunks over Socket.IO and saves local master WAV. Survives screen-off and Doze mode |
 | **Distance/ETA notification** | **New** — a persistent notification shows straight-line distance and a rough ETA during Safe Walk, refreshed per location update. **Not turn-by-turn navigation** — no per-step instructions or voice; that needs real per-mode routing, which is V2 (`MAP-4`/`MAP-5`) |
 
 ## SOS & Emergency Deterrent
 | Feature | Status |
 |---|---|
-| 5 s cancel countdown, GPS + battery + up to 30 s audio | Existing |
+| 5 s cancel countdown, GPS + battery dispatch | Existing (immediate 0s emergency broadcast) |
+| **Dual-Pipe Progressive Audio Streaming** | **New** — 16kHz PCM audio sliced in memory into 5s WAV chunks emitted live over Socket.IO (`sos:audio_chunk`) to Guardians & Admin, while simultaneously recording unbroken 30s local master file for Cloudinary archival |
+| **Fail-Safe Watchdog Archival** | **New** — if mobile phone is smashed or battery dies mid-stream, server 8s watchdog auto-stitches received slices and uploads partial evidence to Cloudinary |
 | **High-Decibel Siren Audio Deterrent** | **New** — 4-second multi-harmonic looping siren (`siren_alarm.wav`) playing at maximum hardware alarm volume (`STREAM_ALARM`) even when phone is on silent |
-| **Dual-Mode SOS Execution** | **New** — respecting `@safora_pref_loud_siren`: loud alarm deterrent vs stealth mode (silent 30s covert audio recording to Cloudinary) |
+| **Dual-Mode SOS Execution** | **New** — respecting `@safora_pref_loud_siren`: loud alarm deterrent vs stealth mode (silent progressive audio streaming to Cloudinary) |
 | **Personal Panic Siren Quick Card** | **New** — standalone 1-tap siren button on Home screen for immediate on-the-spot street harassment deterrence without triggering police/guardian dispatch |
 | Push to guardians (FCM) | Existing |
 | SMS/dialer fallback (manual tap) | Existing |
@@ -79,14 +81,17 @@ Chat, Hindi, voice/turn-by-turn navigation, safest-route ranking, safe-places ov
 
 | Feature | File(s) |
 |---|---|
-| Terms & age notice screen | New `screens/TermsScreen.tsx` (or fold into `OnboardingScreen.tsx`) |
+| Terms & age notice screen | `screens/TermsScreen.tsx`, gated in `navigation/RootNavigator.tsx` |
 | Safety score card fix | `screens/HomeScreen.tsx`, `services/reportService.ts` |
 | Heatmap wiring | `screens/MapScreen.tsx`, `screens/HomeScreen.tsx`, `components/OpenMapView.tsx` |
 | Photo picker | `components/ReportHazardModal.tsx` |
-| Public report identity removal | Backend only (`reportRepository.ts`) — no mobile change needed beyond confirming the app doesn't break if `userId`/`reporterName` are absent from the response (check `ReportCard` or equivalent rendering component doesn't crash on missing fields) |
-| Socket.IO connection | New `services/socketService.ts`, wired from wherever the app's root auth-state logic already lives |
-| Live guardian view | New screen/component, reuses `components/OpenMapView.tsx` |
-| Deviation confirm-safe prompt | `screens/SafeWalkScreen.tsx` (add the "Are you OK?" prompt calling the new `confirm-safe` endpoint) |
+| Public report identity removal | Backend only (`reportRepository.ts`, `reportController.ts`) |
+| Socket.IO connection | `services/socketService.ts`, initialized on login |
+| Live guardian view | `screens/GuardianLiveScreen.tsx`, reuses `components/OpenMapView.tsx` |
+| Deviation confirm-safe prompt | `screens/SafeWalkScreen.tsx` ("Are you OK?" prompt calling `confirm-safe`) |
+| Foreground Safe Walk service | Native Kotlin `android/app/src/main/java/com/mobile/SafeWalkService.kt` |
+| Dual-Pipe Audio Streaming | `SafeWalkService.kt`, `SafeWalkServiceModule.kt`, `services/audioRecorderService.ts`, `services/socketService.ts` |
+| Emergency Siren & Panic Button | `services/sirenService.ts`, `screens/HomeScreen.tsx`, `screens/SettingsScreen.tsx` |
 | Copy corrections | `screens/HomeScreen.tsx`, `screens/OnboardingScreen.tsx`, SOS success/failure screens |
 
 ## Component-level notes for the agent

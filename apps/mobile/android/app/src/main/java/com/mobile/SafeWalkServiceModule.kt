@@ -13,6 +13,8 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.modules.core.DeviceEventManagerModule
+import java.lang.ref.WeakReference
 
 class SafeWalkServiceModule(private val reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext), TextToSpeech.OnInitListener {
@@ -44,7 +46,22 @@ class SafeWalkServiceModule(private val reactContext: ReactApplicationContext) :
         "कोई बात हो तो तुरंत बताना, मैं यहीं बाहर खड़ा हूँ।"
     )
 
+    companion object {
+        private var reactContextRef: WeakReference<ReactApplicationContext>? = null
+
+        fun emitEvent(eventName: String, params: Any?) {
+            try {
+                reactContextRef?.get()
+                    ?.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                    ?.emit(eventName, params)
+            } catch (e: Exception) {
+                android.util.Log.w("SafeWalkServiceModule", "Failed to emit $eventName: ${e.message}")
+            }
+        }
+    }
+
     init {
+        reactContextRef = WeakReference(reactContext)
         try {
             tts = TextToSpeech(reactContext, this)
         } catch (_: Exception) {}
@@ -321,6 +338,11 @@ class SafeWalkServiceModule(private val reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun recordSosAudio(alertId: String, promise: Promise) {
+        startEmergencyAudio(alertId, promise)
+    }
+
+    @ReactMethod
+    fun startEmergencyAudio(alertId: String, promise: Promise) {
         try {
             val intent = Intent(reactContext, SafeWalkService::class.java).apply {
                 action = SafeWalkService.ACTION_RECORD_AUDIO
@@ -333,7 +355,20 @@ class SafeWalkServiceModule(private val reactContext: ReactApplicationContext) :
             }
             promise.resolve(true)
         } catch (e: Exception) {
-            promise.reject("AUDIO_ERROR", e.message, e)
+            promise.reject("AUDIO_START_ERROR", e.message, e)
+        }
+    }
+
+    @ReactMethod
+    fun stopEmergencyAudio(promise: Promise) {
+        try {
+            val intent = Intent(reactContext, SafeWalkService::class.java).apply {
+                action = SafeWalkService.ACTION_STOP_AUDIO
+            }
+            reactContext.startService(intent)
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("AUDIO_STOP_ERROR", e.message, e)
         }
     }
 

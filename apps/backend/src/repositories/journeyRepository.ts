@@ -185,9 +185,19 @@ export class JourneyRepository {
     return result.rows;
   }
 
+  static async countAll(status?: string): Promise<number> {
+    const query = status
+      ? "SELECT COUNT(*) FROM journeys WHERE status = $1;"
+      : "SELECT COUNT(*) FROM journeys;";
+    const params = status ? [status] : [];
+    const result = await db.query(query, params);
+    return parseInt(result.rows[0]?.count || "0", 10);
+  }
+
   static async findAll(
     limit = 100,
     status?: string,
+    offset = 0,
   ): Promise<
     Array<
       JourneyRow & {
@@ -207,16 +217,15 @@ export class JourneyRepository {
          LEFT JOIN users u ON j.user_id = u.id
          WHERE j.status = $2
          ORDER BY j.started_at DESC
-         LIMIT $1;`
+         LIMIT $1 OFFSET $3;`
       : `SELECT j.*, u.name as user_name, u.phone as user_phone, u.email as user_email,
                 ST_Y(j.last_location::geometry) as last_lat,
                 ST_X(j.last_location::geometry) as last_lng
          FROM journeys j
          LEFT JOIN users u ON j.user_id = u.id
          ORDER BY j.started_at DESC
-         LIMIT $1;`;
-    const params: any[] = [limit];
-    if (status) params.push(status);
+         LIMIT $1 OFFSET $2;`;
+    const params: any[] = status ? [limit, status, offset] : [limit, offset];
     const result = await db.query(query, params);
     return result.rows;
   }

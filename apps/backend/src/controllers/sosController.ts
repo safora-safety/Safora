@@ -159,11 +159,25 @@ export async function getNotifications(
   try {
     if (!req.user) throw new AppError("Unauthorized", 401);
 
-    const notifications = await SosService.getNotifications(req.user.id);
+    const limit = Math.min(100, parseInt(String(req.query.limit || "50"), 10));
+    const page = parseInt(String(req.query.page || "1"), 10);
+    const offset = Math.max(0, (page - 1) * limit);
+
+    const { notifications, totalCount } =
+      await SosService.getNotificationsPaginated(req.user.id, limit, offset);
+
     res.status(200).json({
       success: true,
       count: notifications.length,
       notifications,
+      pagination: {
+        page,
+        limit,
+        totalCount,
+        totalPages: Math.ceil(totalCount / limit) || 1,
+        hasNextPage: page * limit < totalCount,
+        hasPrevPage: page > 1,
+      },
     });
   } catch (err) {
     next(err);
@@ -236,16 +250,33 @@ export async function attachAudio(
 }
 
 export async function getAlerts(
-  _req: AuthenticatedRequest,
+  req: AuthenticatedRequest,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
   try {
-    const alerts = await SosService.getAllAlerts();
+    const limit = Math.min(200, parseInt(String(req.query.limit || "100"), 10));
+    const page = parseInt(String(req.query.page || "1"), 10);
+    const offset = Math.max(0, (page - 1) * limit);
+    const status = req.query.status as string | undefined;
+
+    const { alerts, totalCount } = await SosService.getAllAlertsPaginated(
+      limit,
+      offset,
+      status,
+    );
     res.status(200).json({
       success: true,
       count: alerts.length,
       alerts,
+      pagination: {
+        page,
+        limit,
+        totalCount,
+        totalPages: Math.ceil(totalCount / limit) || 1,
+        hasNextPage: page * limit < totalCount,
+        hasPrevPage: page > 1,
+      },
     });
   } catch (err) {
     next(err);

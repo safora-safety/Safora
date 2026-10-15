@@ -6,7 +6,7 @@
 |---|---|
 | Login | Existing |
 | Dashboard (map + KPIs) | **Interactive (V1)** — all StatCards clickable with module navigation; live API latency ping measured in ms; priority queue click-through |
-| SOS Alerts (queue, status, audio playback) | **Changed** — shows watchdog-triggered alerts (`source='watchdog'`) alongside manual triggers; real-time audio playback |
+| SOS Alerts (queue, status, audio playback) | **Live (V1)** — shows watchdog alerts (`source='watchdog'`); Web Audio API progressive 5s chunk queue player with real-time badges (`LIVE STREAMING CHUNK #N/6`) and automatic transition to Cloudinary archival scrubber |
 | Hazards (filters, moderation) | **Interactive (V1)** — KPI StatCards filter table; "Add Resolution Notes" modal dialog with quick municipal preset chips; batch checkboxes with floating action bar |
 | Safe Walks radar | **Interactive (V1)** — sample-data fallback removed (SEC-9); KPI StatCards and filter pills; "🗺️ View Corridor" modal with direct Google Maps/OSM navigation links; direct "📞 Call Walker" callback |
 | Analytics | Existing |
@@ -27,7 +27,8 @@ Campus/organisation scoping, dispatch workflow (assign responder, call-back log)
 |---|---|
 | Remove sample-journey fallback | `apps/frontend/src/services/journeyService.ts` — delete `getMockActiveJourneys` and its call site |
 | Empty/error states for Safe Walks radar | `apps/frontend/src/pages/SafeWalksPage.tsx` |
-| Watchdog-sourced SOS alerts appear in the queue | No admin code change needed — `apps/frontend/src/pages/SosAlertsPage.tsx` already reads from `sos_alerts`/`GET /api/sos/alerts`, which now also contains `source='watchdog'` rows from the backend change in `tasks.md` #7. Confirm the UI doesn't assume `source` is always `'manual'` anywhere (e.g. an icon or label keyed off source) |
+| Watchdog-sourced SOS alerts appear in the queue | `apps/frontend/src/pages/SosAlertsPage.tsx` already reads from `sos_alerts`/`GET /api/sos/alerts`, which contains `source='watchdog'` rows |
+| Progressive live audio queue & real-time badge | `apps/frontend/src/context/SocketContext.tsx` (ordered Web Audio API queue decoding `sos:live_audio_chunk`), `apps/frontend/src/pages/SosAlertsPage.tsx` (live chunk badges #1..6 and player) |
 | Hazard identity still visible to staff | No change — `apps/frontend/src/pages/HazardsPage.tsx` already calls staff-guarded endpoints, which keep full `StaffReportDto` identity per `tasks.md` #2 |
 
 ## Exact pseudocode for the sample-data removal

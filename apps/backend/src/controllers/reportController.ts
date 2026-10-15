@@ -50,14 +50,22 @@ export async function getReports(
 ): Promise<void> {
   try {
     const limit = parseInt(req.query.limit as string, 10) || 500;
+    const page = parseInt(req.query.page as string, 10) || 1;
+    const offset = Math.max(0, (page - 1) * limit);
     const authReq = req as AuthenticatedRequest;
     const isStaff =
       authReq.user &&
       (authReq.user.role === "admin" || authReq.user.role === "moderator");
     const statusQuery = req.query.status as string | undefined;
     const status = statusQuery || (isStaff ? undefined : "active");
+    const category = req.query.category as string | undefined;
 
-    const reports = await ReportService.getReports(limit, status);
+    const { reports, totalCount } = await ReportService.getReportsPaginated(
+      limit,
+      status,
+      offset,
+      category,
+    );
     const formatted = isStaff
       ? reports.map(ReportModel.toStaff)
       : reports.map(ReportModel.toPublic);
@@ -66,6 +74,14 @@ export async function getReports(
       success: true,
       count: formatted.length,
       reports: formatted,
+      pagination: {
+        page,
+        limit,
+        totalCount,
+        totalPages: Math.ceil(totalCount / limit) || 1,
+        hasNextPage: page * limit < totalCount,
+        hasPrevPage: page > 1,
+      },
     });
   } catch (err) {
     next(err);

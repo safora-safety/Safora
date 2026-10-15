@@ -12,8 +12,8 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { useTheme } from '../theme/ThemeContext';
-import { useAuthStore } from '../store/authStore';
+import { useTheme } from '../../theme/ThemeContext';
+import { useAuthStore } from '../../store/authStore';
 
 interface EditProfileModalProps {
   visible: boolean;
@@ -450,3 +450,5 @@ const styles = StyleSheet.create({
   saveBtnDisabled: { opacity: 0.6 },
   saveBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
 });
+
+export default EditProfileModal;
