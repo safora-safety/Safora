@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { sosService, AdminSosAlert } from '../services/sosService';
-import { useSocket } from '../context/SocketContext';
+import { useSocket, LiveAudioChunk } from '../context/SocketContext';
 import { Badge } from '../components/common/Badge';
 import { AudioPlayer } from '../components/common/AudioPlayer';
 import {
@@ -12,6 +12,10 @@ import {
   RefreshCw,
   ExternalLink,
   Volume2,
+  VolumeX,
+  Play,
+  Pause,
+  Radio,
   ShieldAlert,
 } from 'lucide-react';
 
@@ -19,7 +23,27 @@ export const SosAlertsPage: React.FC = () => {
   const [alerts, setAlerts] = useState<AdminSosAlert[]>([]);
   const [selectedAlert, setSelectedAlert] = useState<AdminSosAlert | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const { socket, activeEmergency, latestLiveAudioChunk } = useSocket();
+  const [playingChunkSeq, setPlayingChunkSeq] = useState<number | null>(null);
+  const activeChunkAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const {
+    socket,
+    activeEmergency,
+    latestLiveAudioChunk,
+    liveAudioChunksByAlert,
+    joinAlertRoom,
+    leaveAlertRoom,
+    unlockAudio,
+  } = useSocket();
+
+  // Automatically join the alert's dedicated room so 5s live audio slices stream directly
+  useEffect(() => {
+    if (!selectedAlert?.id) return;
+    joinAlertRoom(selectedAlert.id);
+    return () => {
+      leaveAlertRoom(selectedAlert.id);
+    };
+  }, [selectedAlert?.id]);
 
   const loadAlerts = async (silent = false) => {
     if (!silent) setIsLoading(true);
@@ -381,44 +405,165 @@ export const SosAlertsPage: React.FC = () => {
               </div>
 
               {/* Ambient Audio Evidence (Live Streaming Slices or Final Master Recording) */}
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-mono uppercase tracking-wider text-gray-400 font-semibold">
+                  <span className="text-xs font-mono uppercase tracking-wider text-gray-400 font-semibold flex items-center gap-1.5">
+                    <Radio className="w-3.5 h-3.5 text-red-400" />
                     Ambient Audio Evidence
                   </span>
-                  {latestLiveAudioChunk &&
-                    String(latestLiveAudioChunk.alertId) ===
-                      String(selectedAlert.id) &&
-                    !selectedAlert.audioUrl && (
-                      <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-950/80 border border-red-500/50 text-[11px] font-bold text-red-200">
-                        <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
-                        LIVE STREAMING CHUNK #{latestLiveAudioChunk.seq}/
-                        {latestLiveAudioChunk.totalChunksExpected || 6}
-                      </span>
-                    )}
+
+                  {(() => {
+                    const alertChunks = liveAudioChunksByAlert[String(selectedAlert.id)] || [];
+                    const isStreaming = !selectedAlert.audioUrl && (
+                      (latestLiveAudioChunk && String(latestLiveAudioChunk.alertId) === String(selectedAlert.id)) ||
+                      alertChunks.length > 0
+                    );
+                    const currentSeq = alertChunks.length > 0
+                      ? alertChunks[alertChunks.length - 1].seq
+                      : (latestLiveAudioChunk?.seq || 1);
+
+                    if (isStreaming) {
+                      return (
+                        <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-950/80 border border-red-500/50 text-[11px] font-bold text-red-200 shadow-md">
+                          <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                          LIVE STREAMING CHUNK #{currentSeq}/6
+                        </span>
+                      );
+                    }
+                    if (selectedAlert.audioUrl) {
+                      return (
+                        <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-950/60 border border-emerald-500/40 text-[10px] font-mono text-emerald-300 font-bold">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                          30s Master Archival Complete
+                        </span>
+                      );
+                    }
+                    return null;
+                  })()}
                 </div>
 
-                {latestLiveAudioChunk &&
-                  String(latestLiveAudioChunk.alertId) ===
-                    String(selectedAlert.id) &&
-                  !selectedAlert.audioUrl && (
-                    <div className="p-3 rounded-xl bg-red-950/40 border border-red-500/30 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Volume2 className="w-4 h-4 text-red-400 animate-pulse" />
-                        <span className="text-xs text-red-200">
-                          Playing 5-second ambient audio slices in real time
-                        </span>
-                      </div>
-                      <span className="text-[10px] font-mono text-red-300">
-                        Buffer: {latestLiveAudioChunk.seq * 5}s / 30s
-                      </span>
-                    </div>
-                  )}
+                {/* Live 5-Second Slices Player (Visible during real-time emergency) */}
+                {(() => {
+                  const alertChunks = liveAudioChunksByAlert[String(selectedAlert.id)] || [];
+                  const isLiveStreamActive = !selectedAlert.audioUrl && (
+                    (latestLiveAudioChunk && String(latestLiveAudioChunk.alertId) === String(selectedAlert.id)) ||
+                    alertChunks.length > 0
+                  );
 
-                <AudioPlayer
-                  audioUrl={selectedAlert.audioUrl || undefined}
-                  title={`SOS Ambient Recording — ${selectedAlert.userName || 'Citizen'}`}
-                />
+                  if (!isLiveStreamActive && !selectedAlert.audioUrl) {
+                    return (
+                      <AudioPlayer
+                        audioUrl={undefined}
+                        title={`SOS Ambient Recording — ${selectedAlert.userName || 'Citizen'}`}
+                      />
+                    );
+                  }
+
+                  if (isLiveStreamActive && !selectedAlert.audioUrl) {
+                    const bufferedSec = Math.min(30, alertChunks.length * 5);
+                    const progressPercent = Math.min(100, Math.round((bufferedSec / 30) * 100));
+
+                    const playChunk = (chunk: LiveAudioChunk) => {
+                      unlockAudio();
+                      if (activeChunkAudioRef.current) {
+                        activeChunkAudioRef.current.pause();
+                        activeChunkAudioRef.current = null;
+                      }
+
+                      if (playingChunkSeq === chunk.seq) {
+                        setPlayingChunkSeq(null);
+                        return;
+                      }
+
+                      const audio = new Audio(`data:${chunk.mimeType || 'audio/wav'};base64,${chunk.data}`);
+                      activeChunkAudioRef.current = audio;
+                      setPlayingChunkSeq(chunk.seq);
+                      audio.onended = () => setPlayingChunkSeq(null);
+                      audio.onerror = () => setPlayingChunkSeq(null);
+                      audio.play().catch(() => setPlayingChunkSeq(null));
+                    };
+
+                    return (
+                      <div className="p-4 rounded-xl bg-red-950/30 border border-red-500/30 space-y-3 shadow-xl">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Volume2 className="w-4 h-4 text-red-400 animate-pulse" />
+                            <span className="text-xs font-bold text-red-200">
+                              Real-Time 5s Ambient Audio Streaming
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => {
+                              unlockAudio();
+                              if (alertChunks.length > 0) {
+                                playChunk(alertChunks[alertChunks.length - 1]);
+                              }
+                            }}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[11px] font-bold transition-all shadow-md active:scale-95"
+                          >
+                            <Volume2 className="w-3.5 h-3.5" />
+                            <span>Listen Live Feed</span>
+                          </button>
+                        </div>
+
+                        {/* Real-time buffer bar */}
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-[10px] font-mono text-red-300">
+                            <span>Live Ingested Buffer: {bufferedSec}s / 30s</span>
+                            <span>{progressPercent}% Complete</span>
+                          </div>
+                          <div className="w-full h-2 rounded-full bg-black/50 overflow-hidden border border-white/5">
+                            <div
+                              className="h-full bg-gradient-to-r from-red-600 to-amber-500 transition-all duration-500"
+                              style={{ width: `${progressPercent}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Interactive Slices Pills: Allows Dispatcher to play each 5-second slice individually */}
+                        {alertChunks.length > 0 && (
+                          <div className="pt-1">
+                            <div className="text-[10px] font-mono text-gray-400 mb-1.5 uppercase tracking-wider">
+                              Received 5s Audio Slices (Click to listen):
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {alertChunks.map((chunk) => {
+                                const isCurrentlyPlaying = playingChunkSeq === chunk.seq;
+                                return (
+                                  <button
+                                    key={chunk.seq}
+                                    onClick={() => playChunk(chunk)}
+                                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-mono font-semibold transition-all border ${
+                                      isCurrentlyPlaying
+                                        ? 'bg-red-600 text-white border-red-400 shadow-md animate-pulse'
+                                        : 'bg-obsidian-800 hover:bg-obsidian-700 text-red-200 border-red-500/20'
+                                    }`}
+                                  >
+                                    {isCurrentlyPlaying ? (
+                                      <Pause className="w-3 h-3 text-white" />
+                                    ) : (
+                                      <Play className="w-3 h-3 text-red-400" />
+                                    )}
+                                    <span>
+                                      Slice #{chunk.seq} ({(chunk.seq - 1) * 5}-{chunk.seq * 5}s)
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <AudioPlayer
+                      audioUrl={selectedAlert.audioUrl || undefined}
+                      title={`SOS Ambient Recording — ${selectedAlert.userName || 'Citizen'}`}
+                    />
+                  );
+                })()}
               </div>
             </div>
           ) : (
