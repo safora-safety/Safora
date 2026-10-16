@@ -5,11 +5,13 @@ import {
   View,
   Text,
   TouchableOpacity,
+  AppState,
 } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import { notificationService } from './src/services/notificationService';
+import { ensureSocketConnected } from './src/services/socketService';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -68,6 +70,17 @@ function AppContent(): React.JSX.Element {
 
   useEffect(() => {
     notificationService.initialize();
+    ensureSocketConnected().catch(() => {});
+
+    const subscription = AppState.addEventListener('change', nextState => {
+      if (nextState === 'active') {
+        ensureSocketConnected().catch(() => {});
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
   }, []);
 
   return (

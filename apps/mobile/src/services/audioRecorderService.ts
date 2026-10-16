@@ -131,7 +131,7 @@ export class AudioRecorderService {
       await this.stopSilent();
 
       // Pre-warm Socket.IO connection immediately so pipe is hot before first 5s slice
-      ensureSocketConnected().catch(() => {});
+      await ensureSocketConnected(3000).catch(() => {});
 
       currentPipelineAlertId = alertId || null;
       if (alertId) {

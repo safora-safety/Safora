@@ -37,50 +37,133 @@ interface SocketContextType {
   joinAlertRoom: (alertId: string | number) => void;
   leaveAlertRoom: (alertId: string | number) => void;
   unlockAudio: () => void;
+  isAudioUnlocked: boolean;
 }
 
 const SocketContext = createContext<SocketContextType | undefined>(undefined);
 
-// In-memory ordered audio queue for continuous progressive playback
+function base64ToArrayBuffer(base64: string): ArrayBuffer {
+  const binaryString = window.atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+interface QueuedAudioChunk {
+  seq: number;
+  data: string;
+  mimeType: string;
+  buffer?: AudioBuffer | null;
+}
+
 let webAudioContext: AudioContext | null = null;
-const audioQueue: { seq: number; dataUri: string }[] = [];
+const audioQueue: QueuedAudioChunk[] = [];
 let isPlayingFromQueue = false;
+let currentBufferSource: AudioBufferSourceNode | null = null;
 let currentHtml5Audio: HTMLAudioElement | null = null;
 
 function getWebAudioContext(): AudioContext {
   if (!webAudioContext || webAudioContext.state === 'closed') {
     webAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
   }
-  if (webAudioContext.state === 'suspended') {
-    webAudioContext.resume().catch(() => {});
-  }
   return webAudioContext;
 }
 
-function unlockBrowserAudio() {
+function unlockBrowserAudio(): boolean {
   try {
     const ctx = getWebAudioContext();
     if (ctx.state === 'suspended') {
-      ctx.resume().catch(() => {});
+      ctx.resume().then(() => {
+        console.log('[SocketContext] AudioContext successfully resumed & unlocked');
+        if (audioQueue.length > 0 && !isPlayingFromQueue) {
+          processAudioQueue();
+        }
+      }).catch(() => {});
+    } else {
+      if (audioQueue.length > 0 && !isPlayingFromQueue) {
+        processAudioQueue();
+      }
     }
-  } catch {}
+    return ctx.state === 'running';
+  } catch {
+    return false;
+  }
 }
 
-function processAudioQueue() {
+// Global user interaction listener to automatically unlock audio as soon as admin clicks anywhere
+if (typeof window !== 'undefined') {
+  const handleUserGesture = () => {
+    unlockBrowserAudio();
+  };
+  window.addEventListener('click', handleUserGesture, { passive: true });
+  window.addEventListener('keydown', handleUserGesture, { passive: true });
+  window.addEventListener('touchstart', handleUserGesture, { passive: true });
+}
+
+async function processAudioQueue() {
   if (audioQueue.length === 0) {
     isPlayingFromQueue = false;
     return;
   }
 
+  const ctx = getWebAudioContext();
+
+  // If AudioContext is suspended, attempt to resume. If blocked by browser, preserve queue until user interacts!
+  if (ctx.state === 'suspended') {
+    try {
+      await ctx.resume();
+    } catch {}
+    if (ctx.state === 'suspended') {
+      console.warn('[SocketContext] AudioContext suspended waiting for user gesture — preserving chunks in queue');
+      isPlayingFromQueue = false;
+      return;
+    }
+  }
+
   isPlayingFromQueue = true;
   const nextItem = audioQueue.shift()!;
+
   try {
+    if (currentBufferSource) {
+      try { currentBufferSource.stop(); } catch {}
+      currentBufferSource = null;
+    }
     if (currentHtml5Audio) {
       currentHtml5Audio.pause();
       currentHtml5Audio = null;
     }
 
-    const audio = new Audio(nextItem.dataUri);
+    // Pipe 1: Web Audio API AudioBuffer playback (gapless, no autoplay restriction once context is running)
+    let buffer = nextItem.buffer;
+    if (!buffer) {
+      try {
+        const rawBuf = base64ToArrayBuffer(nextItem.data);
+        buffer = await ctx.decodeAudioData(rawBuf);
+      } catch (decodeErr) {
+        console.warn(`[SocketContext] Web Audio decoding failed for chunk #${nextItem.seq}:`, decodeErr);
+      }
+    }
+
+    if (buffer) {
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(ctx.destination);
+      currentBufferSource = source;
+
+      source.onended = () => {
+        currentBufferSource = null;
+        processAudioQueue();
+      };
+      source.start(0);
+      return;
+    }
+
+    // Pipe 2: HTML5 Audio element fallback
+    const dataUri = `data:${nextItem.mimeType || 'audio/wav'};base64,${nextItem.data}`;
+    const audio = new Audio(dataUri);
     currentHtml5Audio = audio;
     audio.onended = () => {
       currentHtml5Audio = null;
@@ -90,13 +173,11 @@ function processAudioQueue() {
       currentHtml5Audio = null;
       processAudioQueue();
     };
-    audio.play().catch(err => {
-      console.warn('[SocketContext] Autoplay blocked, will retry on click:', err);
-      currentHtml5Audio = null;
-      processAudioQueue();
-    });
+    await audio.play();
   } catch (err) {
-    console.warn('[SocketContext] Error playing queued audio chunk:', err);
+    console.warn(`[SocketContext] Error playing queued audio chunk #${nextItem.seq}:`, err);
+    currentBufferSource = null;
+    currentHtml5Audio = null;
     processAudioQueue();
   }
 }
@@ -106,8 +187,22 @@ async function enqueueAndPlayChunk(chunk: LiveAudioChunk) {
     const soundEnabled = localStorage.getItem('safora_sound_alerts') !== 'false';
     if (!soundEnabled || !chunk.data) return;
 
-    const dataUri = `data:${chunk.mimeType || 'audio/wav'};base64,${chunk.data}`;
-    audioQueue.push({ seq: chunk.seq, dataUri });
+    // Pre-decode audio buffer in background for instant gapless playback
+    let decodedBuffer: AudioBuffer | null = null;
+    try {
+      const ctx = getWebAudioContext();
+      if (ctx.state === 'running') {
+        const rawBuf = base64ToArrayBuffer(chunk.data);
+        decodedBuffer = await ctx.decodeAudioData(rawBuf);
+      }
+    } catch {}
+
+    audioQueue.push({
+      seq: chunk.seq,
+      data: chunk.data,
+      mimeType: chunk.mimeType || 'audio/wav',
+      buffer: decodedBuffer,
+    });
     audioQueue.sort((a, b) => a.seq - b.seq);
 
     if (!isPlayingFromQueue) {
@@ -125,6 +220,24 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [activeEmergency, setActiveEmergency] = useState<InboundSosAlert | null>(null);
   const [latestLiveAudioChunk, setLatestLiveAudioChunk] = useState<LiveAudioChunk | null>(null);
   const [liveAudioChunksByAlert, setLiveAudioChunksByAlert] = useState<Record<string, LiveAudioChunk[]>>({});
+  const [isAudioUnlocked, setIsAudioUnlocked] = useState(false);
+
+  useEffect(() => {
+    const checkState = () => {
+      if (webAudioContext && webAudioContext.state === 'running') {
+        setIsAudioUnlocked(true);
+      }
+    };
+    checkState();
+    const timer = setInterval(checkState, 1500);
+    window.addEventListener('click', checkState, { passive: true });
+    window.addEventListener('keydown', checkState, { passive: true });
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('click', checkState);
+      window.removeEventListener('keydown', checkState);
+    };
+  }, []);
 
   useEffect(() => {
     const s = socketService.connect(token);
@@ -221,6 +334,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const unlockAudio = () => {
     unlockBrowserAudio();
+    setIsAudioUnlocked(true);
   };
 
   const broadcastTestSos = async (lat: number, lng: number) => {
@@ -245,6 +359,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         joinAlertRoom,
         leaveAlertRoom,
         unlockAudio,
+        isAudioUnlocked,
       }}
     >
       {children}
