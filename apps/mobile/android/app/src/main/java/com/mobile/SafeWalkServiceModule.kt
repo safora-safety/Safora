@@ -370,6 +370,20 @@ class SafeWalkServiceModule(private val reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
+    fun updateEmergencyAlertId(alertId: String, promise: Promise) {
+        try {
+            val intent = Intent(reactContext, SafeWalkService::class.java).apply {
+                action = SafeWalkService.ACTION_UPDATE_ALERT_ID
+                putExtra(SafeWalkService.EXTRA_ALERT_ID, alertId)
+            }
+            reactContext.startService(intent)
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.resolve(false)
+        }
+    }
+
+    @ReactMethod
     fun stopEmergencyAudio(promise: Promise) {
         try {
             val intent = Intent(reactContext, SafeWalkService::class.java).apply {

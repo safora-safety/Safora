@@ -24,6 +24,8 @@ let chunkSubscription: any = null;
 let masterCompletionSubscription: any = null;
 let failureSubscription: any = null;
 const pendingChunkBuffer: any[] = [];
+let pendingMasterUpload: { alertId: string | number; filePath: string } | null =
+  null;
 
 const TOTAL_DURATION_SEC = 30;
 const PENDING_SOS_AUDIO_KEY = '@safora_pending_sos_audio';
@@ -127,15 +129,19 @@ export class AudioRecorderService {
         return false;
       }
 
-      // Stop any existing session
-      await this.stopSilent();
+      // Stop any previously running session safely
+      if (isRecording) {
+        await this.stopSilent();
+      }
 
-      // Pre-warm Socket.IO connection immediately so pipe is hot before first 5s slice
-      await ensureSocketConnected(3000).catch(() => {});
+      // Pre-warm Socket.IO connection in background (non-blocking)
+      ensureSocketConnected(4000).catch(() => {});
 
-      currentPipelineAlertId = alertId || null;
-      if (alertId) {
-        joinSosAlertRoom(alertId);
+      if (alertId && alertId !== 'emergency' && alertId !== 'sos_emergency') {
+        currentPipelineAlertId = alertId;
+      }
+      if (currentPipelineAlertId) {
+        joinSosAlertRoom(currentPipelineAlertId);
       }
 
       // 1. Listen for native 5s audio slice events (Pipe 1)
@@ -191,13 +197,27 @@ export class AudioRecorderService {
           console.log(
             `[AudioRecorder] Native master audio completed for alert ${targetAlertId} (${filePath}, success=${success}, bytes=${bytesRecorded})`,
           );
-          if (success && filePath && targetAlertId) {
-            await AudioRecorderService.uploadAndAttachMaster(
-              targetAlertId,
-              filePath,
-            );
+
+          if (success && filePath) {
+            if (
+              targetAlertId &&
+              targetAlertId !== 'emergency' &&
+              targetAlertId !== 'sos_emergency'
+            ) {
+              await AudioRecorderService.uploadAndAttachMaster(
+                targetAlertId,
+                filePath,
+              );
+              AudioRecorderService.cleanupPipeline();
+            } else {
+              console.log(
+                `[AudioRecorder] Master audio ready (${filePath}) but alert ID still pending. Stashing upload for when setAlertId resolves.`,
+              );
+              pendingMasterUpload = { alertId: '', filePath };
+            }
+          } else {
+            AudioRecorderService.cleanupPipeline();
           }
-          AudioRecorderService.cleanupPipeline();
         },
       );
 
@@ -247,13 +267,14 @@ export class AudioRecorderService {
         NativeModules.SafeWalkService?.startEmergencyAudio
       ) {
         try {
-          await NativeModules.SafeWalkService.startEmergencyAudio(
-            String(alertId || 'sos_emergency'),
+          const nativeId = String(
+            currentPipelineAlertId || alertId || 'sos_emergency',
           );
+          await NativeModules.SafeWalkService.startEmergencyAudio(nativeId);
           isNativeAudioActive = true;
           isRecording = true;
           console.log(
-            `[AudioRecorder] Dual-sink native audio started for alert ${alertId}`,
+            `[AudioRecorder] Dual-sink native audio started for alert ${nativeId}`,
           );
         } catch (nativeErr) {
           console.warn(
@@ -300,6 +321,17 @@ export class AudioRecorderService {
     if (!alertId) return;
     currentPipelineAlertId = alertId;
     joinSosAlertRoom(alertId);
+
+    // Notify native Android service so any subsequent chunks/master completion carry real alertId
+    if (
+      Platform.OS === 'android' &&
+      NativeModules.SafeWalkService?.updateEmergencyAlertId
+    ) {
+      NativeModules.SafeWalkService.updateEmergencyAlertId(
+        String(alertId),
+      ).catch(() => {});
+    }
+
     console.log(
       `[AudioRecorder] Pipeline associated with alert ID: ${alertId}. Flushing ${pendingChunkBuffer.length} buffered chunk(s)...`,
     );
@@ -316,6 +348,20 @@ export class AudioRecorderService {
           alertId,
         });
       }
+    }
+
+    // Flush pending master upload if recording finished before alert ID arrived
+    if (pendingMasterUpload && pendingMasterUpload.filePath) {
+      const { filePath } = pendingMasterUpload;
+      pendingMasterUpload = null;
+      console.log(
+        `[AudioRecorder] Alert ID now known (${alertId}). Uploading pending master audio: ${filePath}`,
+      );
+      AudioRecorderService.uploadAndAttachMaster(alertId, filePath).finally(
+        () => {
+          AudioRecorderService.cleanupPipeline();
+        },
+      );
     }
   }
 
@@ -410,7 +456,6 @@ export class AudioRecorderService {
    */
   static async stopSilent(): Promise<void> {
     if (!isRecording) {
-      this.cleanupPipeline();
       return;
     }
 
@@ -457,8 +502,10 @@ export class AudioRecorderService {
       failureSubscription.remove();
       failureSubscription = null;
     }
+    isRecording = false;
     isNativeAudioActive = false;
     currentPipelineAlertId = null;
+    pendingMasterUpload = null;
     pendingChunkBuffer.length = 0;
     AsyncStorage.removeItem(PENDING_SOS_AUDIO_KEY).catch(() => {});
   }
