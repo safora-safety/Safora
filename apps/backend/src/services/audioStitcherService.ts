@@ -133,28 +133,20 @@ export class AudioStitcherService {
     }
 
     if (params.isLast) {
-      // Mobile signaled natural end of 30s recording.
-      // Phone is now writing master WAV header and uploading full ~1MB master file to Cloudinary.
-      // Give the phone a 45-second cellular grace period before falling back to re-stitching.
+      // Mobile signaled natural end of 30s session
       console.log(
-        `[AudioStitcher] Alert ${alertKey}: Final chunk #${params.seq} received. Waiting up to 45s for pristine master audio upload...`,
+        `[AudioStitcher] Alert ${alertKey}: Final chunk #${params.seq} received. Assembling recording...`,
       );
-      session.watchdogTimer = setTimeout(async () => {
-        console.warn(
-          `[AudioStitcher] Alert ${alertKey}: Master upload grace period expired (45s). Assembling ${session?.chunks.size || 0} chunks as rescue fallback...`,
-        );
-        await AudioStitcherService.finalizeAndUpload(alertKey);
-      }, 45000);
-
-      return { stagedCount: session.chunks.size, isFinalized: false };
+      await this.finalizeAndUpload(alertKey);
+      return { stagedCount: session.chunks.size, isFinalized: true };
     } else {
-      // Mid-stream chunk: If phone unexpectedly disconnects for 20s (4 missed 5s chunks), assemble rescue fallback
+      // Arm watchdog: If phone dies/drops, auto-assemble received chunks after 8 seconds
       session.watchdogTimer = setTimeout(async () => {
         console.warn(
-          `[AudioStitcher] Watchdog timeout for alert ${alertKey}: Device interrupted mid-stream. Assembling ${session?.chunks.size || 0} partial chunks...`,
+          `[AudioStitcher] Watchdog timeout for alert ${alertKey}: Device interrupted. Assembling ${session?.chunks.size || 0} partial chunks...`,
         );
         await AudioStitcherService.finalizeAndUpload(alertKey);
-      }, 20000);
+      }, 8000);
 
       return { stagedCount: session.chunks.size, isFinalized: false };
     }
@@ -186,17 +178,19 @@ export class AudioStitcherService {
       }
 
       // Check if pristine master audio has already been attached by mobile
-      const existingAlert = await SosRepository.findById(session.alertId);
-      if (
-        existingAlert?.audio_url &&
-        !existingAlert.audio_url.includes("_stitched")
-      ) {
-        console.log(
-          `[AudioStitcher] Alert ${alertKey} already has pristine master audio (${existingAlert.audio_url}). Skipping stitch upload.`,
-        );
-        this.cleanupSession(alertKey);
-        return existingAlert.audio_url;
-      }
+      try {
+        const existingAlert = await SosRepository.findById(session.alertId);
+        if (
+          existingAlert?.audio_url &&
+          !existingAlert.audio_url.includes("_stitched")
+        ) {
+          console.log(
+            `[AudioStitcher] Alert ${alertKey} already has pristine master audio (${existingAlert.audio_url}). Skipping stitch upload.`,
+          );
+          this.cleanupSession(alertKey);
+          return existingAlert.audio_url;
+        }
+      } catch (_: any) {}
 
       // Sort chunks by sequential order (1, 2, 3...)
       const sortedSeqs = Array.from(session.chunks.keys()).sort(
@@ -240,11 +234,18 @@ export class AudioStitcherService {
 
       // Update Database only if no pristine master file was attached in the meantime
       try {
-        const latestAlert = await SosRepository.findById(session.alertId);
-        if (
-          !latestAlert?.audio_url ||
-          latestAlert.audio_url.includes("_stitched")
-        ) {
+        let shouldUpdate = true;
+        try {
+          const latestAlert = await SosRepository.findById(session.alertId);
+          if (
+            latestAlert?.audio_url &&
+            !latestAlert.audio_url.includes("_stitched")
+          ) {
+            shouldUpdate = false;
+          }
+        } catch (_: any) {}
+
+        if (shouldUpdate) {
           await SosRepository.updateAudioUrl(
             session.alertId,
             session.userId,
