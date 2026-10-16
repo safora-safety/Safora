@@ -177,6 +177,21 @@ export class AudioStitcherService {
         return null;
       }
 
+      // Check if pristine master audio has already been attached by mobile
+      try {
+        const existingAlert = await SosRepository.findById(session.alertId);
+        if (
+          existingAlert?.audio_url &&
+          !existingAlert.audio_url.includes("_stitched")
+        ) {
+          console.log(
+            `[AudioStitcher] Alert ${alertKey} already has pristine master audio (${existingAlert.audio_url}). Skipping stitch upload.`,
+          );
+          this.cleanupSession(alertKey);
+          return existingAlert.audio_url;
+        }
+      } catch (_: any) {}
+
       // Sort chunks by sequential order (1, 2, 3...)
       const sortedSeqs = Array.from(session.chunks.keys()).sort(
         (a, b) => a - b,
@@ -208,7 +223,7 @@ export class AudioStitcherService {
       const fullWavBuffer = Buffer.concat([header, ...pcmPayloads]);
 
       console.log(
-        `[AudioStitcher] Alert ${alertKey}: Stitched ${sortedSeqs.length} chunks into ${fullWavBuffer.length} bytes. Uploading to Cloudinary...`,
+        `[AudioStitcher] Alert ${alertKey}: Stitched ${sortedSeqs.length} chunks into ${fullWavBuffer.length} bytes. Uploading rescue fallback to Cloudinary...`,
       );
 
       // Upload to Cloudinary
@@ -217,26 +232,47 @@ export class AudioStitcherService {
         `sos_${alertKey}_stitched`,
       );
 
-      // Update Database (only if no master file has already been saved)
+      // Update Database only if no pristine master file was attached in the meantime
       try {
-        await SosRepository.updateAudioUrl(
-          session.alertId,
-          session.userId,
-          url,
-        );
+        let shouldUpdate = true;
+        try {
+          const latestAlert = await SosRepository.findById(session.alertId);
+          if (
+            latestAlert?.audio_url &&
+            !latestAlert.audio_url.includes("_stitched")
+          ) {
+            shouldUpdate = false;
+          }
+        } catch (_: any) {}
+
+        if (shouldUpdate) {
+          await SosRepository.updateAudioUrl(
+            session.alertId,
+            session.userId,
+            url,
+          );
+
+          // Broadcast verified audio URL to Admin and Guardians
+          broadcastSosAudio({
+            alertId: session.alertId,
+            userId: session.userId,
+            audioUrl: url,
+          });
+
+          console.log(
+            `[AudioStitcher] Alert ${alertKey}: Rescue fallback audio preserved & broadcast: ${url}`,
+          );
+        } else {
+          console.log(
+            `[AudioStitcher] Alert ${alertKey}: Pristine master audio took precedence over stitched fallback.`,
+          );
+        }
       } catch (dbErr) {
         console.warn(
           `[AudioStitcher] Database update warning for alert ${alertKey}:`,
           dbErr,
         );
       }
-
-      // Broadcast verified audio URL to Admin and Guardians
-      broadcastSosAudio({
-        alertId: session.alertId,
-        userId: session.userId,
-        audioUrl: url,
-      });
 
       console.log(
         `[AudioStitcher] Alert ${alertKey}: Audio successfully preserved & broadcast: ${url}`,

@@ -407,12 +407,25 @@ export function setupJourneySockets(io: Server): void {
 
         try {
           const alert = await SosRepository.findById(alertIdNum);
-          if (!alert || String(alert.user_id) !== String(user.id)) {
+          const isOwner =
+            Boolean(alert) &&
+            (String(alert?.user_id) === String(user.id) ||
+              Number(alert?.user_id) === Number(user.id));
+          const isStaff = user.role === "admin" || user.role === "moderator";
+
+          if (!alert || (!isOwner && !isStaff)) {
+            console.warn(
+              `[Socket.IO] Forbidden audio slice #${data.seq} for alert ${alertIdNum} from user ${user.id} (owner: ${alert?.user_id})`,
+            );
             socket.emit("error", {
               message: "Forbidden: Cannot stream audio for unowned SOS alert",
             });
             return;
           }
+
+          console.log(
+            `[Socket.IO] Ingested live audio slice #${data.seq} for alert ${data.alertId} (${data.durationSec || 5}s, isLast=${Boolean(data.isLast)})`,
+          );
 
           // Fetch guardians to broadcast live slice to their personal rooms
           const guardianUserIds = await SosRepository.findGuardianUserIds(

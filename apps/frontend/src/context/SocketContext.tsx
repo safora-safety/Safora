@@ -31,18 +31,21 @@ interface SocketContextType {
   isConnected: boolean;
   activeEmergency: InboundSosAlert | null;
   latestLiveAudioChunk: LiveAudioChunk | null;
+  liveAudioChunksByAlert: Record<string, LiveAudioChunk[]>;
   dismissEmergency: () => void;
   broadcastTestSos: (lat: number, lng: number) => Promise<void>;
   joinAlertRoom: (alertId: string | number) => void;
   leaveAlertRoom: (alertId: string | number) => void;
+  unlockAudio: () => void;
 }
 
 const SocketContext = createContext<SocketContextType | undefined>(undefined);
 
 // In-memory ordered audio queue for continuous progressive playback
 let webAudioContext: AudioContext | null = null;
-const audioQueue: { seq: number; buffer: AudioBuffer }[] = [];
+const audioQueue: { seq: number; dataUri: string }[] = [];
 let isPlayingFromQueue = false;
+let currentHtml5Audio: HTMLAudioElement | null = null;
 
 function getWebAudioContext(): AudioContext {
   if (!webAudioContext || webAudioContext.state === 'closed') {
@@ -54,6 +57,15 @@ function getWebAudioContext(): AudioContext {
   return webAudioContext;
 }
 
+function unlockBrowserAudio() {
+  try {
+    const ctx = getWebAudioContext();
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+  } catch {}
+}
+
 function processAudioQueue() {
   if (audioQueue.length === 0) {
     isPlayingFromQueue = false;
@@ -63,14 +75,26 @@ function processAudioQueue() {
   isPlayingFromQueue = true;
   const nextItem = audioQueue.shift()!;
   try {
-    const ctx = getWebAudioContext();
-    const source = ctx.createBufferSource();
-    source.buffer = nextItem.buffer;
-    source.connect(ctx.destination);
-    source.onended = () => {
+    if (currentHtml5Audio) {
+      currentHtml5Audio.pause();
+      currentHtml5Audio = null;
+    }
+
+    const audio = new Audio(nextItem.dataUri);
+    currentHtml5Audio = audio;
+    audio.onended = () => {
+      currentHtml5Audio = null;
       processAudioQueue();
     };
-    source.start();
+    audio.onerror = () => {
+      currentHtml5Audio = null;
+      processAudioQueue();
+    };
+    audio.play().catch(err => {
+      console.warn('[SocketContext] Autoplay blocked, will retry on click:', err);
+      currentHtml5Audio = null;
+      processAudioQueue();
+    });
   } catch (err) {
     console.warn('[SocketContext] Error playing queued audio chunk:', err);
     processAudioQueue();
@@ -82,22 +106,15 @@ async function enqueueAndPlayChunk(chunk: LiveAudioChunk) {
     const soundEnabled = localStorage.getItem('safora_sound_alerts') !== 'false';
     if (!soundEnabled || !chunk.data) return;
 
-    const ctx = getWebAudioContext();
-    const binary = window.atob(chunk.data);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) {
-      bytes[i] = binary.charCodeAt(i);
-    }
-
-    const decoded = await ctx.decodeAudioData(bytes.buffer.slice(0));
-    audioQueue.push({ seq: chunk.seq, buffer: decoded });
+    const dataUri = `data:${chunk.mimeType || 'audio/wav'};base64,${chunk.data}`;
+    audioQueue.push({ seq: chunk.seq, dataUri });
     audioQueue.sort((a, b) => a.seq - b.seq);
 
     if (!isPlayingFromQueue) {
       processAudioQueue();
     }
   } catch (err) {
-    console.warn('[SocketContext] Audio decoding failed for live chunk:', err);
+    console.warn('[SocketContext] Audio queueing failed for live chunk:', err);
   }
 }
 
@@ -107,6 +124,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [isConnected, setIsConnected] = useState(false);
   const [activeEmergency, setActiveEmergency] = useState<InboundSosAlert | null>(null);
   const [latestLiveAudioChunk, setLatestLiveAudioChunk] = useState<LiveAudioChunk | null>(null);
+  const [liveAudioChunksByAlert, setLiveAudioChunksByAlert] = useState<Record<string, LiveAudioChunk[]>>({});
 
   useEffect(() => {
     const s = socketService.connect(token);
@@ -154,6 +172,13 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         `[Socket] LIVE AUDIO CHUNK #${chunk.seq} received for alert ${chunk.alertId}`,
       );
       setLatestLiveAudioChunk(chunk);
+      setLiveAudioChunksByAlert(prev => {
+        const key = String(chunk.alertId);
+        const existing = prev[key] || [];
+        if (existing.some(c => c.seq === chunk.seq)) return prev;
+        const updated = [...existing, chunk].sort((a, b) => a.seq - b.seq);
+        return { ...prev, [key]: updated };
+      });
       enqueueAndPlayChunk(chunk);
     });
 
@@ -183,15 +208,19 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const joinAlertRoom = (alertId: string | number) => {
-    if (socket) {
+    if (socket && alertId) {
       socket.emit('sos:join', { alertId });
     }
   };
 
   const leaveAlertRoom = (alertId: string | number) => {
-    if (socket) {
+    if (socket && alertId) {
       socket.emit('sos:leave', { alertId });
     }
+  };
+
+  const unlockAudio = () => {
+    unlockBrowserAudio();
   };
 
   const broadcastTestSos = async (lat: number, lng: number) => {
@@ -210,10 +239,12 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         isConnected,
         activeEmergency,
         latestLiveAudioChunk,
+        liveAudioChunksByAlert,
         dismissEmergency,
         broadcastTestSos,
         joinAlertRoom,
         leaveAlertRoom,
+        unlockAudio,
       }}
     >
       {children}

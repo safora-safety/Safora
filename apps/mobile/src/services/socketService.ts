@@ -1,27 +1,48 @@
 import { io, Socket } from 'socket.io-client';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from './apiClient';
 
 let socket: Socket | null = null;
+const pendingAudioChunks: any[] = [];
 
 // Socket host is origin of API_BASE_URL (stripping trailing /api)
 const SOCKET_URL = API_BASE_URL.replace(/\/api\/?$/, '');
 
 const activeRooms = new Set<string | number>();
+const activeSosRooms = new Set<string | number>();
 
-export function connectSocket(jwt: string): Socket {
+export async function ensureSocketConnected(): Promise<Socket | null> {
   if (socket?.connected) {
     return socket;
   }
+  try {
+    const token = await AsyncStorage.getItem('@safora_token');
+    if (token && token !== 'guest-session-token') {
+      return connectSocket(token);
+    }
+  } catch {}
+  return socket;
+}
 
+export function connectSocket(jwt: string): Socket {
   if (socket) {
-    socket.disconnect();
+    if (socket.connected) {
+      return socket;
+    }
+    // Update auth token and trigger connect if disconnected, without tearing down instance
+    (socket.auth as any) = { token: jwt };
+    if (!socket.active) {
+      socket.connect();
+    }
+    return socket;
   }
 
   socket = io(SOCKET_URL, {
     auth: { token: jwt },
     reconnection: true,
-    reconnectionAttempts: 15,
-    reconnectionDelay: 2000,
+    reconnectionAttempts: 30,
+    reconnectionDelay: 1000,
+    timeout: 20000,
     transports: ['websocket', 'polling'],
   });
 
@@ -31,6 +52,20 @@ export function connectSocket(jwt: string): Socket {
     activeRooms.forEach(id => {
       socket?.emit('journey:join', { journeyId: id });
     });
+    activeSosRooms.forEach(id => {
+      socket?.emit('sos:join', { alertId: id });
+    });
+
+    // Flush any pending emergency audio slices
+    while (pendingAudioChunks.length > 0) {
+      const item = pendingAudioChunks.shift();
+      if (item) {
+        console.log(
+          `[Socket.IO Mobile] Flushing queued audio chunk #${item.seq} for alert ${item.alertId}`,
+        );
+        socket?.emit('sos:audio_chunk', item);
+      }
+    }
   });
 
   socket.on('connect_error', err => {
@@ -105,14 +140,12 @@ export function emitSosAudioChunk(data: {
 }): void {
   if (socket?.connected) {
     socket.emit('sos:audio_chunk', data);
-  } else if (socket) {
-    socket.once('connect', () => {
-      socket?.emit('sos:audio_chunk', data);
-    });
   } else {
-    console.warn(
-      '[Socket.IO Mobile] Socket not initialized for sos:audio_chunk',
+    console.log(
+      `[Socket.IO Mobile] Socket not yet connected, queueing audio chunk #${data.seq} for alert ${data.alertId}`,
     );
+    pendingAudioChunks.push(data);
+    ensureSocketConnected().catch(() => {});
   }
 }
 
@@ -125,12 +158,21 @@ export function onSosAudioChunkAck(cb: (payload: any) => void): () => void {
 }
 
 export function joinSosAlertRoom(alertId: string | number): void {
-  if (socket) {
+  if (!alertId) return;
+  activeSosRooms.add(alertId);
+  if (socket?.connected) {
     socket.emit('sos:join', { alertId });
+  } else {
+    ensureSocketConnected()
+      .then(s => {
+        s?.emit('sos:join', { alertId });
+      })
+      .catch(() => {});
   }
 }
 
 export function leaveSosAlertRoom(alertId: string | number): void {
+  activeSosRooms.delete(alertId);
   if (socket) {
     socket.emit('sos:leave', { alertId });
   }
@@ -146,6 +188,8 @@ export function onSosLiveAudioChunk(cb: (payload: any) => void): () => void {
 
 export function disconnectSocket(): void {
   activeRooms.clear();
+  activeSosRooms.clear();
+  pendingAudioChunks.length = 0;
   if (socket) {
     socket.disconnect();
     socket = null;

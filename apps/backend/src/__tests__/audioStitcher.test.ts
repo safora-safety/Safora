@@ -19,6 +19,7 @@ describe("AudioStitcherService & Dual-Pipe Audio Concatenation", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.useFakeTimers();
+    jest.spyOn(SosRepository, "findById").mockResolvedValue(null);
   });
 
   afterEach(() => {

@@ -14,6 +14,8 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.content.pm.ServiceInfo
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 
 import android.util.Base64
 import com.facebook.react.bridge.Arguments
@@ -133,28 +135,36 @@ class SafeWalkService : Service(), LocationListener {
     }
 
     private fun ensureAudioForegroundNotification() {
-        if (isServiceRunning) return
+        try {
+            val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle("🚨 SAFORA · Emergency SOS Recording")
+                .setContentText("Capturing & streaming live ambient audio evidence...")
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setOngoing(true)
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .build()
 
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("🚨 SAFORA · Emergency SOS Recording")
-            .setContentText("Capturing & streaming live ambient audio evidence...")
-            .setSmallIcon(R.mipmap.ic_launcher)
-            .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .build()
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val fgsType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                try {
+                    val fgsType = if (isServiceRunning) {
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                    } else {
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                    }
+                    startForeground(NOTIFICATION_ID, notification, fgsType)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Typed startForeground failed, falling back to standard: ${e.message}")
+                    startForeground(NOTIFICATION_ID, notification)
+                }
             } else {
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                startForeground(NOTIFICATION_ID, notification)
             }
-            startForeground(NOTIFICATION_ID, notification, fgsType)
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+        } catch (e: Exception) {
+            Log.e(TAG, "ensureAudioForegroundNotification failed: ${e.message}")
         }
     }
+
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -190,7 +200,21 @@ class SafeWalkService : Service(), LocationListener {
             "Safe Escort Active",
             0
         )
-        startForeground(NOTIFICATION_ID, notification)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                val fgsType = if (isRecordingAudio) {
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                } else {
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                }
+                startForeground(NOTIFICATION_ID, notification, fgsType)
+            } catch (e: Exception) {
+                Log.w(TAG, "Typed startForeground failed, falling back to standard: ${e.message}")
+                startForeground(NOTIFICATION_ID, notification)
+            }
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
 
         // 3. Register native location updates (4s interval or 3 meters distance)
         try {
@@ -422,10 +446,98 @@ class SafeWalkService : Service(), LocationListener {
         }
     }
 
+    data class AudioProbeResult(
+        val record: AudioRecord,
+        val sampleRate: Int,
+        val bufferSize: Int
+    )
+
+    private fun findBestAudioRecord(): AudioProbeResult? {
+        if (ContextCompat.checkSelfPermission(
+                this,
+                android.Manifest.permission.RECORD_AUDIO
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            Log.e(TAG, "RECORD_AUDIO permission not granted in SafeWalkService")
+            return null
+        }
+
+        val sampleRates = intArrayOf(16000, 44100, 48000, 22050, 8000)
+        val sources = intArrayOf(
+            MediaRecorder.AudioSource.MIC,
+            MediaRecorder.AudioSource.VOICE_RECOGNITION,
+            MediaRecorder.AudioSource.DEFAULT
+        )
+
+        for (source in sources) {
+            for (rate in sampleRates) {
+                try {
+                    val minBuf = AudioRecord.getMinBufferSize(
+                        rate,
+                        AudioFormat.CHANNEL_IN_MONO,
+                        AudioFormat.ENCODING_PCM_16BIT
+                    )
+                    if (minBuf > 0) {
+                        val bufSize = (minBuf * 2).coerceAtLeast(4096)
+                        val rec = AudioRecord(
+                            source,
+                            rate,
+                            AudioFormat.CHANNEL_IN_MONO,
+                            AudioFormat.ENCODING_PCM_16BIT,
+                            bufSize
+                        )
+                        if (rec.state == AudioRecord.STATE_INITIALIZED) {
+                            Log.i(TAG, "AudioRecord successfully probed: source=$source, rate=$rate, bufferSize=$bufSize")
+                            return AudioProbeResult(rec, rate, bufSize)
+                        } else {
+                            rec.release()
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "AudioRecord probe failed for source=$source, rate=$rate: ${e.message}")
+                }
+            }
+        }
+        return null
+    }
+
+    private fun stopAudioThreadOnly() {
+        isRecordingAudio = false
+        try {
+            audioRecordThread?.join(600)
+        } catch (_: Exception) {}
+        audioRecordThread = null
+
+        try {
+            audioRecord?.stop()
+            audioRecord?.release()
+        } catch (_: Exception) {}
+        audioRecord = null
+
+        try {
+            audioWakeLock?.let { if (it.isHeld) it.release() }
+        } catch (_: Exception) {}
+        audioWakeLock = null
+    }
+
+    private fun checkStopService() {
+        if (!isServiceRunning && !isRecordingAudio) {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                } else {
+                    @Suppress("DEPRECATION")
+                    stopForeground(true)
+                }
+                stopSelf()
+            } catch (_: Exception) {}
+        }
+    }
+
     // Dual-Sink Audio Engine: Slices 5s PCM chunks over Socket.IO and saves unbroken master WAV
     fun startLockScreenAudio(alertId: String): String? {
         try {
-            stopAudioRecording()
+            stopAudioThreadOnly()
 
             // Acquire temporary partial wake lock so CPU stays awake during 30s emergency recording
             val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
@@ -437,31 +549,32 @@ class SafeWalkService : Service(), LocationListener {
                 acquire(45 * 1000L)
             }
 
-            val outputDir = File(cacheDir, "emergency_audio").apply { if (!exists()) mkdirs() }
-            currentAudioFile = File(outputDir, "sos_${alertId}_master.wav")
-
-            val sampleRate = 16000
-            val channelConfig = AudioFormat.CHANNEL_IN_MONO
-            val audioFormat = AudioFormat.ENCODING_PCM_16BIT
-            val minBufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
-            val bufferSize = minBufferSize.coerceAtLeast(4096)
-
-            audioRecord = AudioRecord(
-                MediaRecorder.AudioSource.MIC,
-                sampleRate,
-                channelConfig,
-                audioFormat,
-                bufferSize * 2
-            )
-
-            if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
-                Log.w(TAG, "AudioRecord failed to initialize")
+            val probe = findBestAudioRecord()
+            if (probe == null) {
+                Log.e(TAG, "AudioRecord failed to initialize across all sample rates and sources!")
                 try {
                     audioWakeLock?.let { if (it.isHeld) it.release() }
                 } catch (_: Exception) {}
                 audioWakeLock = null
+
+                // Notify JavaScript that native AudioRecord failed so it activates fallback recorder!
+                val failMap = Arguments.createMap().apply {
+                    putString("alertId", alertId)
+                    putString("error", "NATIVE_RECORD_FAILED")
+                }
+                SafeWalkServiceModule.emitEvent("onSosAudioFailed", failMap)
+                checkStopService()
                 return null
             }
+
+            audioRecord = probe.record
+            val sampleRate = probe.sampleRate
+            val bufferSize = probe.bufferSize
+            val bytesPerSecond = sampleRate * 1 * 2 // 16-bit mono = 2 bytes per sample
+            val target5SecBytes = bytesPerSecond * 5
+
+            val outputDir = File(cacheDir, "emergency_audio").apply { if (!exists()) mkdirs() }
+            currentAudioFile = File(outputDir, "sos_${alertId}_master.wav")
 
             audioRecord?.startRecording()
             isRecordingAudio = true
@@ -469,7 +582,7 @@ class SafeWalkService : Service(), LocationListener {
             audioRecordThread = Thread {
                 val buffer = ByteArray(bufferSize)
                 var totalBytesRecorded = 0
-                val chunkBuffer = ByteArrayOutputStream(160000)
+                val chunkBuffer = ByteArrayOutputStream(target5SecBytes)
                 var chunkSeq = 1
                 val maxDurationMs = 30000L
                 val startTime = System.currentTimeMillis()
@@ -484,11 +597,11 @@ class SafeWalkService : Service(), LocationListener {
                             chunkBuffer.write(buffer, 0, read)
                             totalBytesRecorded += read
 
-                            // When 5 seconds of PCM accumulated (~160,000 bytes at 16kHz 16-bit mono)
-                            if (chunkBuffer.size() >= 160000) {
+                            // When 5 seconds of PCM accumulated
+                            if (chunkBuffer.size() >= target5SecBytes) {
                                 val pcmBytes = chunkBuffer.toByteArray()
                                 chunkBuffer.reset()
-                                val chunkWav = createWavHeaderBytes(pcmBytes.size, 16000, 1, 16) + pcmBytes
+                                val chunkWav = createWavHeaderBytes(pcmBytes.size, sampleRate, 1, 16) + pcmBytes
                                 val base64Chunk = Base64.encodeToString(chunkWav, Base64.NO_WRAP)
 
                                 val map = Arguments.createMap().apply {
@@ -496,6 +609,7 @@ class SafeWalkService : Service(), LocationListener {
                                     putInt("seq", chunkSeq)
                                     putInt("totalChunksExpected", 6)
                                     putDouble("durationSec", 5.0)
+                                    putInt("sampleRate", sampleRate)
                                     putString("mimeType", "audio/wav")
                                     putString("data", base64Chunk)
                                     putBoolean("isLast", false)
@@ -510,14 +624,15 @@ class SafeWalkService : Service(), LocationListener {
                     if (chunkBuffer.size() > 0) {
                         val pcmBytes = chunkBuffer.toByteArray()
                         chunkBuffer.reset()
-                        val chunkWav = createWavHeaderBytes(pcmBytes.size, 16000, 1, 16) + pcmBytes
+                        val chunkWav = createWavHeaderBytes(pcmBytes.size, sampleRate, 1, 16) + pcmBytes
                         val base64Chunk = Base64.encodeToString(chunkWav, Base64.NO_WRAP)
 
                         val map = Arguments.createMap().apply {
                             putString("alertId", alertId)
                             putInt("seq", chunkSeq)
                             putInt("totalChunksExpected", chunkSeq)
-                            putDouble("durationSec", pcmBytes.size / 32000.0)
+                            putDouble("durationSec", pcmBytes.size.toDouble() / bytesPerSecond.toDouble())
+                            putInt("sampleRate", sampleRate)
                             putString("mimeType", "audio/wav")
                             putString("data", base64Chunk)
                             putBoolean("isLast", true)
@@ -537,8 +652,9 @@ class SafeWalkService : Service(), LocationListener {
                         try {
                             val raf = RandomAccessFile(currentAudioFile, "rw")
                             raf.seek(0)
-                            raf.write(createWavHeaderBytes(totalBytesRecorded, 16000, 1, 16))
+                            raf.write(createWavHeaderBytes(totalBytesRecorded, sampleRate, 1, 16))
                             raf.close()
+                            Log.i(TAG, "Master WAV written successfully: ${currentAudioFile?.absolutePath} ($totalBytesRecorded bytes)")
                         } catch (e: Exception) {
                             Log.w(TAG, "Failed to write master WAV header: ${e.message}")
                         }
@@ -556,28 +672,23 @@ class SafeWalkService : Service(), LocationListener {
                     } catch (_: Exception) {}
                     audioWakeLock = null
 
-                    // If SafeWalk is not actively escorting, remove emergency foreground notification
-                    if (!isServiceRunning) {
-                        try {
-                            stopForeground(true)
-                            stopSelf()
-                        } catch (_: Exception) {}
-                    }
-
                     // Notify mobile JS that master recording is complete and ready for Cloudinary upload
                     val completionMap = Arguments.createMap().apply {
                         putString("alertId", alertId)
                         putString("filePath", currentAudioFile?.absolutePath ?: "")
                         putBoolean("success", totalBytesRecorded > 0)
+                        putInt("bytesRecorded", totalBytesRecorded)
                     }
                     SafeWalkServiceModule.emitEvent("onSosAudioMasterCompleted", completionMap)
+
+                    checkStopService()
                 }
             }.apply {
                 priority = Thread.MAX_PRIORITY
                 start()
             }
 
-            Log.i(TAG, "Dual-sink audio recording started: ${currentAudioFile?.absolutePath}")
+            Log.i(TAG, "Dual-sink audio recording started ($sampleRate Hz): ${currentAudioFile?.absolutePath}")
             return currentAudioFile?.absolutePath
         } catch (e: Exception) {
             Log.w(TAG, "Failed to start dual-sink audio: ${e.message}")
@@ -585,29 +696,16 @@ class SafeWalkService : Service(), LocationListener {
                 audioWakeLock?.let { if (it.isHeld) it.release() }
             } catch (_: Exception) {}
             audioWakeLock = null
+            checkStopService()
             return null
         }
     }
 
+
     fun stopAudioRecording(): String? {
         val path = currentAudioFile?.absolutePath
-        isRecordingAudio = false
-        try {
-            audioRecordThread?.join(1000)
-        } catch (_: Exception) {}
-        audioRecordThread = null
-
-        try {
-            audioWakeLock?.let { if (it.isHeld) it.release() }
-        } catch (_: Exception) {}
-        audioWakeLock = null
-
-        if (!isServiceRunning) {
-            try {
-                stopForeground(true)
-                stopSelf()
-            } catch (_: Exception) {}
-        }
+        stopAudioThreadOnly()
+        checkStopService()
         return path
     }
 
@@ -680,7 +778,6 @@ class SafeWalkService : Service(), LocationListener {
 
     private fun stopSafeWalk() {
         isServiceRunning = false
-        stopAudioRecording()
 
         // Inform backend natively that journey is completed/stopped
         if (journeyId.isNotEmpty()) {
@@ -710,13 +807,7 @@ class SafeWalkService : Service(), LocationListener {
             wakeLock?.release()
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
-        } else {
-            @Suppress("DEPRECATION")
-            stopForeground(true)
-        }
-        stopSelf()
+        checkStopService()
     }
 
     override fun onLocationChanged(location: Location) {
@@ -734,7 +825,8 @@ class SafeWalkService : Service(), LocationListener {
     override fun onProviderDisabled(provider: String) {}
 
     override fun onDestroy() {
-        stopSafeWalk()
+        isServiceRunning = false
+        stopAudioThreadOnly()
         super.onDestroy()
     }
 

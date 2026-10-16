@@ -9,7 +9,11 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Sound } from 'react-native-nitro-sound';
 import { SosService } from './sosService';
-import { emitSosAudioChunk, joinSosAlertRoom } from './socketService';
+import {
+  emitSosAudioChunk,
+  joinSosAlertRoom,
+  ensureSocketConnected,
+} from './socketService';
 
 let isRecording = false;
 let isNativeAudioActive = false;
@@ -18,6 +22,8 @@ let pipelineIntervalTimer: any = null;
 let appStateSubscription: any = null;
 let chunkSubscription: any = null;
 let masterCompletionSubscription: any = null;
+let failureSubscription: any = null;
+const pendingChunkBuffer: any[] = [];
 
 const TOTAL_DURATION_SEC = 30;
 const PENDING_SOS_AUDIO_KEY = '@safora_pending_sos_audio';
@@ -107,16 +113,25 @@ export class AudioRecorderService {
     totalSeconds = TOTAL_DURATION_SEC,
   ): Promise<boolean> {
     try {
-      const hasPermission = await this.isPermissionGranted();
+      let hasPermission = await this.isPermissionGranted();
+      if (!hasPermission) {
+        console.log(
+          '[AudioRecorder] Microphone permission not yet granted, prompting user...',
+        );
+        hasPermission = await this.requestPermission();
+      }
       if (!hasPermission) {
         console.warn(
-          '[AudioRecorder] Microphone permission missing, skipping audio recording',
+          '[AudioRecorder] Microphone permission missing or denied, skipping audio recording',
         );
         return false;
       }
 
       // Stop any existing session
       await this.stopSilent();
+
+      // Pre-warm Socket.IO connection immediately so pipe is hot before first 5s slice
+      ensureSocketConnected().catch(() => {});
 
       currentPipelineAlertId = alertId || null;
       if (alertId) {
@@ -135,13 +150,24 @@ export class AudioRecorderService {
                 ? chunk.alertId
                 : currentPipelineAlertId;
 
-            console.log(
-              `[AudioRecorder] Emitting live audio slice #${chunk.seq} (alert ${resolvedId}) over Socket.IO`,
-            );
-            emitSosAudioChunk({
-              ...chunk,
-              alertId: resolvedId || chunk.alertId,
-            });
+            if (
+              resolvedId &&
+              resolvedId !== 'emergency' &&
+              resolvedId !== 'sos_emergency'
+            ) {
+              console.log(
+                `[AudioRecorder] Emitting live audio slice #${chunk.seq} (alert ${resolvedId}) over Socket.IO`,
+              );
+              emitSosAudioChunk({
+                ...chunk,
+                alertId: resolvedId,
+              });
+            } else {
+              console.log(
+                `[AudioRecorder] Buffering live audio slice #${chunk.seq} while alert ID resolves...`,
+              );
+              pendingChunkBuffer.push(chunk);
+            }
           }
         },
       );
@@ -149,7 +175,12 @@ export class AudioRecorderService {
       // 2. Listen for native master 30s completion (Pipe 2)
       masterCompletionSubscription = DeviceEventEmitter.addListener(
         'onSosAudioMasterCompleted',
-        async ({ alertId: finishedAlertId, filePath, success }: any) => {
+        async ({
+          alertId: finishedAlertId,
+          filePath,
+          success,
+          bytesRecorded,
+        }: any) => {
           const targetAlertId =
             finishedAlertId &&
             finishedAlertId !== 'emergency' &&
@@ -158,12 +189,33 @@ export class AudioRecorderService {
               : currentPipelineAlertId;
 
           console.log(
-            `[AudioRecorder] Native master audio completed for alert ${targetAlertId} (${filePath}, success=${success})`,
+            `[AudioRecorder] Native master audio completed for alert ${targetAlertId} (${filePath}, success=${success}, bytes=${bytesRecorded})`,
           );
           if (success && filePath && targetAlertId) {
             await AudioRecorderService.uploadAndAttachMaster(
               targetAlertId,
               filePath,
+            );
+          }
+          AudioRecorderService.cleanupPipeline();
+        },
+      );
+
+      // 3. Listen for native hardware failure so fallback recorder activates immediately
+      failureSubscription = DeviceEventEmitter.addListener(
+        'onSosAudioFailed',
+        async ({ alertId: failedAlertId, error }: any) => {
+          console.warn(
+            `[AudioRecorder] Native AudioRecord unavailable (${error}) for alert ${failedAlertId}. Activating fallback Sound.startRecorder()`,
+          );
+          isNativeAudioActive = false;
+          try {
+            await Sound.startRecorder();
+            isRecording = true;
+          } catch (fallbackErr) {
+            console.error(
+              '[AudioRecorder] Fallback recorder failed too:',
+              fallbackErr,
             );
           }
         },
@@ -249,8 +301,22 @@ export class AudioRecorderService {
     currentPipelineAlertId = alertId;
     joinSosAlertRoom(alertId);
     console.log(
-      `[AudioRecorder] Pipeline associated with alert ID: ${alertId}`,
+      `[AudioRecorder] Pipeline associated with alert ID: ${alertId}. Flushing ${pendingChunkBuffer.length} buffered chunk(s)...`,
     );
+
+    // Flush any 5s slices that arrived while the REST SOS endpoint was responding
+    while (pendingChunkBuffer.length > 0) {
+      const chunk = pendingChunkBuffer.shift();
+      if (chunk && chunk.data) {
+        console.log(
+          `[AudioRecorder] Emitting buffered live audio slice #${chunk.seq} for alert ${alertId}`,
+        );
+        emitSosAudioChunk({
+          ...chunk,
+          alertId,
+        });
+      }
+    }
   }
 
   /**
@@ -304,24 +370,23 @@ export class AudioRecorderService {
     const targetAlert = alertId || currentPipelineAlertId;
 
     if (!isRecording) {
-      this.cleanupPipeline();
       return null;
     }
 
     try {
-      isRecording = false;
-
       if (
         isNativeAudioActive &&
         NativeModules.SafeWalkService?.stopEmergencyAudio
       ) {
+        // Stop native recording; the native service writes the WAV header and emits onSosAudioMasterCompleted
+        isRecording = false;
         await NativeModules.SafeWalkService.stopEmergencyAudio().catch(
           () => {},
         );
-        this.cleanupPipeline();
         return null;
       }
 
+      isRecording = false;
       const uri = await Sound.stopRecorder();
       this.cleanupPipeline();
       if (!uri) return null;
@@ -388,8 +453,13 @@ export class AudioRecorderService {
       masterCompletionSubscription.remove();
       masterCompletionSubscription = null;
     }
+    if (failureSubscription) {
+      failureSubscription.remove();
+      failureSubscription = null;
+    }
     isNativeAudioActive = false;
     currentPipelineAlertId = null;
+    pendingChunkBuffer.length = 0;
     AsyncStorage.removeItem(PENDING_SOS_AUDIO_KEY).catch(() => {});
   }
 
