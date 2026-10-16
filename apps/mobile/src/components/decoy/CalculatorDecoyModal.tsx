@@ -100,11 +100,6 @@ export const CalculatorDecoyModal: React.FC<CalculatorDecoyModalProps> = ({
           if (alertId) {
             AudioRecorderService.setAlertId(alertId);
           }
-
-          // Schedule silent stop & upload after 30s
-          setTimeout(() => {
-            AudioRecorderService.stopAndUpload(alertId).catch(() => {});
-          }, 30000);
         } catch {
           // Silently fails without suspicious error dialogs
         }

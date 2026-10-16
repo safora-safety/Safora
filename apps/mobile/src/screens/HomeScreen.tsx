@@ -32,6 +32,7 @@ import {
   onJourneyLocation,
   onJourneyStart,
   onJourneyEnded,
+  ensureSocketConnected,
 } from '../services/socketService';
 import { navigationRef } from '../navigation/RootNavigator';
 
@@ -337,8 +338,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
       setIsSirenActive(true);
     }
 
+    // Pre-warm Socket.IO connection in parallel with SOS dispatch
+    ensureSocketConnected(3000).catch(() => {});
+
     if (!isLoudSiren) {
-      AudioRecorderService.startStreamingPipeline().catch(() => {});
+      AudioRecorderService.startRecording().catch(() => {});
     }
 
     let onlineSuccess = false;

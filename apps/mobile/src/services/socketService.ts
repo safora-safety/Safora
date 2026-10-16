@@ -11,27 +11,54 @@ const SOCKET_URL = API_BASE_URL.replace(/\/api\/?$/, '');
 const activeRooms = new Set<string | number>();
 const activeSosRooms = new Set<string | number>();
 
-export async function ensureSocketConnected(): Promise<Socket | null> {
+export async function ensureSocketConnected(
+  timeoutMs = 4000,
+): Promise<Socket | null> {
   if (socket?.connected) {
     return socket;
   }
   try {
     const token = await AsyncStorage.getItem('@safora_token');
     if (token && token !== 'guest-session-token') {
-      return connectSocket(token);
+      const s = connectSocket(token);
+      if (s.connected) {
+        return s;
+      }
+      return new Promise<Socket | null>(resolve => {
+        let finished = false;
+        const timer = setTimeout(() => {
+          if (!finished) {
+            finished = true;
+            console.warn(
+              '[Socket.IO Mobile] ensureSocketConnected timed out waiting for connect event (will continue background reconnect)',
+            );
+            resolve(s);
+          }
+        }, timeoutMs);
+
+        s.once('connect', () => {
+          if (!finished) {
+            finished = true;
+            clearTimeout(timer);
+            resolve(s);
+          }
+        });
+
+        if (!s.connected) {
+          s.connect();
+        }
+      });
     }
-  } catch {}
+  } catch (err) {
+    console.warn('[Socket.IO Mobile] Failed to read token or connect:', err);
+  }
   return socket;
 }
 
 export function connectSocket(jwt: string): Socket {
   if (socket) {
-    if (socket.connected) {
-      return socket;
-    }
-    // Update auth token and trigger connect if disconnected, without tearing down instance
     (socket.auth as any) = { token: jwt };
-    if (!socket.active) {
+    if (!socket.connected) {
       socket.connect();
     }
     return socket;
@@ -139,13 +166,16 @@ export function emitSosAudioChunk(data: {
   isLast: boolean;
 }): void {
   if (socket?.connected) {
+    console.log(
+      `[Socket.IO Mobile] Emitting live audio slice #${data.seq} for alert ${data.alertId}`,
+    );
     socket.emit('sos:audio_chunk', data);
   } else {
     console.log(
       `[Socket.IO Mobile] Socket not yet connected, queueing audio chunk #${data.seq} for alert ${data.alertId}`,
     );
     pendingAudioChunks.push(data);
-    ensureSocketConnected().catch(() => {});
+    ensureSocketConnected(4000).catch(() => {});
   }
 }
 
@@ -163,9 +193,11 @@ export function joinSosAlertRoom(alertId: string | number): void {
   if (socket?.connected) {
     socket.emit('sos:join', { alertId });
   } else {
-    ensureSocketConnected()
+    ensureSocketConnected(4000)
       .then(s => {
-        s?.emit('sos:join', { alertId });
+        if (s?.connected) {
+          s.emit('sos:join', { alertId });
+        }
       })
       .catch(() => {});
   }

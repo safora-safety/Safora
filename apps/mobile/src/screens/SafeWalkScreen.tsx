@@ -303,9 +303,6 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
 
           if (res?.alert?.id) {
             AudioRecorderService.setAlertId(res.alert.id);
-            setTimeout(() => {
-              AudioRecorderService.stopAndUpload(res.alert.id).catch(() => {});
-            }, 30000);
           }
         })
         .catch(() => {
@@ -601,11 +598,6 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
 
               if (res?.alert?.id) {
                 AudioRecorderService.setAlertId(res.alert.id);
-                setTimeout(() => {
-                  AudioRecorderService.stopAndUpload(res.alert.id).catch(
-                    () => {},
-                  );
-                }, 30000);
               }
             } catch {
               Alert.alert(

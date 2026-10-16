@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { sosService, AdminSosAlert } from '../services/sosService';
-import { useSocket, LiveAudioChunk } from '../context/SocketContext';
+import { useSocket, LiveAudioChunk, InboundSosAlert } from '../context/SocketContext';
 import { Badge } from '../components/common/Badge';
 import { AudioPlayer } from '../components/common/AudioPlayer';
 import {
@@ -34,6 +34,7 @@ export const SosAlertsPage: React.FC = () => {
     joinAlertRoom,
     leaveAlertRoom,
     unlockAudio,
+    isAudioUnlocked,
   } = useSocket();
 
   // Automatically join the alert's dedicated room so 5s live audio slices stream directly
@@ -45,7 +46,7 @@ export const SosAlertsPage: React.FC = () => {
     };
   }, [selectedAlert?.id]);
 
-  const loadAlerts = async (silent = false) => {
+  const loadAlerts = async (silent = false): Promise<AdminSosAlert[] | undefined> => {
     if (!silent) setIsLoading(true);
     try {
       const data = await sosService.getAdminAlerts();
@@ -53,12 +54,22 @@ export const SosAlertsPage: React.FC = () => {
       if (data.length > 0) {
         setSelectedAlert((prev) => {
           if (!prev) return data[0];
+          // If active emergency is present, prioritize it
+          if (activeEmergency) {
+            const activeMatch = data.find((a) => String(a.id) === String(activeEmergency.alertId));
+            if (activeMatch) return activeMatch;
+          }
+          // If latest alert is dispatched and previous selection is resolved, auto-switch to new emergency
+          if (data[0].status === 'dispatched' && prev.status === 'resolved') {
+            return data[0];
+          }
           const found = data.find((a) => a.id === prev.id);
           return found || data[0];
         });
       } else {
         setSelectedAlert(null);
       }
+      return data;
     } catch (err) {
       console.warn('Failed to load SOS alerts:', err);
     } finally {
@@ -70,11 +81,31 @@ export const SosAlertsPage: React.FC = () => {
     loadAlerts();
   }, []);
 
-  // Real-time automatic background updates when new citizen SOS or audio arrives without full-screen loading spinner
+  // When live chunks arrive for an alert not currently selected, if current is resolved or none selected, auto-select
+  useEffect(() => {
+    if (!latestLiveAudioChunk?.alertId) return;
+    const chunkAlertId = String(latestLiveAudioChunk.alertId);
+    setSelectedAlert((prev) => {
+      if (!prev || prev.status === 'resolved') {
+        const match = alerts.find((a) => String(a.id) === chunkAlertId);
+        if (match) return match;
+      }
+      return prev;
+    });
+  }, [latestLiveAudioChunk, alerts]);
+
+  // Real-time automatic background updates when new citizen SOS or audio arrives
   useEffect(() => {
     if (!socket) return;
-    const handleAlert = () => {
-      loadAlerts(true);
+    const handleAlert = (incoming?: InboundSosAlert) => {
+      loadAlerts(true).then((freshAlerts) => {
+        if (incoming?.alertId && freshAlerts) {
+          const match = freshAlerts.find((a) => String(a.id) === String(incoming.alertId));
+          if (match) {
+            setSelectedAlert(match);
+          }
+        }
+      });
     };
     const handleAudio = () => {
       loadAlerts(true);
@@ -199,7 +230,10 @@ export const SosAlertsPage: React.FC = () => {
               return (
                 <div
                   key={`alert-item-${alert.id}`}
-                  onClick={() => setSelectedAlert(alert)}
+                  onClick={() => {
+                    unlockAudio();
+                    setSelectedAlert(alert);
+                  }}
                   className={`p-4 rounded-2xl cursor-pointer border transition-all ${
                     isSelected
                       ? 'bg-obsidian-700 border-red-500/60 shadow-lg shadow-red-950/30 ring-1 ring-red-500/40'
@@ -272,12 +306,27 @@ export const SosAlertsPage: React.FC = () => {
                         {alert.batteryPercentage}%
                       </span>
                     )}
-                    {alert.audioUrl && (
-                      <span className="flex items-center gap-1 text-indigo-400">
-                        <Volume2 className="w-3 h-3" />
-                        Audio Evidence
-                      </span>
-                    )}
+                    {(() => {
+                      const chunks = liveAudioChunksByAlert[String(alert.id)] || [];
+                      const isStreamingNow = !alert.audioUrl && chunks.length > 0;
+                      if (isStreamingNow) {
+                        return (
+                          <span className="flex items-center gap-1 text-red-400 font-bold animate-pulse">
+                            <Radio className="w-3 h-3" />
+                            Live Audio ({chunks[chunks.length - 1].seq}/6)
+                          </span>
+                        );
+                      }
+                      if (alert.audioUrl) {
+                        return (
+                          <span className="flex items-center gap-1 text-indigo-400">
+                            <Volume2 className="w-3 h-3" />
+                            Audio Evidence
+                          </span>
+                        );
+                      }
+                      return null;
+                    })()}
                   </div>
                 </div>
               );
@@ -485,6 +534,21 @@ export const SosAlertsPage: React.FC = () => {
 
                     return (
                       <div className="p-4 rounded-xl bg-red-950/30 border border-red-500/30 space-y-3 shadow-xl">
+                        {!isAudioUnlocked && (
+                          <div className="flex items-center justify-between p-2.5 rounded-lg bg-amber-950/70 border border-amber-500/40 text-amber-200 text-xs font-medium">
+                            <span className="flex items-center gap-1.5">
+                              <Volume2 className="w-3.5 h-3.5 text-amber-400" />
+                              Browser audio muted: Click to allow live emergency stream
+                            </span>
+                            <button
+                              onClick={unlockAudio}
+                              className="px-2.5 py-1 rounded bg-amber-500 hover:bg-amber-400 text-black font-bold text-[11px] transition-all shadow"
+                            >
+                              🔊 Enable Audio
+                            </button>
+                          </div>
+                        )}
+
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <Volume2 className="w-4 h-4 text-red-400 animate-pulse" />

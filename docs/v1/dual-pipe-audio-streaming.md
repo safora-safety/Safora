@@ -144,11 +144,17 @@ Clients request to join an active SOS channel:
   - If phone completes 30s and uploads master file, `AudioStitcherService.handleMasterUploaded(alertId)` cancels watchdog and deletes temporary directory.
 
 ### 4.4 Web Dispatcher Audio Queue (`SocketContext.tsx` & `SosAlertsPage.tsx`)
-- **In-Memory Ordered Web Audio API Queue:**
-  - Audio chunks are decoded via `AudioContext.decodeAudioData()`.
-  - Enqueued in strict sequential order by `seq`.
-  - Consecutive chunks play seamlessly without clipping, gaps, or overlapping.
-- **UI Feedback:** Displays `LIVE STREAMING CHUNK #N/6` badge with real-time buffer progress, automatically switching to the full Cloudinary scrubber player upon alert finalization.
+- **Web Audio API Native Decoded Playback:**
+  - Audio chunks are converted from Base64 to ArrayBuffer and decoded via `AudioContext.decodeAudioData()`.
+  - Enqueued in strict sequential order by integer `seq`.
+  - Consecutive chunks play through `AudioBufferSourceNode` without HTML5 audio autoplay restrictions once unlocked.
+- **Global User Gesture Unlock & Autoplay Resilience:**
+  - Window-level listeners (`click`, `keydown`, `touchstart`) automatically call `unlockBrowserAudio()` on the first interaction anywhere on the dashboard.
+  - If chunks arrive while the browser `AudioContext` is suspended, chunks are preserved in `audioQueue` (never dropped) and play sequentially the moment the user interacts.
+  - Active visual banner displayed if audio is muted, enabling one-click unmute.
+- **Auto-Selection of Emergency Alerts:**
+  - When an incoming `sos:alert` or `sos:live_audio_chunk` arrives, the dispatcher UI automatically selects the emergency alert, joins its room, and switches the main panel to the live telemetry and audio buffer player.
+  - Alert cards in the queue display real-time pulsing `Live Audio (X/6)` badges while streaming is active.
 
 ---
 
@@ -159,8 +165,10 @@ Clients request to join an active SOS channel:
 | **1** | **Phone smashed / battery dies at 12s** | 100% audio evidence destroyed. | Chunks 1 & 2 (10s) were already received by server. 8s watchdog triggers auto-stitching, uploads 10s WAV to Cloudinary, and links to incident report. |
 | **2** | **Airplane mode / zero connectivity** | Audio upload fails; evidence lost. | Pipe 2 continues recording unbroken 30s to device disk. `AudioRecorderService.recoverPendingEvidence()` uploads master file upon signal recovery. |
 | **3** | **Network latency / out-of-order chunks** | Slices play out of order, scrambling voice. | Every chunk carries integer `seq: 1..6`. Web Audio API queue sorts by `seq` before playback. |
-| **4** | **Browser autoplay restriction on admin portal** | Browser blocks audio playback. | Dispatcher clicking "Acknowledge" or "Respond Now" satisfies user interaction gesture, resuming `AudioContext`. |
-| **5** | **Normal 30-second completion** | Race condition between stitched and master. | Mobile master file upload disarms server watchdog (`handleMasterUploaded`) and takes precedence. |
+| **4** | **Browser autoplay restriction on admin portal** | Browser blocks audio playback. | Web Audio API queue preserves chunks during suspended state. First click anywhere on the page or the "Enable Live Audio" button resumes context and plays full stream. |
+| **5** | **Socket connection cold-start on mobile** | Slices delayed or dropped before socket connects. | Sockets are pre-warmed on app launch and foreground resume. `ensureSocketConnected(timeoutMs)` actively connects and awaits connection before audio emission. |
+| **6** | **Sub-second race between REST SOS & first chunk** | Server rejects chunk as unowned or not found. | Backend implements a 400ms grace retry on database lookup in `journeySocket.ts`, and mobile pre-associates pipeline `alertId`. |
+| **7** | **Normal 30-second completion** | Race condition between stitched and master. | Mobile master file upload disarms server watchdog (`handleMasterUploaded`) and takes precedence. |
 
 ---
 
