@@ -409,8 +409,10 @@ export function setupJourneySockets(io: Server): void {
           let alert = await SosRepository.findById(alertIdNum);
           if (!alert) {
             // Rapid DB commit grace retry (protects against sub-second timing differences between HTTP SOS creation and first socket chunk)
-            await new Promise((resolve) => setTimeout(resolve, 400));
-            alert = await SosRepository.findById(alertIdNum);
+            for (let i = 0; i < 3 && !alert; i++) {
+              await new Promise((resolve) => setTimeout(resolve, 500));
+              alert = await SosRepository.findById(alertIdNum);
+            }
           }
 
           const isOwner =

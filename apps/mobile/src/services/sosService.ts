@@ -207,10 +207,11 @@ export class SosService {
     const formData = new FormData();
     const cleanUri =
       Platform.OS === 'android' ? audioUri : audioUri.replace('file://', '');
+    const isWav = cleanUri.toLowerCase().endsWith('.wav');
     formData.append('audio', {
       uri: cleanUri,
-      type: 'audio/m4a',
-      name: `sos_recording_${Date.now()}.m4a`,
+      type: isWav ? 'audio/wav' : 'audio/m4a',
+      name: `sos_recording_${Date.now()}.${isWav ? 'wav' : 'm4a'}`,
     } as any);
 
     const res = await apiClient.post<{

@@ -56,6 +56,7 @@ class SafeWalkService : Service(), LocationListener {
         const val ACTION_RECORD_AUDIO = "com.mobile.action.RECORD_AUDIO"
         const val ACTION_STOP_AUDIO = "com.mobile.action.STOP_AUDIO"
         const val ACTION_TRIGGER_SOS = "com.mobile.action.TRIGGER_SOS"
+        const val ACTION_UPDATE_ALERT_ID = "com.mobile.action.UPDATE_ALERT_ID"
 
         const val EXTRA_JOURNEY_ID = "journey_id"
         const val EXTRA_DEST_LAT = "dest_lat"
@@ -83,7 +84,10 @@ class SafeWalkService : Service(), LocationListener {
     private var locationManager: LocationManager? = null
     private var notificationManager: NotificationManager? = null
 
+    @Volatile
     private var isRecordingAudio = false
+    @Volatile
+    private var currentRecordingAlertId: String = ""
     private var audioRecordThread: Thread? = null
     private var audioRecord: AudioRecord? = null
     private var currentAudioFile: File? = null
@@ -120,8 +124,18 @@ class SafeWalkService : Service(), LocationListener {
             }
             ACTION_RECORD_AUDIO -> {
                 val alertId = intent.getStringExtra(EXTRA_ALERT_ID) ?: "emergency"
+                if (alertId.isNotEmpty() && alertId != "emergency" && alertId != "sos_emergency") {
+                    currentRecordingAlertId = alertId
+                }
                 ensureAudioForegroundNotification()
                 startLockScreenAudio(alertId)
+            }
+            ACTION_UPDATE_ALERT_ID -> {
+                val alertId = intent.getStringExtra(EXTRA_ALERT_ID) ?: ""
+                if (alertId.isNotEmpty() && alertId != "emergency" && alertId != "sos_emergency") {
+                    currentRecordingAlertId = alertId
+                    Log.i(TAG, "Native alert ID updated to: $alertId")
+                }
             }
             ACTION_STOP_AUDIO -> {
                 stopAudioRecording()
@@ -154,8 +168,12 @@ class SafeWalkService : Service(), LocationListener {
                     }
                     startForeground(NOTIFICATION_ID, notification, fgsType)
                 } catch (e: Exception) {
-                    Log.w(TAG, "Typed startForeground failed, falling back to standard: ${e.message}")
-                    startForeground(NOTIFICATION_ID, notification)
+                    Log.w(TAG, "Typed startForeground failed: ${e.message}, attempting location-typed fallback")
+                    try {
+                        startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+                    } catch (fallbackEx: Exception) {
+                        Log.w(TAG, "Fallback typed startForeground failed: ${fallbackEx.message}")
+                    }
                 }
             } else {
                 startForeground(NOTIFICATION_ID, notification)
@@ -503,6 +521,7 @@ class SafeWalkService : Service(), LocationListener {
 
     private fun stopAudioThreadOnly() {
         isRecordingAudio = false
+        currentRecordingAlertId = ""
         try {
             audioRecordThread?.join(600)
         } catch (_: Exception) {}
@@ -538,6 +557,9 @@ class SafeWalkService : Service(), LocationListener {
     fun startLockScreenAudio(alertId: String): String? {
         try {
             stopAudioThreadOnly()
+            if (alertId.isNotEmpty() && alertId != "emergency" && alertId != "sos_emergency") {
+                currentRecordingAlertId = alertId
+            }
 
             // Acquire temporary partial wake lock so CPU stays awake during 30s emergency recording
             val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
@@ -604,8 +626,14 @@ class SafeWalkService : Service(), LocationListener {
                                 val chunkWav = createWavHeaderBytes(pcmBytes.size, sampleRate, 1, 16) + pcmBytes
                                 val base64Chunk = Base64.encodeToString(chunkWav, Base64.NO_WRAP)
 
+                                val activeAlertId = if (currentRecordingAlertId.isNotEmpty() && currentRecordingAlertId != "emergency" && currentRecordingAlertId != "sos_emergency") {
+                                    currentRecordingAlertId
+                                } else {
+                                    alertId
+                                }
+
                                 val map = Arguments.createMap().apply {
-                                    putString("alertId", alertId)
+                                    putString("alertId", activeAlertId)
                                     putInt("seq", chunkSeq)
                                     putInt("totalChunksExpected", 6)
                                     putDouble("durationSec", 5.0)
@@ -627,8 +655,14 @@ class SafeWalkService : Service(), LocationListener {
                         val chunkWav = createWavHeaderBytes(pcmBytes.size, sampleRate, 1, 16) + pcmBytes
                         val base64Chunk = Base64.encodeToString(chunkWav, Base64.NO_WRAP)
 
+                        val activeAlertId = if (currentRecordingAlertId.isNotEmpty() && currentRecordingAlertId != "emergency" && currentRecordingAlertId != "sos_emergency") {
+                            currentRecordingAlertId
+                        } else {
+                            alertId
+                        }
+
                         val map = Arguments.createMap().apply {
-                            putString("alertId", alertId)
+                            putString("alertId", activeAlertId)
                             putInt("seq", chunkSeq)
                             putInt("totalChunksExpected", chunkSeq)
                             putDouble("durationSec", pcmBytes.size.toDouble() / bytesPerSecond.toDouble())
@@ -672,9 +706,15 @@ class SafeWalkService : Service(), LocationListener {
                     } catch (_: Exception) {}
                     audioWakeLock = null
 
+                    val activeAlertId = if (currentRecordingAlertId.isNotEmpty() && currentRecordingAlertId != "emergency" && currentRecordingAlertId != "sos_emergency") {
+                        currentRecordingAlertId
+                    } else {
+                        alertId
+                    }
+
                     // Notify mobile JS that master recording is complete and ready for Cloudinary upload
                     val completionMap = Arguments.createMap().apply {
-                        putString("alertId", alertId)
+                        putString("alertId", activeAlertId)
                         putString("filePath", currentAudioFile?.absolutePath ?: "")
                         putBoolean("success", totalBytesRecorded > 0)
                         putInt("bytesRecorded", totalBytesRecorded)

@@ -20,6 +20,8 @@ const allowedOrigins = [
 ];
 
 const io = new SocketIOServer(server, {
+  maxHttpBufferSize: 1e7, // 10MB to support base64 live audio streaming chunks without disconnection
+  pingTimeout: 30000,
   cors: {
     origin: (origin, callback) => {
       if (!origin || allowedOrigins.includes(origin)) {
