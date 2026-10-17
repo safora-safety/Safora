@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   triggerSOS,
   attachAudio,
+  streamAudioChunk,
   getAlerts,
   updateStatus,
   getContacts,
@@ -18,6 +19,7 @@ import { authMiddleware, requireStaff } from "../middleware/auth";
 import { validateBody } from "../middleware/validate";
 import {
   sosRateLimiter,
+  audioChunkRateLimiter,
   checkGuardianRateLimiter,
   uploadAudioRateLimiter,
   testGuardianRateLimiter,
@@ -26,6 +28,7 @@ import {
   sosAlertSchema,
   trustedContactSchema,
   attachAudioSchema,
+  streamAudioChunkSchema,
   updateSosStatusSchema,
   testGuardianSchema,
 } from "../validation/schemas";
@@ -53,6 +56,20 @@ router.patch(
 
 // Attach audio evidence to SOS alert
 router.patch("/:id/audio", validateBody(attachAudioSchema), attachAudio);
+
+// Stream real-time ambient audio chunk (HTTP fallback for background/locked-screen streaming)
+router.post(
+  "/:id/audio-chunk",
+  audioChunkRateLimiter,
+  validateBody(streamAudioChunkSchema),
+  streamAudioChunk,
+);
+router.post(
+  "/audio-chunk",
+  audioChunkRateLimiter,
+  validateBody(streamAudioChunkSchema),
+  streamAudioChunk,
+);
 
 // Upload real SOS audio evidence (Rate-limited to 5 per 15 min)
 router.post(

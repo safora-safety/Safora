@@ -17,7 +17,11 @@
     }
   },
   "scripts": {
-    "test": "npm test --workspace=apps/backend",
+    "test": "npm run test:all",
+    "test:all": "npm test --workspace=apps/backend && npm test --workspace=@safora/frontend && npm test --workspace=mobile",
+    "test:backend": "npm test --workspace=apps/backend",
+    "test:frontend": "npm test --workspace=@safora/frontend",
+    "test:mobile": "npm test --workspace=mobile",
     "prepare": "npx husky"
   },
   "lint-staged": {

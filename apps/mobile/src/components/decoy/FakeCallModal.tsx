@@ -13,6 +13,7 @@ import {
   FakeCallService,
   FakeCallLanguage,
 } from '../../services/FakeCallService';
+import { typography } from '../../theme/typography';
 
 interface FakeCallModalProps {
   visible: boolean;
@@ -192,6 +193,8 @@ export const FakeCallModal: React.FC<FakeCallModalProps> = ({
                 style={[styles.actionBtn, styles.declineBtn]}
                 onPress={handleDecline}
                 activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Decline incoming call"
               >
                 <Text style={styles.btnIcon}>📞</Text>
                 <Text style={styles.btnLabel}>Decline</Text>
@@ -201,6 +204,8 @@ export const FakeCallModal: React.FC<FakeCallModalProps> = ({
                 style={[styles.actionBtn, styles.acceptBtn]}
                 onPress={handleAccept}
                 activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Accept incoming call"
               >
                 <Text style={styles.btnIcon}>📞</Text>
                 <Text style={styles.btnLabel}>Accept</Text>
@@ -217,13 +222,31 @@ export const FakeCallModal: React.FC<FakeCallModalProps> = ({
                 </Text>
               </View>
               <Text style={styles.callerNameText}>{callerName}</Text>
-              <Text style={styles.connectedDuration}>
+              <Text style={[styles.connectedDuration, typography.tabularNums]}>
                 {formatDuration(callSeconds)}
               </Text>
               <Text style={styles.connectedLangBadge}>
                 {language === 'hi' ? '🇮🇳 Hindi Script' : '🇺🇸 English Script'} •{' '}
                 {isSpeaker ? '🔊 Speakerphone' : '👂 Earpiece Mode'}
               </Text>
+
+              {/* Conversational Escape Teleprompter Script */}
+              <View style={styles.teleprompterCard}>
+                <Text style={styles.teleprompterTitle}>
+                  {language === 'hi'
+                    ? '🗣️ बात करने का सुझाव (Say this out loud):'
+                    : '🗣️ Suggested Natural Reply:'}
+                </Text>
+                <Text style={styles.teleprompterScript}>
+                  {language === 'hi'
+                    ? callSeconds < 10
+                      ? '"हाँ, मैं बाहर ही आ रहा हूँ, बस दो मिनट में गेट पर मिलता हूँ!"'
+                      : '"गाड़ी स्टार्ट रखो, मैं बस अभी बाहर निकल रहा हूँ!"'
+                    : callSeconds < 10
+                      ? '"Hey, yeah! I am heading outside right now, see you in two minutes."'
+                      : '"Keep the engine running, I\'m walking out the front doors now!"'}
+                </Text>
+              </View>
             </View>
 
             {/* In-call controls grid */}
@@ -376,6 +399,33 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontWeight: '500',
     letterSpacing: 0.3,
+  },
+  teleprompterCard: {
+    marginTop: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: 'rgba(30, 41, 59, 0.7)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.3)',
+    width: '100%',
+    maxWidth: 320,
+    alignItems: 'center',
+  },
+  teleprompterTitle: {
+    color: '#38BDF8',
+    fontSize: 11,
+    fontWeight: '700',
+    marginBottom: 4,
+    letterSpacing: 0.3,
+  },
+  teleprompterScript: {
+    color: '#F8FAFC',
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+    lineHeight: 18,
+    fontStyle: 'italic',
   },
   langSelectorRow: {
     alignItems: 'center',

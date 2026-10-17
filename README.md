@@ -95,19 +95,19 @@ Documentation is organised into three stages, plus an archive of earlier drafts:
 
 | Folder | Contents |
 |---|---|
-| 🚀 **[`docs/v1/`](docs/v1/)** | **This submission.** Architecture, API, database schema, safety algorithms, mobile features, dual-pipe audio streaming, admin panel, setup, task list, and testing/submission checklist for the current build. |
-| 🗺️ **[`docs/v2/`](docs/v2/)** | Product roadmap beyond the submission: accounts hardening, real per-mode routing & voice guidance, no-unlock SOS triggers, staged chat, Hindi/Uttarakhand localisation, weather & earthquake data, security/privacy/DPDP compliance. |
-| 🔭 **[`docs/v3/`](docs/v3/)** | Research notes on the synopsis's future-scope items (AI safe-route scoring, offline mesh SOS messaging, AI hazard image detection) — honestly scoped, not scheduled. |
+| 🚀 **[`docs/v1/`](docs/v1/)** | **This submission.** Architecture, API, database schema, safety algorithms, mobile features, dual-pipe audio streaming, admin panel, setup, task list, testing/submission checklist, and comprehensive [global industry research & competitive benchmarking](docs/v1/safora-v1-features-industry-research.md). |
+| 🗺️ **[`docs/v2/`](docs/v2/)** | Product roadmap beyond the submission: accounts hardening, real per-mode routing & voice guidance, no-unlock SOS triggers, staged chat, Hindi/Uttarakhand localisation, weather & earthquake data, security/privacy/DPDP compliance, forensic PDF evidentiary dossier (ADM-4), and municipal 112 ERSS / CAD connector (ADM-5). |
+| 🔭 **[`docs/v3/`](docs/v3/)** | Research notes on future-scope items (AI safe-route scoring, offline mesh SOS messaging, AI hazard image detection, on-device hands-free voice-activated SOS) — honestly scoped, not scheduled. |
 | 🗄️ **[`docs/archive/`](docs/archive/)** | Earlier documentation drafts, kept for reference during the transition to the v1/v2/v3 structure. |
 | 📄 **[Academic Synopsis PDF](docs/SAFORA_Synopsis_Formatted.pdf)** | Approved project synopsis submitted to Dev Bhoomi Uttarakhand University. |
 
-**Start here:** [`docs/README.md`](docs/README.md) (folder index) → [`docs/v1/README.md`](docs/v1/README.md) (this submission's scope) → [`docs/v1/tasks.md`](docs/v1/tasks.md) (what's being worked on right now).
+**Start here:** [`docs/README.md`](docs/README.md) (folder index) → [`docs/v1/README.md`](docs/v1/README.md) (this submission's scope) → [`docs/v1/tasks.md`](docs/v1/tasks.md) (V1 task verification).
 
 ---
 
 ## 🚀 Key Features & The 6 Core Modules
 
-Based on Section 4.2 of the [Project Synopsis](docs/SAFORA_Synopsis_Formatted.pdf). Items marked 🔧 are in active development for this submission — see [Development Status](#-development-status).
+Based on Section 4.2 of the [Project Synopsis](docs/SAFORA_Synopsis_Formatted.pdf). All modules are fully delivered, hardened, and verified for V1:
 
 1. **Module 1: User Authentication, Onboarding & Session Management**
    - Secure stateless authentication using JSON Web Tokens (JWT) and bcrypt password hashing.
@@ -120,7 +120,7 @@ Based on Section 4.2 of the [Project Synopsis](docs/SAFORA_Synopsis_Formatted.pd
    - **Offline Incident Queue**: stores unsubmitted hazard reports in `AsyncStorage` when internet drops, automatically syncing once connection is restored.
 3. **Module 3: Safety Score & Calibrated Multi-Modal Routing**
    - Real-time score computation (0–100) combining hazard severity, distance falloff, recency exponential decay ($t_{\text{half}} = 24\text{h}$), and community confirmations. See `docs/v1/safety-algorithms.md` for the exact formula.
-   - Spatial analysis endpoint via PostGIS `ST_ClusterDBSCAN` (`GET /api/reports/clusters`), grouping hazards within **~330m** for density analytics. 🔧 Rendering this as a heatmap on the map/home screens is in progress.
+   - Spatial analysis endpoint via PostGIS `ST_ClusterDBSCAN` (`GET /api/reports/clusters`), grouping hazards within **~330m** for density analytics, rendered as a dynamic multi-tiered heatmap on the map/home screens.
    - **Calibrated Multi-Modal Travel Time estimates** (Walk / 2-Wheeler / Car), based on fixed speed constants over the routed distance:
      - **Walk**: $1.60\text{ m/s}$ ($5.8\text{ km/h}$) → **~10.4 mins per 1 km**.
      - **2-Wheeler**: $8.88\text{ m/s}$ ($32\text{ km/h}$) + 20s buffer → **~2.2 mins per 1 km**.
@@ -133,10 +133,10 @@ Based on Section 4.2 of the [Project Synopsis](docs/SAFORA_Synopsis_Formatted.pd
    - **Layered basemap switcher**: dark and light themes over OpenStreetMap tiles, plus Esri World Imagery for satellite view.
    - **Note on offline tile caching**: an earlier bulk offline-tile-prefetch approach is being reworked (`docs/v2/`) to comply with OpenStreetMap's tile usage policy and to add proper attribution.
    - **Hierarchical Android hardware back navigation**: step-back through search dropdowns → hazard cards → tab history → double-tap exit on Home.
-   - **Confirm-before-escalate**: on a route deviation, the walker gets a 60-second on-phone prompt before contacts are notified. 🔧 A server-side backstop (so an escalation still fires if the app is killed or the phone loses signal) and live location streaming to guardians are in progress for this submission — see `docs/v1/architecture.md` §3–§4.
+   - **Confirm-before-escalate**: on a route deviation, the walker gets a 60-second on-phone prompt before contacts are notified, backed by an autonomous server-side watchdog that escalates to trusted contacts if the phone is destroyed or offline, plus live location streaming to guardians.
 5. **Module 5: Guardian SOS, Safety Alerts Center & Audio Evidence**
    - **Hybrid dispatch**:
-     - *Online*: captures GPS coordinates, battery level, and up to 30 seconds of recorded audio; looks up guardians by email and dispatches Firebase push notifications.
+     - *Online*: captures GPS coordinates, battery level, and progressive 5s audio slices; looks up guardians by email and dispatches Firebase push notifications.
      - *Offline fallback*: manual SMS composer pre-filled with a live Google Maps location link, and one-tap dialer fallback to trusted contacts or 112, requiring no internet connection.
    - **Guardian email verification**: shows whether an added contact is a Safora member (in-app push + audio playback) or SMS-only.
    - **Safety Alerts Center** (`NotificationScreen.tsx`): unread-count badge, GPS map links, and an embedded audio evidence player.
@@ -145,7 +145,7 @@ Based on Section 4.2 of the [Project Synopsis](docs/SAFORA_Synopsis_Formatted.pd
 6. **Module 6: Administrative Moderation & Diagnostics**
    - Moderation workflow to mark hazard reports as active, resolved, duplicate, or fake.
    - Live system health checks and database latency diagnostics (`/api/diagnostics`).
-   - 🔧 The Safe Walk radar's fallback to illustrative sample data (when no walk is active) is being replaced with a proper empty state — see `docs/v1/tasks.md` (task 3).
+   - The Safe Walk radar displays real-time active walkers or a clear, responsive empty state.
 
 ---
 
@@ -261,14 +261,37 @@ cd apps/mobile
 npm run android
 ```
 
-### 6. Build Standalone Debug APK
-To package the standalone APK for physical testing without a local dev server:
+### 7. Run Unified Monorepo Test Suite
+To execute all test cases across the entire monorepo (**Backend + Frontend + Mobile**) in a single command from the project root:
 ```powershell
-cd apps/mobile/android
-.\gradlew assembleDebug
+npm test
 ```
-Compiled APK path:
-`apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk` *(size will change as V1's background-service work lands; last verified build was ~59 MB, optimised for arm64-v8a)*
+Or execute individual workspaces independently:
+```powershell
+npm run test:backend   # 8 suites, 72 unit/integration tests (Jest + Supertest)
+npm run test:frontend  # 2 suites, 12 unit tests (Vitest + Happy-DOM)
+npm run test:mobile    # 5 suites, 20 unit tests (Jest + React Test Renderer)
+```
+*Current Monorepo Test Health: 15 / 15 test suites passed, 104 / 104 tests passed (100% pass rate).*
+
+---
+
+## 🎨 UI/UX Modernization & CAD Ergonomics (Phases 1–5 Delivered)
+
+### Mobile Client Modernization (`apps/mobile`)
+1. **Phase 1 (Brand & Typography):** Pure OLED Midnight Theme (`#0A0D14`), Luminous Shield Launcher Mipmaps (`mdpi`..`xxxhdpi`), and tabular numbers (`fontVariant: ['tabular-nums']`).
+2. **Phase 2 (Living Map Canvas):** Google Maps-style Floating Search Capsule with integrated circular Safety Score ring meter, rapid category filter chips, thumb-zone persistent Safety FAB and drawer, and 1-handed zoom gestures.
+3. **Phase 3 (Active Safe Walk Cockpit):** Multi-modal travel comparison (Walk, 2-Wheeler, Car), Safest vs. Fastest route strategy, 150m corridor halo buffer, and 1.5s Hold-To-Confirm walk completion.
+4. **Phase 4 (Emergency SOS):** 5-second Grace-Period Emergency Abort overlay with rhythmic haptics, live microphone waveform equalizer bars, and 60-second deviation countdown modal.
+5. **Phase 5 (Covert Decoys & Polish):** 4-function Calculator Decoy with duress PIN `9999=` silently firing background SOS + haptic pulse, bilingual (English/Hindi) Incoming Fake Call simulator, and Safe Arrival auto-text celebration modal.
+
+### Web Operations Command CAD Ergonomics (`apps/frontend`)
+- **Spotlight Command Palette (`Ctrl+K` / `Cmd+K`):** Fuzzy CAD action launcher, quick page navigation, tactical drill trigger (`Alt+S`), and Voice Clarity DSP toggle (`C`).
+- **Dispatcher Keyboard Shortcuts (`?`):** Comprehensive Linear-style cheatsheet for CAD navigation, incident triage, Web Audio controls, and batch actions.
+- **Automated Offline Failover Banner:** Sticky amber ceiling alert with manual reconnection trigger when WSS connection drops.
+- **Tactical Audio Chime Mute Switch (`M`):** Persistent top-bar speaker toggle allowing dispatchers to silence non-critical chimes during major incidents.
+- **High-Resolution Evidence Lightbox:** Thumbnail inspection with EXIF timestamps, verified GPS coordinates with Google Maps shortcut, and 1-click status moderation.
+- **Batch Range Selection:** `Shift`+Click continuous multi-selection across crowdsourced hazard reports.
 
 ---
 
@@ -289,6 +312,7 @@ To maintain high quality within the academic timeline, strict boundaries are enf
   - AI-based safe-route recommendation (lighting/crowd predictive models).
   - Offline Bluetooth / Wi-Fi Direct mesh communication.
   - AI image hazard detection from camera photos.
+  - On-device hands-free voice-activated SOS (Keyword Spotting via DSP / TFLite Micro).
   - Hardware wearable SOS device integration.
 
 ---

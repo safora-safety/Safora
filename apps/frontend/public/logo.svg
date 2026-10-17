@@ -1,4 +1,63 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#6366F1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-  <path d="m9 12 2 2 4-4"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="shieldBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0B131E" />
+      <stop offset="100%" stop-color="#070A11" />
+    </linearGradient>
+
+    <!-- Neon Emerald to Cyan Brand Gradient -->
+    <linearGradient id="brandGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10B981" />
+      <stop offset="100%" stop-color="#06D6A0" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background Base with Rounded Squircle -->
+  <rect width="512" height="512" rx="112" fill="url(#shieldBg)" />
+
+  <!-- Outer Protective Shield Contour -->
+  <path 
+    d="M 256 64 
+       L 392 116 
+       L 392 272 
+       C 392 344 336 408 256 448 
+       C 176 408 120 344 120 272 
+       L 120 116 
+       Z" 
+    fill="none" 
+    stroke="url(#brandGradient)" 
+    stroke-width="24" 
+    stroke-linecap="round" 
+    stroke-linejoin="round" 
+  />
+
+  <!-- Geometric Interlocking 'S' Ribbon -->
+  <!-- Top Segment of S -->
+  <path 
+    d="M 336 176 
+       L 216 176 
+       L 184 248 
+       L 328 248 
+       L 328 320 
+       L 176 320" 
+    fill="none" 
+    stroke="url(#brandGradient)" 
+    stroke-width="26" 
+    stroke-linecap="round" 
+    stroke-linejoin="round" 
+  />
+
+  <!-- Parallel Internal S Fold -->
+  <path 
+    d="M 336 212 
+       L 256 212 
+       L 224 284 
+       L 336 284" 
+    fill="none" 
+    stroke="#F8FAFC" 
+    stroke-width="18" 
+    stroke-linecap="round" 
+    stroke-linejoin="round" 
+  />
 </svg>

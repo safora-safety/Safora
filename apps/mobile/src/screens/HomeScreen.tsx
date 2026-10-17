@@ -23,8 +23,10 @@ import {
 import { ReportService } from '../services/reportService';
 import { SosService } from '../services/sosService';
 import { SafetyScoreResponse } from '@safora/shared-types';
+import { FloatingSearchCapsule } from '../components/map/FloatingSearchCapsule';
 import { FakeCallModal } from '../components/decoy/FakeCallModal';
 import { CalculatorDecoyModal } from '../components/decoy/CalculatorDecoyModal';
+import { SosGracePeriodOverlay, AudioWaveformBars } from '../components';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AudioRecorderService } from '../services/audioRecorderService';
 import { JourneyService } from '../services/journeyService';
@@ -67,6 +69,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
   } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [isSirenActive, setIsSirenActive] = useState(false);
+  const [isAudioRecording, setIsAudioRecording] = useState(false);
 
   const lastAlertedJourneyIdRef = useRef<string | number | null>(null);
 
@@ -264,6 +267,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
         AudioRecorderService.requestPermissionOnce().catch(() => {});
       }
     });
+
+    const audioCheckTimer = setInterval(() => {
+      setIsAudioRecording(AudioRecorderService.isCurrentlyRecording());
+    }, 1500);
+
+    return () => clearInterval(audioCheckTimer);
   }, []);
 
   // 5-second countdown abort window for SOS
@@ -320,6 +329,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
     Vibration.cancel();
     SirenService.stopSiren().catch(() => {});
     setIsSirenActive(false);
+    setIsAudioRecording(false);
     AudioRecorderService.stopSilent().catch(() => {});
     Alert.alert('SOS Cancelled', 'Emergency broadcast was safely aborted.');
   };
@@ -342,7 +352,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
     ensureSocketConnected(3000).catch(() => {});
 
     if (!isLoudSiren) {
-      AudioRecorderService.startRecording().catch(() => {});
+      AudioRecorderService.startRecording()
+        .then(started => {
+          if (started) setIsAudioRecording(true);
+        })
+        .catch(() => {});
     }
 
     let onlineSuccess = false;
@@ -555,6 +569,38 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
           </Text>
         </View>
       </View>
+
+      {/* Live Audio Streaming Status Banner with Waveform Equalizer (Phase 4) */}
+      {isAudioRecording && (
+        <View style={styles.audioBanner}>
+          <AudioWaveformBars
+            isRecording={true}
+            barCount={7}
+            height={18}
+            activeColor="#EF4444"
+            labelText="EMERGENCY AUDIO EVIDENCE STREAMING"
+          />
+        </View>
+      )}
+
+      {/* Quick Destination Search Capsule (Google Maps Habit) */}
+      <TouchableOpacity
+        activeOpacity={0.88}
+        onPress={() => onNavigateTab?.('Map')}
+        style={styles.searchCapsuleTouch}
+        accessibilityRole="button"
+        accessibilityLabel="Search destination and open map"
+      >
+        <View pointerEvents="none">
+          <FloatingSearchCapsule
+            searchQuery=""
+            onSearchChange={() => {}}
+            onClear={() => {}}
+            placeholder="Where are you walking to?"
+            safetyScore={safetyScore ? safetyScore.safetyScore : null}
+          />
+        </View>
+      </TouchableOpacity>
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
@@ -1094,6 +1140,17 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
         onClose={() => setShowDecoyCalculator(false)}
         duressPin="9999"
       />
+
+      {/* Phase 4: 5-Second Emergency SOS Grace-Period Abort Overlay */}
+      <SosGracePeriodOverlay
+        visible={sosCountdown !== null && sosCountdown > 0}
+        countdown={sosCountdown || 0}
+        onCancel={cancelSos}
+        onTriggerImmediately={() => {
+          setSosCountdown(null);
+          dispatchRealSos();
+        }}
+      />
     </View>
   );
 };
@@ -1141,6 +1198,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderBottomWidth: 1,
     gap: 8,
+  },
+  searchCapsuleTouch: {
+    marginVertical: 10,
   },
   gpsIcon: { fontSize: 13 },
   gpsText: {

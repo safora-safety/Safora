@@ -4,6 +4,7 @@ import { UserRepository } from "../repositories/userRepository";
 import { JourneyRepository } from "../repositories/journeyRepository";
 import { SosRepository } from "../repositories/sosRepository";
 import { AudioStitcherService } from "../services/audioStitcherService";
+import { processSosAudioChunk } from "../services/sosAudioService";
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -400,82 +401,24 @@ export function setupJourneySockets(io: Server): void {
           return;
         }
 
-        const alertIdNum = Number(data.alertId);
-        if (isNaN(alertIdNum)) {
-          return;
-        }
-
         try {
-          let alert = await SosRepository.findById(alertIdNum);
-          if (!alert) {
-            // Rapid DB commit grace retry (protects against sub-second timing differences between HTTP SOS creation and first socket chunk)
-            for (let i = 0; i < 3 && !alert; i++) {
-              await new Promise((resolve) => setTimeout(resolve, 500));
-              alert = await SosRepository.findById(alertIdNum);
-            }
-          }
-
-          const isOwner =
-            Boolean(alert) &&
-            (String(alert?.user_id) === String(user.id) ||
-              Number(alert?.user_id) === Number(user.id));
-          const isStaff = user.role === "admin" || user.role === "moderator";
-
-          if (!alert || (!isOwner && !isStaff)) {
-            console.warn(
-              `[Socket.IO] Forbidden audio slice #${data.seq} for alert ${alertIdNum} from user ${user.id} (owner: ${alert?.user_id})`,
-            );
-            socket.emit("error", {
-              message: "Forbidden: Cannot stream audio for unowned SOS alert",
-            });
-            return;
-          }
-
-          console.log(
-            `[Socket.IO] Ingested live audio slice #${data.seq} for alert ${data.alertId} (${data.durationSec || 5}s, isLast=${Boolean(data.isLast)})`,
-          );
-
-          // Fetch guardians to broadcast live slice to their personal rooms
-          const guardianUserIds = await SosRepository.findGuardianUserIds(
-            alert.user_id,
-          );
-
-          // 1. Instantly forward live audio slice to alert room, staff, and guardians
-          broadcastSosLiveAudioChunk({
-            alertId: data.alertId,
-            seq: data.seq,
-            totalChunksExpected: data.totalChunksExpected,
-            durationSec: data.durationSec,
-            mimeType: data.mimeType,
-            data: data.data,
-            isLast: data.isLast,
-            guardianUserIds,
+          await processSosAudioChunk({
+            ...data,
+            userId: user.id,
+            userRole: user.role,
           });
 
-          // 2. Acknowledge back to emitting mobile client
+          // Acknowledge back to emitting mobile client
           socket.emit("sos:audio_chunk_ack", {
             alertId: data.alertId,
             seq: data.seq,
             receivedAt: new Date().toISOString(),
           });
-
-          // 3. Disk staging & server watchdog management (auto-stitch fallback if client dies)
-          AudioStitcherService.handleIncomingChunk({
-            alertId: data.alertId,
-            userId: user.id,
-            seq: data.seq,
-            dataBase64: data.data,
-            isLast: Boolean(data.isLast),
-            sampleRate: data.sampleRate,
-          }).catch((err) => {
-            console.warn(
-              `[Socket.IO] Error staging audio chunk for alert ${data.alertId}:`,
-              err,
-            );
-          });
-        } catch (err) {
+        } catch (err: any) {
           console.error(`[Socket.IO] Error processing sos:audio_chunk:`, err);
-          socket.emit("error", { message: "Failed to process audio chunk" });
+          socket.emit("error", {
+            message: err?.message || "Failed to process audio chunk",
+          });
         }
       },
     );

@@ -17,6 +17,7 @@ import {
   Pause,
   Radio,
   ShieldAlert,
+  Sparkles,
 } from 'lucide-react';
 
 export const SosAlertsPage: React.FC = () => {
@@ -35,6 +36,9 @@ export const SosAlertsPage: React.FC = () => {
     leaveAlertRoom,
     unlockAudio,
     isAudioUnlocked,
+    stopLiveAudioPlayback,
+    isVoiceClarityEnabled,
+    toggleVoiceClarity,
   } = useSocket();
 
   // Automatically join the alert's dedicated room so 5s live audio slices stream directly
@@ -232,6 +236,12 @@ export const SosAlertsPage: React.FC = () => {
                   key={`alert-item-${alert.id}`}
                   onClick={() => {
                     unlockAudio();
+                    stopLiveAudioPlayback();
+                    if (activeChunkAudioRef.current) {
+                      activeChunkAudioRef.current.pause();
+                      activeChunkAudioRef.current = null;
+                    }
+                    setPlayingChunkSeq(null);
                     setSelectedAlert(alert);
                   }}
                   className={`p-4 rounded-2xl cursor-pointer border transition-all ${
@@ -337,7 +347,7 @@ export const SosAlertsPage: React.FC = () => {
         {/* Selected Alert Details View (7 cols) */}
         <div className="lg:col-span-7">
           {selectedAlert ? (
-            <div className="p-6 rounded-2xl bg-obsidian-850 border border-white/10 shadow-2xl space-y-6">
+            <div className="p-6 rounded-2xl bg-obsidian-850 border border-white/10 shadow-2xl space-y-6 max-h-[720px] overflow-y-auto custom-scrollbar">
               {/* Header Info */}
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -512,14 +522,14 @@ export const SosAlertsPage: React.FC = () => {
                     const bufferedSec = Math.min(30, alertChunks.length * 5);
                     const progressPercent = Math.min(100, Math.round((bufferedSec / 30) * 100));
 
-                    const playChunk = (chunk: LiveAudioChunk) => {
+                    const playChunk = (chunk: LiveAudioChunk, autoNext = false) => {
                       unlockAudio();
                       if (activeChunkAudioRef.current) {
                         activeChunkAudioRef.current.pause();
                         activeChunkAudioRef.current = null;
                       }
 
-                      if (playingChunkSeq === chunk.seq) {
+                      if (playingChunkSeq === chunk.seq && !autoNext) {
                         setPlayingChunkSeq(null);
                         return;
                       }
@@ -527,7 +537,15 @@ export const SosAlertsPage: React.FC = () => {
                       const audio = new Audio(`data:${chunk.mimeType || 'audio/wav'};base64,${chunk.data}`);
                       activeChunkAudioRef.current = audio;
                       setPlayingChunkSeq(chunk.seq);
-                      audio.onended = () => setPlayingChunkSeq(null);
+                      audio.onended = () => {
+                        setPlayingChunkSeq(null);
+                        if (autoNext) {
+                          const nextIdx = alertChunks.findIndex((c) => c.seq === chunk.seq) + 1;
+                          if (nextIdx < alertChunks.length) {
+                            playChunk(alertChunks[nextIdx], true);
+                          }
+                        }
+                      };
                       audio.onerror = () => setPlayingChunkSeq(null);
                       audio.play().catch(() => setPlayingChunkSeq(null));
                     };
@@ -556,18 +574,51 @@ export const SosAlertsPage: React.FC = () => {
                               Real-Time 5s Ambient Audio Streaming
                             </span>
                           </div>
-                          <button
-                            onClick={() => {
-                              unlockAudio();
-                              if (alertChunks.length > 0) {
-                                playChunk(alertChunks[alertChunks.length - 1]);
-                              }
-                            }}
-                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[11px] font-bold transition-all shadow-md active:scale-95"
-                          >
-                            <Volume2 className="w-3.5 h-3.5" />
-                            <span>Listen Live Feed</span>
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={toggleVoiceClarity}
+                              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all ${
+                                isVoiceClarityEnabled
+                                  ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300 shadow-sm shadow-emerald-950/50'
+                                  : 'bg-obsidian-900 border-white/10 text-gray-400 hover:text-gray-200'
+                              }`}
+                              title="Voice Clarity: Suppresses pocket friction/wind noise (<175Hz) and boosts human vocal frequencies (2.4kHz)"
+                            >
+                              <Sparkles className={`w-3.5 h-3.5 ${isVoiceClarityEnabled ? 'text-emerald-400' : 'text-gray-400'}`} />
+                              <span>Clarity: {isVoiceClarityEnabled ? 'ON' : 'OFF'}</span>
+                            </button>
+                            <button
+                              onClick={() => {
+                                unlockAudio();
+                                if (playingChunkSeq !== null) {
+                                  if (activeChunkAudioRef.current) {
+                                    activeChunkAudioRef.current.pause();
+                                    activeChunkAudioRef.current = null;
+                                  }
+                                  setPlayingChunkSeq(null);
+                                } else if (alertChunks.length > 0) {
+                                  playChunk(alertChunks[0], true);
+                                }
+                              }}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white text-[11px] font-bold transition-all shadow-md active:scale-95 ${
+                                playingChunkSeq !== null
+                                  ? 'bg-amber-600 hover:bg-amber-500'
+                                  : 'bg-red-600 hover:bg-red-500'
+                              }`}
+                            >
+                              {playingChunkSeq !== null ? (
+                                <>
+                                  <Pause className="w-3.5 h-3.5" />
+                                  <span>Pause Feed (Slice #{playingChunkSeq})</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Volume2 className="w-3.5 h-3.5" />
+                                  <span>Listen Live Feed ({alertChunks.length} slices)</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
                         </div>
 
                         {/* Real-time buffer bar */}

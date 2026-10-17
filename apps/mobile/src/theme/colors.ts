@@ -5,6 +5,8 @@ export interface ColorPalette {
   primaryLight: string;
   accent: string;
   accentGlow: string;
+  brandEmerald: string;
+  brandCyan: string;
 
   // Status
   danger: string;
@@ -15,6 +17,8 @@ export interface ColorPalette {
 
   // Surfaces & Backgrounds
   background: string;
+  backgroundOled: string;
+  surfaceElevated: string;
   backgroundCard: string;
   backgroundInput: string;
   surfaceHover: string;
@@ -41,6 +45,8 @@ export const lightColors: ColorPalette = {
   primaryLight: '#6366F1',
   accent: '#0284C7', // Refined Sky 600
   accentGlow: 'rgba(2, 132, 199, 0.15)',
+  brandEmerald: '#059669', // Emerald 600
+  brandCyan: '#0284C7',
 
   danger: '#DC2626', // Red 600
   dangerDark: '#991B1B',
@@ -49,6 +55,8 @@ export const lightColors: ColorPalette = {
   info: '#2563EB',
 
   background: '#F8FAFC', // Slate 50 - crisp paper surface
+  backgroundOled: '#FFFFFF',
+  surfaceElevated: '#F1F5F9', // Slate 100
   backgroundCard: '#FFFFFF', // Pure White elevated card
   backgroundInput: '#F1F5F9', // Slate 100 soft input
   surfaceHover: '#E2E8F0', // Slate 200
@@ -73,6 +81,8 @@ export const darkColors: ColorPalette = {
   primaryLight: '#818CF8',
   accent: '#38BDF8', // Sky 400
   accentGlow: 'rgba(56, 189, 248, 0.2)',
+  brandEmerald: '#10B981', // Neon Emerald
+  brandCyan: '#06D6A0', // Electric Cyan
 
   danger: '#EF4444', // Red 500
   dangerDark: '#B91C1C',
@@ -81,6 +91,8 @@ export const darkColors: ColorPalette = {
   info: '#3B82F6',
 
   background: '#0F172A', // Slate 900
+  backgroundOled: '#0A0D14', // Pure OLED Midnight Canvas
+  surfaceElevated: '#111827', // Elevated Sheet / Card Base
   backgroundCard: '#1E293B', // Slate 800
   backgroundInput: '#0B132B', // Deep input field
   surfaceHover: '#334155', // Slate 700

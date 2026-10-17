@@ -65,7 +65,8 @@
 |---|---|---|
 | POST | `/api/sos/:id/assign` / `/notes` / `/callback` | `accounts-email-local.md` §7 (ADM-1) |
 | GET | `/api/analytics/response-times` | §7 (ADM-3) |
-| GET | `/api/sos/:id/evidence-packet` (PDF) | §7 (ADM-4) |
+| GET | `/api/sos/:id/evidence-packet` (PDF) | §7 & `safety-and-tracking.md` §12 (ADM-4) |
+| POST | `/api/cad/dispatch-feed` (CAP v1.2 / Webhook) | `safety-and-tracking.md` §12 (ADM-5) |
 
 ## Environmental hazards (added 22 Sep 2026)
 

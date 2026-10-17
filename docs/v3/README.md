@@ -11,12 +11,14 @@
 | `03-ai-hazard-image-detection.md` | Auto-classifying hazard photos: on-device vs hosted, dataset needs, a realistic narrow-first path |
 | `04-research-and-evaluation-framework.md` | How to decide whether/when to actually build any of these — a scoring framework, not a commitment |
 | `05-references.md` | Sources for the claims made in files 01–03 |
+| `06-voice-activated-sos.md` | On-device hands-free Safe Word detection (TFLite Micro / DSP Keyword Spotting): architecture, battery profile, false-alarm mitigation, UrSafe & bSafe benchmarks |
 
 ## How V3 relates to V1 and V2
 - V1 (college submission) and V2 (product) do not depend on any V3 item.
 - V2's `MAP-6` (rule-based safest route) is deliberately the "V3 phase 0" for item 1 — it exists so a future ML model has a baseline to beat and, eventually, real usage data to train on.
 - V1's photo picker (`SYN-3`) and Cloudinary storage are the prerequisite for item 3 — no classification happens without photos existing first.
 - Item 2 (mesh messaging) has no dependency in V1/V2 and is the least connected to the current architecture.
+- Item 6 (Voice-Activated SOS / Keyword Spotting) builds directly upon V1's proven `SafeWalkService.kt` foreground microphone pipeline and AudioStreamManager, taking it from active live streaming to ultra-low-power passive acoustic detection.
 
 ## How to present this in your report
-Frame V3 as: "the synopsis's future-scope items remain future scope — V1 and V2 build the data and infrastructure (photo storage, hazard reports, rule-based route scoring) that any of these three would eventually need, without committing to unproven ML or mesh-networking work inside the current project timeline." Each file below gives you enough substance to answer a faculty question like "how would you actually do that?" without having built it.
+Frame V3 as: "the synopsis's future-scope items remain future scope — V1 and V2 build the data and infrastructure (photo storage, hazard reports, rule-based route scoring, foreground audio streaming) that any of these would eventually need, without committing to unproven ML or mesh-networking work inside the current project timeline." Each file below gives you enough substance to answer a faculty question like "how would you actually do that?" without having built it.

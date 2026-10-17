@@ -165,6 +165,14 @@ export const sosRateLimiter = createRateLimiter({
     "Too many SOS requests triggered in a short period. Please wait 1 minute.",
 });
 
+// Up to 60 chunks per minute for real-time ambient audio streaming (keyed by user ID)
+export const audioChunkRateLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: 60,
+  keyGenerator: userOrIpKeyGenerator,
+  message: "Too many audio chunks transmitted in a short period.",
+});
+
 // 20 reports per 15 minutes (keyed by user ID)
 export const reportCreateRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,

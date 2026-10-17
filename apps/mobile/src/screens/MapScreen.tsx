@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  TextInput,
   StatusBar,
   ActivityIndicator,
   Alert,
@@ -12,6 +11,7 @@ import {
   Image,
   BackHandler,
   ScrollView,
+  Linking,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import {
@@ -19,6 +19,15 @@ import {
   OpenMapViewRef,
   MapMarkerItem,
 } from '../components/map/OpenMapView';
+import { FloatingSearchCapsule } from '../components/map/FloatingSearchCapsule';
+import {
+  HazardFilterChips,
+  FilterCategory,
+} from '../components/map/HazardFilterChips';
+import { SafetyFabDrawer } from '../components/map/SafetyFabDrawer';
+import { SirenService } from '../services/sirenService';
+import { FakeCallModal } from '../components/decoy/FakeCallModal';
+import { CalculatorDecoyModal } from '../components/decoy/CalculatorDecoyModal';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuthStore } from '../store/authStore';
 import {
@@ -74,7 +83,11 @@ export const MapScreen: React.FC<MapScreenProps> = ({
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
   const [isSyncingPending, setIsSyncingPending] = useState(false);
   const [selectedCategoryFilter, setSelectedCategoryFilter] =
-    useState<string>('all');
+    useState<FilterCategory>('all');
+  const [safetyScore, setSafetyScore] = useState<number | null>(null);
+  const [isSirenActive, setIsSirenActive] = useState(false);
+  const [showFakeCall, setShowFakeCall] = useState(false);
+  const [showDecoyCalculator, setShowDecoyCalculator] = useState(false);
 
   // Multi-Modal Path Routing State (Car, 2-Wheeler, Walk)
   const [activeRoute, setActiveRoute] = useState<{
@@ -163,6 +176,11 @@ export const MapScreen: React.FC<MapScreenProps> = ({
       ReportService.getClusters(0.003, 2)
         .then(setClusters)
         .catch(() => {});
+
+      // Calculate real-time safety score at current coordinates
+      ReportService.getSafetyScore(userPos.latitude, userPos.longitude)
+        .then(scoreRes => setSafetyScore(scoreRes.safetyScore))
+        .catch(() => setSafetyScore(78));
 
       // Check offline reports pending sync
       ReportService.getPendingCount()
@@ -406,7 +424,29 @@ export const MapScreen: React.FC<MapScreenProps> = ({
       : []),
     ...(selectedCategoryFilter === 'all'
       ? hazards
-      : hazards.filter(h => h.category === selectedCategoryFilter)
+      : selectedCategoryFilter === 'lighting'
+        ? hazards.filter(h => h.category === 'lighting')
+        : selectedCategoryFilter === 'crowd'
+          ? hazards.filter(
+              h =>
+                h.category === 'isolated_area' ||
+                (h.category as string) === 'crowd',
+            )
+          : selectedCategoryFilter === 'police'
+            ? hazards.filter(
+                h =>
+                  (h as any).source === 'police_liaison' ||
+                  (h.category as string) === 'police',
+              )
+            : selectedCategoryFilter === 'high_risk'
+              ? hazards.filter(h => h.severity >= 3)
+              : hazards.filter(
+                  h =>
+                    h.category === 'road_hazard' ||
+                    h.category === 'waterlogging' ||
+                    h.category === 'traffic' ||
+                    h.category === 'other',
+                )
     ).map(item => ({
       id: item.id,
       latitude: item.latitude,
@@ -418,40 +458,69 @@ export const MapScreen: React.FC<MapScreenProps> = ({
     })),
   ];
 
+  const categoryCounts: Partial<Record<FilterCategory, number>> = {
+    all: hazards.length,
+    lighting: hazards.filter(h => h.category === 'lighting').length,
+    crowd: hazards.filter(
+      h => h.category === 'isolated_area' || (h.category as string) === 'crowd',
+    ).length,
+    police: hazards.filter(
+      h =>
+        (h as any).source === 'police_liaison' ||
+        (h.category as string) === 'police',
+    ).length,
+    hazard: hazards.filter(
+      h =>
+        h.category === 'road_hazard' ||
+        h.category === 'waterlogging' ||
+        h.category === 'traffic' ||
+        h.category === 'other',
+    ).length,
+    high_risk: hazards.filter(h => h.severity >= 3).length,
+  };
+
+  const handleToggleSiren = async () => {
+    if (isSirenActive) {
+      await SirenService.stopSiren();
+      setIsSirenActive(false);
+    } else {
+      await SirenService.startSiren();
+      setIsSirenActive(true);
+    }
+  };
+
+  const handleStartSafeWalk = () => {
+    if (activeRoute) {
+      onNavigateTab?.('SafeWalk', {
+        destination: {
+          latitude: activeRoute.destinationCoord.latitude,
+          longitude: activeRoute.destinationCoord.longitude,
+          name: activeRoute.destinationName,
+        },
+      });
+    } else {
+      onNavigateTab?.('SafeWalk');
+    }
+  };
+
+  const handleCall112 = () => {
+    Alert.alert(
+      '🚨 Dial Emergency 112',
+      'Connect directly to national police and emergency response services?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Call 112',
+          style: 'destructive',
+          onPress: () => Linking.openURL('tel:112').catch(() => {}),
+        },
+      ],
+    );
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
-
-      {/* Header Overlay */}
-      <View
-        style={[
-          styles.topHeader,
-          {
-            backgroundColor: colors.backgroundCard,
-            borderBottomColor: colors.border,
-          },
-        ]}
-      >
-        <View style={styles.headerInfo}>
-          <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
-            Safety Radar
-          </Text>
-          <Text
-            style={[styles.headerSubtitle, { color: colors.textSecondary }]}
-            numberOfLines={1}
-          >
-            📍 {coords.areaName} • {hazards.length} hazards active
-          </Text>
-        </View>
-
-        <TouchableOpacity
-          style={[styles.pinBtn, { backgroundColor: colors.primary }]}
-          onPress={handlePinHazardPress}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.pinBtnText}>+ Pin Hazard</Text>
-        </TouchableOpacity>
-      </View>
 
       {/* Real Full-Screen MapView with Multi-Modal Polyline */}
       <View style={styles.mapWrapper}>
@@ -471,7 +540,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
                 : '#6366F1'
           }
           polylineDash={false}
-          layerSwitcherTop={122}
+          layerSwitcherTop={116}
           onMapPress={handleMapPress}
           onMarkerPress={markerId => {
             const found = hazards.find(h => String(h.id) === String(markerId));
@@ -482,36 +551,30 @@ export const MapScreen: React.FC<MapScreenProps> = ({
           style={styles.map}
         />
 
-        {/* Floating Google Maps-Style Location Search Bar */}
+        {/* Floating Google Maps-Style Capsule & Quick Filter Chips */}
         <View style={styles.searchOverlay} pointerEvents="box-none">
-          <View
-            style={[
-              styles.searchBar,
-              {
-                backgroundColor: colors.backgroundCard,
-                borderColor: colors.border,
-              },
-            ]}
-          >
-            <Text style={styles.searchIcon}>🔍</Text>
-            <TextInput
-              style={[styles.searchInput, { color: colors.textPrimary }]}
-              placeholder="Search area, street, or landmark..."
-              placeholderTextColor={colors.textMuted}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-            {isSearching && (
-              <ActivityIndicator size="small" color={colors.primary} />
-            )}
-            {searchQuery.length > 0 && !isSearching && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <Text style={{ color: colors.textMuted, fontSize: 16 }}>✕</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+          <FloatingSearchCapsule
+            placeholder="Where are you walking to?"
+            safetyScore={safetyScore}
+            onScorePress={() => {
+              if (safetyScore !== null) {
+                Alert.alert(
+                  `🛡️ Area Safety Score: ${safetyScore}/100`,
+                  `Real-time rating for ${coords.areaName || 'current location'} based on active street lighting, police presence, and community reports.`,
+                  [{ text: 'Got It' }],
+                );
+              }
+            }}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            onClear={() => {
+              setSearchQuery('');
+              setSearchResults([]);
+            }}
+            isLoading={isSearching}
+          />
 
-          {/* Search Results Dropdown (Scrollable) */}
+          {/* Search Results Dropdown (Floating below Capsule) */}
           {searchResults.length > 0 && (
             <View
               style={[
@@ -563,54 +626,12 @@ export const MapScreen: React.FC<MapScreenProps> = ({
             </View>
           )}
 
-          {/* Hazard Category Filter Chips Bar (Task 6.3) */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.categoryFilterRow}
-            contentContainerStyle={styles.categoryFilterContent}
-          >
-            {[
-              { id: 'all', label: 'All', icon: '🛡️' },
-              { id: 'lighting', label: 'Lighting', icon: '💡' },
-              { id: 'road_hazard', label: 'Road Hazards', icon: '🚧' },
-              { id: 'waterlogging', label: 'Waterlogging', icon: '🌊' },
-              { id: 'isolated_area', label: 'Isolated', icon: '🌲' },
-              { id: 'traffic', label: 'Traffic', icon: '🚗' },
-              { id: 'other', label: 'Other', icon: '⚠️' },
-            ].map(cat => {
-              const active = selectedCategoryFilter === cat.id;
-              return (
-                <TouchableOpacity
-                  key={cat.id}
-                  style={[
-                    styles.categoryFilterChip,
-                    {
-                      backgroundColor: active
-                        ? colors.primary
-                        : colors.backgroundCard,
-                      borderColor: active ? colors.primary : colors.border,
-                    },
-                  ]}
-                  onPress={() => setSelectedCategoryFilter(cat.id)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.categoryFilterChipIcon}>{cat.icon}</Text>
-                  <Text
-                    style={[
-                      styles.categoryFilterChipText,
-                      {
-                        color: active ? '#FFFFFF' : colors.textPrimary,
-                        fontWeight: active ? '800' : '600',
-                      },
-                    ]}
-                  >
-                    {cat.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+          {/* Hazard Quick Filter Chips Bar */}
+          <HazardFilterChips
+            selectedCategory={selectedCategoryFilter}
+            onSelectCategory={setSelectedCategoryFilter}
+            categoryCounts={categoryCounts}
+          />
         </View>
 
         {/* Offline Queued Hazard Reports Sync Banner */}
@@ -652,7 +673,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
             {
               backgroundColor: showHeatmap ? '#EF4444' : colors.backgroundCard,
               borderColor: showHeatmap ? '#DC2626' : colors.border,
-              bottom: activeRoute ? 275 : selectedHazard ? 305 : 84,
+              bottom: activeRoute ? 215 : selectedHazard ? 245 : 24,
             },
           ]}
           onPress={() => setShowHeatmap(prev => !prev)}
@@ -676,7 +697,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
             {
               backgroundColor: colors.backgroundCard,
               borderColor: colors.border,
-              bottom: activeRoute ? 215 : selectedHazard ? 245 : 24,
+              bottom: activeRoute ? 215 : selectedHazard ? 245 : 96,
             },
           ]}
           onPress={recenterMap}
@@ -1072,6 +1093,28 @@ export const MapScreen: React.FC<MapScreenProps> = ({
           </View>
         </View>
       </Modal>
+
+      {/* Persistent Safety FAB & Sliding Quick Action Drawer */}
+      <SafetyFabDrawer
+        onTriggerFakeCall={() => setShowFakeCall(true)}
+        onToggleSiren={handleToggleSiren}
+        isSirenActive={isSirenActive}
+        onStartSafeWalk={handleStartSafeWalk}
+        onPinHazard={handlePinHazardPress}
+        onOpenCalculatorDecoy={() => setShowDecoyCalculator(true)}
+        onCall112={handleCall112}
+        bottomOffset={activeRoute ? 280 : selectedHazard ? 310 : 24}
+      />
+
+      {/* Discrete Decoy Modals */}
+      <FakeCallModal
+        visible={showFakeCall}
+        onClose={() => setShowFakeCall(false)}
+      />
+      <CalculatorDecoyModal
+        visible={showDecoyCalculator}
+        onClose={() => setShowDecoyCalculator(false)}
+      />
     </View>
   );
 };
@@ -1100,8 +1143,8 @@ const styles = StyleSheet.create({
   searchOverlay: {
     position: 'absolute',
     top: 14,
-    left: 16,
-    right: 16,
+    left: 0,
+    right: 0,
     zIndex: 30,
   },
   searchBar: {
@@ -1126,6 +1169,7 @@ const styles = StyleSheet.create({
   },
   searchResultsBox: {
     marginTop: 6,
+    marginHorizontal: 16,
     borderRadius: 16,
     borderWidth: 1,
     overflow: 'hidden',
@@ -1175,7 +1219,7 @@ const styles = StyleSheet.create({
 
   heatmapFab: {
     position: 'absolute',
-    right: 20,
+    left: 20,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,

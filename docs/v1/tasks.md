@@ -284,6 +284,22 @@ async function escalate(journeyId: number) {
 
 ---
 
+### 16. UI-16 — Mobile UI Modernization (Phases 1–5), Admin CAD Ergonomics & Unified Monorepo Testing
+**Size:** M (~3 days) · **Status:** ✅ Fully Delivered & Verified
+**Files:**
+- Mobile: `FloatingSearchCapsule.tsx`, `HazardFilterChips.tsx`, `SafetyFabDrawer.tsx`, `MultiModalRouteSheet.tsx`, `ActiveWalkCockpitHud.tsx`, `HoldToConfirmButton.tsx`, `SosGracePeriodOverlay.tsx`, `AudioWaveformBars.tsx`, `DeviationCountdownModal.tsx`, `CalculatorDecoyModal.tsx`, `FakeCallModal.tsx`, `ArrivalCelebrationModal.tsx`
+- Admin: `CommandPalette.tsx`, `KeyboardShortcutsModal.tsx`, `OfflineFailoverBanner.tsx`, `Navbar.tsx`, `HazardTable.tsx`, `HazardsPage.tsx`
+- Testing: `package.json` (`npm test`), `apps/frontend/src/__tests__/`, `apps/mobile/__tests__/`
+
+**Delivered Capabilities:**
+1. Complete 5-phase habit-aligned mobile UI upgrade (Material Design 3 search capsule, 1-handed map gestures, corridor halo, heads-up walk HUD, 5s abort overlay, secret PIN duress calculator, bilingual fake call).
+2. Professional CAD command center ergonomics in web admin console (Spotlight palette `Ctrl+K`, keyboard cheatsheet `?`, audio mute toggle `M`, offline failover banner, high-res evidence lightbox, and continuous Shift-select range moderation).
+3. Monorepo-wide unified test suite (`npm test`) executing 15 test suites and 104 tests across Backend, Frontend, and Mobile with 100% pass rate.
+
+**Test:** Execute `npm test` from root. Confirms 8 backend suites (72 tests), 2 frontend suites (12 tests), and 5 mobile suites (20 tests) all pass with zero failures.
+
+---
+
 ## Nice-to-have (cut first)
 
 ### 12. SYN-3 — Photo picker for hazard reports

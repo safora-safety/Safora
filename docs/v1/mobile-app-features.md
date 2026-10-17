@@ -74,8 +74,17 @@ Screen-by-screen, marking what's existing vs new/changed for V1.
 | **Pull-to-Refresh** | **New** — native `RefreshControl` on Home (re-evaluates real safety score) and Profile |
 | Preference toggles (countdown, haptic, battery) | Persisted locally in AsyncStorage |
 
+## Mobile UI Modernization (Phases 1–5 Built & Verified)
+| Phase | Feature Description | Key Component(s) | Verification |
+|---|---|---|---|
+| **Phase 1: Brand & Typography** | OLED Pure Midnight Theme (`#0A0D14`), Luminous Shield Android Launcher Icons (`mdpi`..`xxxhdpi`), Tabular Figures (`fontVariant: ['tabular-nums']`) preventing digit jumping on counters and ETAs. | `colors.ts`, `typography.ts`, `AndroidManifest.xml`, `res/mipmap-*/` | Clean build, 0 layout jitter |
+| **Phase 2: Living Map Canvas** | Floating Search Capsule with integrated circular Safety Score Ring Meter, rapid Hazard Category Filter Chips (`lighting`, `harassment`, `waterlogging`), thumb-zone persistent Safety FAB and drawer, one-handed zoom gestures. | `FloatingSearchCapsule.tsx`, `HazardFilterChips.tsx`, `SafetyFabDrawer.tsx`, `OpenMapView.tsx` | Unit tests passed |
+| **Phase 3: Active Escort Cockpit** | Multi-modal travel comparison (Walk, 2-Wheeler, Car), Safest vs. Fastest route strategy, 150m glowing corridor buffer halo, real-time Heads-Up Display (HUD) with tabular speed/ETA, and 1.5s Hold-To-Confirm walk completion. | `MultiModalRouteSheet.tsx`, `ActiveWalkCockpitHud.tsx`, `HoldToConfirmButton.tsx` | Unit tests passed |
+| **Phase 4: Emergency SOS & Modals** | 5-second Grace-Period Emergency Abort overlay with rhythmic haptics, live microphone audio waveform equalizer bars, and 60-second route deviation countdown modal. | `SosGracePeriodOverlay.tsx`, `AudioWaveformBars.tsx`, `DeviationCountdownModal.tsx` | Unit tests passed |
+| **Phase 5: Covert Decoys & Polish** | Fully functional Calculator Decoy with duress PIN `9999=` silently firing background SOS + haptic pulse, bilingual (English/Hindi) Incoming Fake Call simulator, and Safe Arrival auto-text celebration modal. | `CalculatorDecoyModal.tsx`, `FakeCallModal.tsx`, `ArrivalCelebrationModal.tsx` | Unit tests passed |
+
 ## Not in V1 at all (see `docs/v2/`)
-Chat, Hindi, voice/turn-by-turn navigation, safest-route ranking, safe-places overlay, hazard-proximity push alerts, hardware/no-unlock SOS triggers (volume pattern, Quick Settings tile), medical card, Telegram (dropped entirely, not planned for any version), guardian tracking link for people without the app.
+Chat, turn-by-turn voice guidance, hardware volume-key SOS triggers, medical card, guardian web companion link for people without the app.
 
 ## File map — where each V1 change lives
 

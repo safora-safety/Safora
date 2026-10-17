@@ -155,3 +155,14 @@ export const trustedContactSchema = z.object({
 export const testGuardianSchema = z.object({
   contactId: z.union([z.string(), z.number()]),
 });
+
+export const streamAudioChunkSchema = z.object({
+  alertId: z.union([z.string(), z.number()]).optional(),
+  seq: z.number().int().min(1),
+  totalChunksExpected: z.number().int().optional(),
+  durationSec: z.number().optional(),
+  sampleRate: z.number().int().optional(),
+  mimeType: z.string().optional(),
+  data: z.string().min(1, "Base64 audio chunk data is required"),
+  isLast: z.boolean().default(false),
+});

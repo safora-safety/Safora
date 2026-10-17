@@ -34,7 +34,20 @@ import {
   searchPlaces,
   PlaceSearchResult,
   RouteCoord,
+  calculateTravelTimes,
+  MultiModalTravelTimes,
 } from '../services/routingService';
+import {
+  MultiModalRouteSheet,
+  TransportMode,
+  RouteStrategy,
+} from '../components/safewalk/MultiModalRouteSheet';
+import { ActiveWalkCockpitHud } from '../components/safewalk/ActiveWalkCockpitHud';
+import { HoldToConfirmButton } from '../components/safewalk/HoldToConfirmButton';
+import {
+  DeviationCountdownModal,
+  ArrivalCelebrationModal,
+} from '../components';
 import { SosService } from '../services/sosService';
 import { AudioRecorderService } from '../services/audioRecorderService';
 import { SirenService } from '../services/sirenService';
@@ -43,6 +56,10 @@ import { joinJourneyRoom } from '../services/socketService';
 import { useAuthStore } from '../store/authStore';
 import { useJourneyStore } from '../store/journeyStore';
 import { navigationRef } from '../navigation/RootNavigator';
+import {
+  BatteryOptimizationService,
+  DeviceInfo,
+} from '../services/batteryOptimizationService';
 
 export interface SafeWalkScreenProps {
   initialDestination?: {
@@ -112,6 +129,13 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
   const [routeDistanceMeters, setRouteDistanceMeters] = useState(850);
   const [routeDurationSeconds, setRouteDurationSeconds] = useState(600);
   const [isCalculatingRoute, setIsCalculatingRoute] = useState(false);
+  const [selectedMode, setSelectedMode] = useState<TransportMode>('walk');
+  const [selectedStrategy, setSelectedStrategy] =
+    useState<RouteStrategy>('safest');
+  const [walkingSpeedMs, setWalkingSpeedMs] = useState<number>(1.4);
+
+  const travelTimes: MultiModalTravelTimes =
+    calculateTravelTimes(routeDistanceMeters);
 
   // Active Journey state synced with persistent Zustand store
   const {
@@ -134,6 +158,46 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
     (string | number)[]
   >([]);
   const [isStartingWalk, setIsStartingWalk] = useState(false);
+  const [isBatteryUnrestricted, setIsBatteryUnrestricted] = useState(true);
+  const [dismissedBatteryBanner, setDismissedBatteryBanner] = useState(false);
+  const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
+
+  useEffect(() => {
+    BatteryOptimizationService.isIgnoringBatteryOptimizations().then(
+      unrestricted => {
+        setIsBatteryUnrestricted(unrestricted);
+      },
+    );
+    BatteryOptimizationService.getDeviceInfo().then(info => {
+      setDeviceInfo(info);
+    });
+  }, []);
+
+  const handleFixBatteryOptimization = async () => {
+    const success =
+      await BatteryOptimizationService.requestIgnoreBatteryOptimizations();
+    if (success) {
+      setTimeout(async () => {
+        const unrestricted =
+          await BatteryOptimizationService.isIgnoringBatteryOptimizations();
+        setIsBatteryUnrestricted(unrestricted);
+      }, 1500);
+    } else {
+      Alert.alert(
+        'Background Power Settings',
+        `To prevent ${deviceInfo?.brand ? deviceInfo.brand.toUpperCase() : 'your device'} from interrupting Safe Walk GPS tracking and emergency audio when your screen is locked, please allow SAFORA to run unrestricted.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Open Settings',
+            onPress: async () => {
+              await BatteryOptimizationService.openManufacturerPowerSettings();
+            },
+          },
+        ],
+      );
+    }
+  };
 
   // Hydrate persistent walk session on mount
   useEffect(() => {
@@ -551,82 +615,75 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
     setShowArrivalModal(false);
   };
 
+  const handleDisarmDeviation = () => {
+    setDeviation(false, null);
+    SirenService.stopSiren().catch(() => {});
+    if (journeyId) {
+      JourneyService.confirmSafe(journeyId);
+    }
+    Alert.alert(
+      'Route Safe',
+      'Corridor deviation alert disarmed. Safe Walk resumed.',
+    );
+  };
+
+  const handleEscalateDeviation = async () => {
+    setDeviation(false, null);
+    Vibration.vibrate([0, 800, 300, 800]);
+
+    AsyncStorage.getItem('@safora_pref_loud_siren').then(pref => {
+      if (pref === 'true') {
+        SirenService.startSiren().catch(() => {});
+      }
+    });
+
+    // Start dual-pipeline audio recording
+    AudioRecorderService.startRecording().catch(() => {});
+
+    try {
+      const res = await SosService.triggerSOS({
+        latitude: userPos.latitude,
+        longitude: userPos.longitude,
+        journey_id: journeyId,
+      });
+      Alert.alert(
+        '🚨 Emergency SOS Dispatched',
+        `Alert transmitted to ${res.contactsNotified} emergency contacts with live GPS coordinates (${userPos.latitude.toFixed(4)}, ${userPos.longitude.toFixed(4)}).\n\n🎙️ 30s ambient audio evidence is recording.`,
+      );
+
+      if (res?.alert?.id) {
+        AudioRecorderService.setAlertId(res.alert.id);
+      }
+    } catch {
+      Alert.alert(
+        '🚨 Emergency Dispatch Offline',
+        `Network unavailable to transmit online alert.\n\nCoordinates: ${userPos.latitude.toFixed(4)}, ${userPos.longitude.toFixed(4)}\n\nLaunch emergency dialer or carrier SMS now?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: '📞 Call 112',
+            style: 'destructive',
+            onPress: () => Linking.openURL('tel:112'),
+          },
+          {
+            text: '📱 Send SMS',
+            onPress: () => {
+              const mapsLink = `https://maps.google.com/?q=${userPos.latitude.toFixed(5)},${userPos.longitude.toFixed(5)}`;
+              const body = encodeURIComponent(
+                `🚨 EMERGENCY SOS! I need immediate help. My live GPS coordinates: ${mapsLink} - Sent via SAFORA Safe Walk`,
+              );
+              Linking.openURL(`sms:?body=${body}`).catch(() => {});
+            },
+          },
+        ],
+      );
+    }
+  };
+
   const triggerDeviationPrompt = (title: string, msg: string) => {
     setDeviation(true, 60);
     // 3-pulse urgent haptic vibration alert so user feels it immediately even in deep pocket/purse
     Vibration.vibrate([0, 600, 200, 600, 200, 600]);
-    Alert.alert(
-      `⚠️ ${title}`,
-      `${msg}\n\nEmergency contacts will be auto-dispatched in 60s if not confirmed.`,
-      [
-        {
-          text: 'I AM SAFE',
-          onPress: () => {
-            setDeviation(false, null);
-            SirenService.stopSiren().catch(() => {});
-            if (journeyId) {
-              JourneyService.confirmSafe(journeyId);
-            }
-          },
-        },
-        {
-          text: 'DISPATCH SOS',
-          style: 'destructive',
-          onPress: async () => {
-            setDeviation(false, null);
-            Vibration.vibrate([0, 800, 300, 800]);
-
-            AsyncStorage.getItem('@safora_pref_loud_siren').then(pref => {
-              if (pref === 'true') {
-                SirenService.startSiren().catch(() => {});
-              }
-            });
-
-            // Start dual-pipeline audio recording
-            AudioRecorderService.startRecording().catch(() => {});
-
-            try {
-              const res = await SosService.triggerSOS({
-                latitude: userPos.latitude,
-                longitude: userPos.longitude,
-                journey_id: journeyId,
-              });
-              Alert.alert(
-                '🚨 Emergency SOS Dispatched',
-                `Alert transmitted to ${res.contactsNotified} emergency contacts with live GPS coordinates (${userPos.latitude.toFixed(4)}, ${userPos.longitude.toFixed(4)}).\n\n🎙️ 30s ambient audio evidence is recording.`,
-              );
-
-              if (res?.alert?.id) {
-                AudioRecorderService.setAlertId(res.alert.id);
-              }
-            } catch {
-              Alert.alert(
-                '🚨 Emergency Dispatch Offline',
-                `Network unavailable to transmit online alert.\n\nCoordinates: ${userPos.latitude.toFixed(4)}, ${userPos.longitude.toFixed(4)}\n\nLaunch emergency dialer or carrier SMS now?`,
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  {
-                    text: '📞 Call 112',
-                    style: 'destructive',
-                    onPress: () => Linking.openURL('tel:112'),
-                  },
-                  {
-                    text: '📱 Send SMS',
-                    onPress: () => {
-                      const mapsLink = `https://maps.google.com/?q=${userPos.latitude.toFixed(5)},${userPos.longitude.toFixed(5)}`;
-                      const body = encodeURIComponent(
-                        `🚨 EMERGENCY SOS! I need immediate help. My live GPS coordinates: ${mapsLink} - Sent via SAFORA Safe Walk`,
-                      );
-                      Linking.openURL(`sms:?body=${body}`).catch(() => {});
-                    },
-                  },
-                ],
-              );
-            }
-          },
-        },
-      ],
-    );
   };
 
   const handleMapPress = (coords: { latitude: number; longitude: number }) => {
@@ -714,6 +771,65 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
         )}
       </View>
 
+      {/* OEM Battery Optimization Reminder Banner */}
+      {!isBatteryUnrestricted && !dismissedBatteryBanner && (
+        <View
+          style={[
+            styles.batteryWarningBanner,
+            {
+              backgroundColor: isDark ? '#261803' : '#FFFBEB',
+              borderColor: isDark ? '#B45309' : '#FDE68A',
+            },
+          ]}
+        >
+          <Text style={styles.batteryBannerIcon}>⚠️</Text>
+          <View style={styles.batteryBannerTextContainer}>
+            <Text
+              style={[
+                styles.batteryBannerTitle,
+                { color: isDark ? '#FBBF24' : '#92400E' },
+              ]}
+            >
+              Background Power Restricted
+            </Text>
+            <Text
+              style={[
+                styles.batteryBannerDesc,
+                { color: isDark ? '#FDE68A' : '#B45309' },
+              ]}
+              numberOfLines={2}
+            >
+              {deviceInfo?.brand
+                ? `${deviceInfo.brand.toUpperCase()} battery saver`
+                : 'Battery saver'}{' '}
+              may pause locked-screen audio & GPS.
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.batteryFixButton}
+            onPress={handleFixBatteryOptimization}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.batteryFixButtonText}>Fix</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.batteryDismissButton}
+            onPress={() => setDismissedBatteryBanner(true)}
+            activeOpacity={0.8}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text
+              style={[
+                styles.batteryDismissText,
+                { color: isDark ? '#FDE68A' : '#92400E' },
+              ]}
+            >
+              ✕
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Floating Google Maps-Style Destination Search Bar */}
       {!isActive && (
         <View style={styles.searchContainer}>
@@ -798,46 +914,63 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
         </View>
       )}
 
-      {/* Real Interactive Map View with Real Street Route */}
+      {/* Top Floating Active Walk Cockpit HUD */}
+      {isActive && (
+        <ActiveWalkCockpitHud
+          distanceMeters={routeDistanceMeters}
+          secondsRemaining={secondsRemaining}
+          walkingSpeedMs={walkingSpeedMs}
+          isDeviated={isDeviated}
+          deviationCountdown={deviationCountdown}
+          destinationName={destPos.name}
+        />
+      )}
+
+      {/* Real Interactive Map View with Real Street Route & 150m Corridor Halo */}
       <View style={styles.mapContainer}>
         <OpenMapView
           ref={mapRef}
           center={{ latitude: userPos.latitude, longitude: userPos.longitude }}
-          zoom={15}
+          zoom={16}
           isDark={isDark}
           markers={mapMarkers}
           polyline={routeCoords}
-          polylineColor={isDeviated ? '#EF4444' : '#4F46E5'}
+          polylineColor={isDeviated ? '#EF4444' : '#10B981'}
           polylineDash={!isActive}
-          layerSwitcherTop={isActive ? 16 : 74}
+          showCorridorHalo={isActive}
+          corridorHaloColor={isDeviated ? '#EF4444' : '#10B981'}
+          tilt3D={isActive}
+          layerSwitcherTop={isActive ? 116 : 74}
           onMapPress={handleMapPress}
           style={styles.map}
         />
 
-        {/* Route Info Badge Floating on Map */}
-        <View
-          style={[
-            styles.routeBadge,
-            {
-              backgroundColor: colors.backgroundCard,
-              borderColor: colors.border,
-            },
-          ]}
-        >
-          {isCalculatingRoute ? (
-            <ActivityIndicator size="small" color={colors.primary} />
-          ) : (
-            <>
-              <Text style={styles.routeBadgeIcon}>🚶</Text>
-              <Text
-                style={[styles.routeBadgeText, { color: colors.textPrimary }]}
-              >
-                {formatDistance(routeDistanceMeters)} •{' '}
-                {formatWalkDuration(routeDurationSeconds)}
-              </Text>
-            </>
-          )}
-        </View>
+        {/* Route Info Badge Floating on Map (when idle) */}
+        {!isActive && (
+          <View
+            style={[
+              styles.routeBadge,
+              {
+                backgroundColor: colors.backgroundCard,
+                borderColor: colors.border,
+              },
+            ]}
+          >
+            {isCalculatingRoute ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <>
+                <Text style={styles.routeBadgeIcon}>🚶</Text>
+                <Text
+                  style={[styles.routeBadgeText, { color: colors.textPrimary }]}
+                >
+                  {formatDistance(routeDistanceMeters)} •{' '}
+                  {formatWalkDuration(routeDurationSeconds)}
+                </Text>
+              </>
+            )}
+          </View>
+        )}
 
         {/* Recenter Live GPS Button */}
         <TouchableOpacity
@@ -846,6 +979,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
             {
               backgroundColor: colors.backgroundCard,
               borderColor: colors.border,
+              bottom: 20,
             },
           ]}
           onPress={recenterMap}
@@ -855,100 +989,57 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
         </TouchableOpacity>
       </View>
 
-      {/* Bottom Panel */}
-      <View
-        style={[
-          styles.bottomPanel,
-          {
-            backgroundColor: colors.backgroundCard,
-            borderColor: colors.border,
-          },
-        ]}
-      >
-        {/* Destination Summary Card */}
+      {/* Bottom Panel: Route Selection Comparison or Active Escort Controls */}
+      {!isActive ? (
+        <MultiModalRouteSheet
+          destinationName={destPos.name}
+          distanceMeters={routeDistanceMeters}
+          travelTimes={travelTimes}
+          selectedMode={selectedMode}
+          onSelectMode={setSelectedMode}
+          selectedStrategy={selectedStrategy}
+          onSelectStrategy={setSelectedStrategy}
+          onStartWalk={handleInitiateWalk}
+          isStarting={isStartingWalk}
+        />
+      ) : (
         <View
           style={[
-            styles.destCard,
+            styles.bottomPanel,
             {
-              backgroundColor: colors.backgroundInput,
+              backgroundColor: colors.backgroundCard,
               borderColor: colors.border,
             },
           ]}
         >
-          <Text style={styles.destPinIcon}>🏁</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.destName, { color: colors.textPrimary }]}>
-              {destPos.name}
-            </Text>
-            <Text style={[styles.destMeta, { color: colors.textSecondary }]}>
-              Real pedestrian road corridor •{' '}
-              {formatDistance(routeDistanceMeters)}
+          {/* Active Cockpit Controls with Hold-To-Confirm */}
+          <View style={styles.activeCockpitBottomRow}>
+            <View style={{ flex: 1 }}>
+              <HoldToConfirmButton
+                onConfirmed={handleCompleteWalk}
+                label="Hold 1.5s to End Walk"
+                confirmedLabel="Reached Safely! ✅"
+              />
+            </View>
+
+            <TouchableOpacity
+              style={styles.cancelWalkBtnSmall}
+              onPress={handleCancelWalk}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.cancelWalkBtnSmallText}>🛑 Stop</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.activeNoticeRow}>
+            <Text
+              style={[styles.activeNoticeText, { color: colors.textMuted }]}
+            >
+              🛡️ 150m Corridor Halo active. Continuous guardian GPS escort on.
             </Text>
           </View>
         </View>
-
-        {/* Action Controls: Start or Active In-Journey Monitor */}
-        {!isActive ? (
-          <TouchableOpacity
-            style={[styles.startWalkBtn, { backgroundColor: colors.primary }]}
-            onPress={handleInitiateWalk}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.startWalkBtnText}>
-              🛡️ Start Safe Walk Escort ({Math.ceil(routeDurationSeconds / 60)}
-              m)
-            </Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.activeControls}>
-            <View style={styles.countdownRow}>
-              <View>
-                <Text style={styles.countdownLabel}>REMAINING WINDOW</Text>
-                <Text
-                  style={[
-                    styles.countdownText,
-                    {
-                      color:
-                        secondsRemaining < 120 ? '#EF4444' : colors.primary,
-                    },
-                  ]}
-                >
-                  {formatCountdown(secondsRemaining)}
-                </Text>
-              </View>
-
-              <View style={styles.walkButtonsRow}>
-                <TouchableOpacity
-                  style={styles.cancelWalkBtn}
-                  onPress={handleCancelWalk}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.cancelWalkBtnText}>🛑 Cancel</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.reachedSafelyBtn}
-                  onPress={handleCompleteWalk}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.reachedSafelyBtnText}>
-                    ✅ Reached Safely
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <View style={styles.activeNoticeRow}>
-              <Text
-                style={[styles.activeNoticeText, { color: colors.textMuted }]}
-              >
-                GPS corridor active. Guardians will be alerted if deviation
-                occurs.
-              </Text>
-            </View>
-          </View>
-        )}
-      </View>
+      )}
 
       {/* Pre-Walk Guardian Confirmation Modal */}
       <Modal
@@ -1120,67 +1211,25 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
         </View>
       </Modal>
 
-      {/* "I Reached Safely" Broadcast Modal */}
-      <Modal
+      {/* "I Reached Safely" Broadcast & Celebration Modal (Phase 5) */}
+      <ArrivalCelebrationModal
         visible={showArrivalModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowArrivalModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View
-            style={[
-              styles.arrivalCard,
-              {
-                backgroundColor: colors.backgroundCard,
-                borderColor: colors.border,
-              },
-            ]}
-          >
-            <View style={styles.arrivalCheckCircle}>
-              <Text style={styles.arrivalCheckEmoji}>🎉</Text>
-            </View>
+        destinationName={destPos.name}
+        distanceMeters={routeDistanceMeters}
+        durationSeconds={routeDurationSeconds}
+        onClose={() => setShowArrivalModal(false)}
+      />
 
-            <Text style={[styles.arrivalTitle, { color: colors.textPrimary }]}>
-              You Arrived Safely!
-            </Text>
-
-            <Text
-              style={[styles.arrivalSubtitle, { color: colors.textSecondary }]}
-            >
-              Safe Walk escort session completed at {destPos.name}. Would you
-              like to broadcast an instant arrival confirmation to your
-              guardians?
-            </Text>
-
-            <View style={styles.arrivalBtnCol}>
-              <TouchableOpacity
-                style={styles.whatsAppBtn}
-                onPress={shareArrivalWhatsApp}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.whatsAppBtnText}>
-                  💬 Share "I Reached Safely" (WhatsApp/SMS)
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.arrivalDismissBtn}
-                onPress={() => setShowArrivalModal(false)}
-              >
-                <Text
-                  style={[
-                    styles.arrivalDismissText,
-                    { color: colors.textMuted },
-                  ]}
-                >
-                  Done
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {/* Confirm-Before-Escalate 60s Route Corridor Deviation Modal (Phase 4) */}
+      <DeviationCountdownModal
+        visible={Boolean(
+          isDeviated && deviationCountdown !== null && deviationCountdown > 0,
+        )}
+        countdownSeconds={deviationCountdown ?? 60}
+        totalSeconds={60}
+        onDisarmSafe={handleDisarmDeviation}
+        onEscalateSos={handleEscalateDeviation}
+      />
     </View>
   );
 };
@@ -1336,34 +1385,26 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 1,
   },
-  walkButtonsRow: {
+  activeCockpitBottomRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 12,
+    marginBottom: 8,
   },
-  cancelWalkBtn: {
+  cancelWalkBtnSmall: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 16,
     backgroundColor: 'rgba(239, 68, 68, 0.12)',
     borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.35)',
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 14,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  cancelWalkBtnText: {
+  cancelWalkBtnSmallText: {
     color: '#EF4444',
+    fontSize: 13,
     fontWeight: '800',
-    fontSize: 12,
-  },
-  reachedSafelyBtn: {
-    backgroundColor: '#10B981',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 14,
-  },
-  reachedSafelyBtnText: {
-    color: '#FFFFFF',
-    fontWeight: '800',
-    fontSize: 12,
   },
   activeNoticeRow: { alignItems: 'center' },
   activeNoticeText: { fontSize: 11, textAlign: 'center' },
@@ -1565,4 +1606,49 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   recenterIcon: { fontSize: 20 },
+  batteryWarningBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    zIndex: 15,
+  },
+  batteryBannerIcon: {
+    fontSize: 18,
+    marginRight: 10,
+  },
+  batteryBannerTextContainer: {
+    flex: 1,
+    marginRight: 8,
+  },
+  batteryBannerTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  batteryBannerDesc: {
+    fontSize: 11,
+    lineHeight: 14,
+    marginTop: 2,
+  },
+  batteryFixButton: {
+    backgroundColor: '#F59E0B',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginRight: 8,
+  },
+  batteryFixButtonText: {
+    color: '#000000',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  batteryDismissButton: {
+    padding: 4,
+  },
+  batteryDismissText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
 });

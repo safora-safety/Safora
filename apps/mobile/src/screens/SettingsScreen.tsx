@@ -9,12 +9,17 @@ import {
   StatusBar,
   Alert,
   Linking,
+  Modal,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuthStore } from '../store/authStore';
 import { ChangePasswordModal } from '../components/profile/ChangePasswordModal';
 import { AudioRecorderService } from '../services/audioRecorderService';
+import {
+  BatteryOptimizationService,
+  DeviceInfo,
+} from '../services/batteryOptimizationService';
 
 interface SettingsScreenProps {
   navigation: any;
@@ -35,9 +40,41 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const [reachedNotification, setReachedNotification] = useState(true);
   const [micGranted, setMicGranted] = useState(false);
 
+  // Phase 4: OEM Battery Optimization Status & Guide
+  const [isBatteryUnrestricted, setIsBatteryUnrestricted] = useState(false);
+  const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
+  const [showBatteryGuideModal, setShowBatteryGuideModal] = useState(false);
+
   useEffect(() => {
     AudioRecorderService.isPermissionGranted().then(setMicGranted);
+    BatteryOptimizationService.isIgnoringBatteryOptimizations().then(
+      setIsBatteryUnrestricted,
+    );
+    BatteryOptimizationService.getDeviceInfo().then(setDeviceInfo);
   }, []);
+
+  const handleRequestBatteryExemption = async () => {
+    const success =
+      await BatteryOptimizationService.requestIgnoreBatteryOptimizations();
+    if (success) {
+      setTimeout(async () => {
+        const unrestricted =
+          await BatteryOptimizationService.isIgnoringBatteryOptimizations();
+        setIsBatteryUnrestricted(unrestricted);
+      }, 1500);
+    } else {
+      setShowBatteryGuideModal(true);
+    }
+  };
+
+  const handleOpenManufacturerSettings = async () => {
+    await BatteryOptimizationService.openManufacturerPowerSettings();
+    setTimeout(async () => {
+      const unrestricted =
+        await BatteryOptimizationService.isIgnoringBatteryOptimizations();
+      setIsBatteryUnrestricted(unrestricted);
+    }, 2000);
+  };
 
   const handleManageMic = async () => {
     const granted = await AudioRecorderService.isPermissionGranted();
@@ -220,7 +257,139 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
           </View>
         </View>
 
-        {/* Section 2: Location & Radar */}
+        {/* Section 2: OEM Battery & Lock-Screen Protection (Phase 4) */}
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+          LOCK-SCREEN & BATTERY PROTECTION
+        </Text>
+        <View
+          style={[
+            styles.card,
+            {
+              backgroundColor: colors.backgroundCard,
+              borderColor: isBatteryUnrestricted
+                ? 'rgba(16, 185, 129, 0.4)'
+                : 'rgba(245, 158, 11, 0.4)',
+            },
+          ]}
+        >
+          <View style={{ padding: 14 }}>
+            <View
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 8,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 13,
+                  fontWeight: '800',
+                  color: colors.textPrimary,
+                }}
+              >
+                {isBatteryUnrestricted
+                  ? '🛡️ Background Protection Active'
+                  : '⚡ Background Limits Detected'}
+              </Text>
+              <View
+                style={{
+                  backgroundColor: isBatteryUnrestricted
+                    ? 'rgba(16, 185, 129, 0.15)'
+                    : 'rgba(245, 158, 11, 0.15)',
+                  borderColor: isBatteryUnrestricted
+                    ? 'rgba(16, 185, 129, 0.4)'
+                    : 'rgba(245, 158, 11, 0.4)',
+                  borderWidth: 1,
+                  paddingHorizontal: 8,
+                  paddingVertical: 3,
+                  borderRadius: 6,
+                }}
+              >
+                <Text
+                  style={{
+                    color: isBatteryUnrestricted ? '#10B981' : '#F59E0B',
+                    fontSize: 10,
+                    fontWeight: '800',
+                  }}
+                >
+                  {isBatteryUnrestricted ? 'UNRESTRICTED' : 'ACTION NEEDED'}
+                </Text>
+              </View>
+            </View>
+
+            <Text
+              style={{
+                fontSize: 12,
+                color: colors.textMuted,
+                lineHeight: 18,
+                marginBottom: 12,
+              }}
+            >
+              {isBatteryUnrestricted
+                ? 'Your device allows SAFORA to run continuously with the screen locked. Emergency SOS broadcasts and Safe Walk live audio streaming will never be paused.'
+                : `${
+                    deviceInfo?.manufacturer
+                      ? deviceInfo.manufacturer.toUpperCase()
+                      : 'Your device'
+                  } battery saver may freeze GPS tracking and locked-screen microphone recording after 2-3 minutes. Allow Unrestricted activity for guaranteed locked-screen safety.`}
+            </Text>
+
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              {!isBatteryUnrestricted && (
+                <TouchableOpacity
+                  style={{
+                    flex: 1,
+                    backgroundColor: colors.primary,
+                    paddingVertical: 9,
+                    borderRadius: 10,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  onPress={handleRequestBatteryExemption}
+                  activeOpacity={0.8}
+                >
+                  <Text
+                    style={{
+                      color: '#FFFFFF',
+                      fontSize: 12,
+                      fontWeight: '700',
+                    }}
+                  >
+                    ⚡ Remove Limits
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity
+                style={{
+                  flex: 1,
+                  backgroundColor: colors.backgroundInput,
+                  borderColor: colors.border,
+                  borderWidth: 1,
+                  paddingVertical: 9,
+                  borderRadius: 10,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                onPress={() => setShowBatteryGuideModal(true)}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={{
+                    color: colors.textPrimary,
+                    fontSize: 12,
+                    fontWeight: '700',
+                  }}
+                >
+                  📱 Setup Guide ›
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+
+        {/* Section 3: Location & Radar */}
         <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
           LOCATION & RADAR ACCURACY
         </Text>
@@ -553,6 +722,213 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         visible={showPasswordModal}
         onClose={() => setShowPasswordModal(false)}
       />
+
+      {/* OEM Battery Optimization Guide Modal (Phase 4) */}
+      <Modal
+        visible={showBatteryGuideModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowBatteryGuideModal(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.75)',
+            justifyContent: 'flex-end',
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: colors.backgroundCard,
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              padding: 24,
+              borderTopWidth: 1,
+              borderColor: colors.border,
+              maxHeight: '85%',
+            }}
+          >
+            {(() => {
+              const guide = BatteryOptimizationService.getManufacturerGuide(
+                deviceInfo?.manufacturer,
+              );
+              return (
+                <ScrollView showsVerticalScrollIndicator={false}>
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: 12,
+                    }}
+                  >
+                    <View style={{ flex: 1, paddingRight: 10 }}>
+                      <Text
+                        style={{
+                          fontSize: 16,
+                          fontWeight: '800',
+                          color: colors.textPrimary,
+                        }}
+                      >
+                        {guide.brandName}
+                      </Text>
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          color: colors.textMuted,
+                          marginTop: 2,
+                        }}
+                      >
+                        {guide.title}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => setShowBatteryGuideModal(false)}
+                      style={{ padding: 6 }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 18,
+                          color: colors.textMuted,
+                          fontWeight: '700',
+                        }}
+                      >
+                        ✕
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View
+                    style={{
+                      backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                      borderColor: 'rgba(245, 158, 11, 0.3)',
+                      borderWidth: 1,
+                      borderRadius: 12,
+                      padding: 12,
+                      marginBottom: 16,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        color: '#F59E0B',
+                        lineHeight: 18,
+                      }}
+                    >
+                      ⚠️ {guide.description}
+                    </Text>
+                  </View>
+
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      fontWeight: '800',
+                      color: colors.textSecondary,
+                      marginBottom: 10,
+                      letterSpacing: 0.5,
+                    }}
+                  >
+                    STEP-BY-STEP INSTRUCTIONS:
+                  </Text>
+
+                  <View style={{ marginBottom: 20 }}>
+                    {guide.steps.map((step, idx) => (
+                      <View
+                        key={idx}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'flex-start',
+                          marginBottom: 10,
+                        }}
+                      >
+                        <View
+                          style={{
+                            width: 22,
+                            height: 22,
+                            borderRadius: 11,
+                            backgroundColor: colors.primary,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            marginRight: 10,
+                            marginTop: 1,
+                          }}
+                        >
+                          <Text
+                            style={{
+                              color: '#FFFFFF',
+                              fontSize: 11,
+                              fontWeight: '800',
+                            }}
+                          >
+                            {idx + 1}
+                          </Text>
+                        </View>
+                        <Text
+                          style={{
+                            flex: 1,
+                            fontSize: 13,
+                            color: colors.textPrimary,
+                            lineHeight: 20,
+                          }}
+                        >
+                          {step}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+
+                  <TouchableOpacity
+                    style={{
+                      backgroundColor: colors.primary,
+                      paddingVertical: 14,
+                      borderRadius: 14,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      marginBottom: 10,
+                    }}
+                    onPress={handleOpenManufacturerSettings}
+                    activeOpacity={0.8}
+                  >
+                    <Text
+                      style={{
+                        color: '#FFFFFF',
+                        fontSize: 14,
+                        fontWeight: '800',
+                      }}
+                    >
+                      ⚙️ Open Device Power Settings
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={{
+                      backgroundColor: colors.backgroundInput,
+                      borderColor: colors.border,
+                      borderWidth: 1,
+                      paddingVertical: 12,
+                      borderRadius: 14,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                    onPress={() => setShowBatteryGuideModal(false)}
+                    activeOpacity={0.8}
+                  >
+                    <Text
+                      style={{
+                        color: colors.textSecondary,
+                        fontSize: 13,
+                        fontWeight: '700',
+                      }}
+                    >
+                      Done / Close
+                    </Text>
+                  </TouchableOpacity>
+                </ScrollView>
+              );
+            })()}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };

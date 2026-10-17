@@ -7,6 +7,7 @@ import {
   ExternalLink,
   RotateCcw,
   RotateCw,
+  Sparkles,
 } from 'lucide-react';
 
 interface AudioPlayerProps {
@@ -27,7 +28,105 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
   const [isMuted, setIsMuted] = useState(false);
   const [loadError, setLoadError] = useState(false);
 
+  // Phase 2: Web Audio Voice Clarity & Noise Reduction DSP
+  const [isVoiceClarityEnabled, setIsVoiceClarityEnabled] = useState(() => {
+    try {
+      return localStorage.getItem('safora_voice_clarity') !== 'false';
+    } catch {
+      return true;
+    }
+  });
+
+  const playerAudioCtxRef = useRef<AudioContext | null>(null);
+  const mediaElementSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const highPassNodeRef = useRef<BiquadFilterNode | null>(null);
+  const peakingNodeRef = useRef<BiquadFilterNode | null>(null);
+  const compressorNodeRef = useRef<DynamicsCompressorNode | null>(null);
+
+  const applyDspFilterParams = useCallback((enabled: boolean) => {
+    const ctx = playerAudioCtxRef.current;
+    const hpf = highPassNodeRef.current;
+    const peak = peakingNodeRef.current;
+    const comp = compressorNodeRef.current;
+    if (!ctx || !hpf || !peak || !comp) return;
+
+    const now = ctx.currentTime;
+    if (enabled) {
+      hpf.frequency.setValueAtTime(175, now);
+      hpf.Q.setValueAtTime(0.707, now);
+
+      peak.frequency.setValueAtTime(2400, now);
+      peak.Q.setValueAtTime(1.1, now);
+      peak.gain.setValueAtTime(3.5, now);
+
+      comp.threshold.setValueAtTime(-24, now);
+      comp.knee.setValueAtTime(12, now);
+      comp.ratio.setValueAtTime(4, now);
+      comp.attack.setValueAtTime(0.003, now);
+      comp.release.setValueAtTime(0.25, now);
+    } else {
+      hpf.frequency.setValueAtTime(20, now);
+      peak.gain.setValueAtTime(0, now);
+      comp.threshold.setValueAtTime(0, now);
+      comp.ratio.setValueAtTime(1, now);
+    }
+  }, []);
+
+  const initWebAudioDsp = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio || mediaElementSourceRef.current) {
+      if (playerAudioCtxRef.current && playerAudioCtxRef.current.state === 'suspended') {
+        playerAudioCtxRef.current.resume().catch(() => {});
+      }
+      return;
+    }
+
+    try {
+      const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtxClass) return;
+      const ctx = new AudioCtxClass();
+      playerAudioCtxRef.current = ctx;
+
+      const source = ctx.createMediaElementSource(audio);
+      mediaElementSourceRef.current = source;
+
+      const hpf = ctx.createBiquadFilter();
+      hpf.type = 'highpass';
+      highPassNodeRef.current = hpf;
+
+      const peak = ctx.createBiquadFilter();
+      peak.type = 'peaking';
+      peakingNodeRef.current = peak;
+
+      const comp = ctx.createDynamicsCompressor();
+      compressorNodeRef.current = comp;
+
+      source.connect(hpf);
+      hpf.connect(peak);
+      peak.connect(comp);
+      comp.connect(ctx.destination);
+
+      applyDspFilterParams(isVoiceClarityEnabled);
+    } catch (err) {
+      console.warn('[AudioPlayer] Web Audio DSP initialization fallback to standard HTML5 audio:', err);
+    }
+  }, [applyDspFilterParams, isVoiceClarityEnabled]);
+
+  const toggleVoiceClarity = () => {
+    const nextVal = !isVoiceClarityEnabled;
+    setIsVoiceClarityEnabled(nextVal);
+    try {
+      localStorage.setItem('safora_voice_clarity', String(nextVal));
+    } catch {}
+    applyDspFilterParams(nextVal);
+  };
+
+  // Hover preview timestamp
+  const [hoverTime, setHoverTime] = useState<string | null>(null);
+  const [hoverPosition, setHoverPosition] = useState<number | null>(null);
+
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const trackRef = useRef<HTMLDivElement | null>(null);
   const isSeekingRef = useRef(false);
 
   const formatSeconds = (sec: number): string => {
@@ -37,7 +136,15 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  // Reset when audioUrl changes (e.g., clicking another alert in the queue)
+  const getAudioDuration = useCallback((): number => {
+    const audio = audioRef.current;
+    if (audio && audio.duration && isFinite(audio.duration) && audio.duration > 0) {
+      return audio.duration;
+    }
+    return 30; // fallback standard SOS recording length
+  }, []);
+
+  // Reset state when audioUrl changes
   useEffect(() => {
     setIsPlaying(false);
     setProgress(0);
@@ -52,18 +159,19 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
     }
   }, [audioUrl]);
 
-  // Audio event listeners
+  // Audio lifecycle event listeners
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
     const handleTimeUpdate = () => {
-      // Never overwrite the progress bar if the user is currently dragging or holding the seek slider
+      // Do not overwrite progress while dispatcher is dragging the scrubber
       if (isSeekingRef.current) return;
 
-      const dur = audio.duration && isFinite(audio.duration) ? audio.duration : 30;
+      const dur = getAudioDuration();
       if (dur > 0) {
-        setProgress((audio.currentTime / dur) * 100);
+        const pct = Math.min(100, Math.max(0, (audio.currentTime / dur) * 100));
+        setProgress(pct);
         setCurrentTime(formatSeconds(audio.currentTime));
       }
     };
@@ -85,17 +193,22 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
 
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    audio.addEventListener('durationchange', handleLoadedMetadata);
+    audio.addEventListener('canplay', handleLoadedMetadata);
     audio.addEventListener('ended', handleEnded);
 
     return () => {
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.removeEventListener('durationchange', handleLoadedMetadata);
+      audio.removeEventListener('canplay', handleLoadedMetadata);
       audio.removeEventListener('ended', handleEnded);
     };
-  }, []);
+  }, [getAudioDuration]);
 
   const togglePlay = () => {
     if (!audioRef.current) return;
+    initWebAudioDsp();
     if (isPlaying) {
       audioRef.current.pause();
       setIsPlaying(false);
@@ -107,41 +220,102 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
     }
   };
 
-  // Skip forward or backward by delta seconds (e.g. -5s or +5s)
   const skipTime = useCallback((deltaSec: number) => {
     const audio = audioRef.current;
     if (!audio) return;
-    const dur = audio.duration && isFinite(audio.duration) ? audio.duration : 30;
+    const dur = getAudioDuration();
     const target = Math.max(0, Math.min(dur, audio.currentTime + deltaSec));
     audio.currentTime = target;
     setProgress((target / dur) * 100);
     setCurrentTime(formatSeconds(target));
+  }, [getAudioDuration]);
+
+  /**
+   * High-precision Seek Scrub Bar Handler:
+   * Supports instant click-to-seek, smooth dragging, and global window release
+   * so dragging never freezes or leaves isSeekingRef locked.
+   */
+  const calculatePercentageFromClientX = useCallback((clientX: number): number => {
+    if (!trackRef.current) return 0;
+    const rect = trackRef.current.getBoundingClientRect();
+    const pos = (clientX - rect.left) / rect.width;
+    return Math.max(0, Math.min(100, pos * 100));
   }, []);
 
-  // Slider scrub handler — updates preview smoothly without jerkiness
-  const handleSliderInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    isSeekingRef.current = true;
-    const val = parseFloat(e.target.value);
-    setProgress(val);
-
+  const seekToPercentage = useCallback((pct: number) => {
     const audio = audioRef.current;
-    const dur = audio && audio.duration && isFinite(audio.duration) ? audio.duration : 30;
-    const previewTime = (val / 100) * dur;
-    setCurrentTime(formatSeconds(previewTime));
+    if (!audio) return;
+    const dur = getAudioDuration();
+    const targetTime = (pct / 100) * dur;
+    audio.currentTime = targetTime;
+    setProgress(pct);
+    setCurrentTime(formatSeconds(targetTime));
+  }, [getAudioDuration]);
+
+  const handleTrackMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    isSeekingRef.current = true;
+    const initialPct = calculatePercentageFromClientX(e.clientX);
+    seekToPercentage(initialPct);
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const pct = calculatePercentageFromClientX(moveEvent.clientX);
+      seekToPercentage(pct);
+    };
+
+    const onMouseUp = (upEvent: MouseEvent) => {
+      const finalPct = calculatePercentageFromClientX(upEvent.clientX);
+      seekToPercentage(finalPct);
+      setTimeout(() => {
+        isSeekingRef.current = false;
+      }, 50);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
   };
 
-  // Commit seek position once thumb is released
-  const commitSeek = (val: number) => {
-    const audio = audioRef.current;
-    if (audio) {
-      const dur = audio.duration && isFinite(audio.duration) ? audio.duration : 30;
-      const targetTime = (val / 100) * dur;
-      audio.currentTime = targetTime;
-    }
-    // Small timeout ensures timeupdate doesn't capture intermediate drag value
-    setTimeout(() => {
-      isSeekingRef.current = false;
-    }, 50);
+  const handleTrackTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 0) return;
+    isSeekingRef.current = true;
+    const initialPct = calculatePercentageFromClientX(e.touches[0].clientX);
+    seekToPercentage(initialPct);
+
+    const onTouchMove = (moveEvent: TouchEvent) => {
+      if (moveEvent.touches.length === 0) return;
+      const pct = calculatePercentageFromClientX(moveEvent.touches[0].clientX);
+      seekToPercentage(pct);
+    };
+
+    const onTouchEnd = (endEvent: TouchEvent) => {
+      const touch = endEvent.changedTouches[0];
+      if (touch) {
+        const finalPct = calculatePercentageFromClientX(touch.clientX);
+        seekToPercentage(finalPct);
+      }
+      setTimeout(() => {
+        isSeekingRef.current = false;
+      }, 50);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onTouchEnd);
+    };
+
+    window.addEventListener('touchmove', onTouchMove);
+    window.addEventListener('touchend', onTouchEnd);
+  };
+
+  const handleTrackMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const pct = calculatePercentageFromClientX(e.clientX);
+    const dur = getAudioDuration();
+    setHoverPosition(pct);
+    setHoverTime(formatSeconds((pct / 100) * dur));
+  };
+
+  const handleTrackMouseLeave = () => {
+    setHoverTime(null);
+    setHoverPosition(null);
   };
 
   const togglePlaybackSpeed = () => {
@@ -177,16 +351,16 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
 
   if (!audioUrl) {
     return (
-      <div className="p-3 rounded-xl bg-obsidian-700/40 border border-white/5 text-xs text-gray-400 flex items-center gap-2">
+      <div className="p-3.5 rounded-xl bg-obsidian-800/50 border border-white/5 text-xs text-gray-400 flex items-center gap-2">
         <Volume2 className="w-4 h-4 text-gray-500" />
-        <span>No audio evidence attached to this alert.</span>
+        <span>No audio evidence attached to this emergency signal.</span>
       </div>
     );
   }
 
   return (
-    <div className="p-4 rounded-xl bg-obsidian-700/60 border border-white/10 space-y-3 shadow-lg">
-      {/* Header with Title & Meta */}
+    <div className="p-4 rounded-xl bg-obsidian-800/80 border border-white/10 space-y-3.5 shadow-xl">
+      {/* Header with Title & Controls */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Volume2 className="w-4 h-4 text-red-400 animate-pulse" />
@@ -195,6 +369,18 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
           </span>
         </div>
         <div className="flex items-center gap-2.5">
+          <button
+            onClick={toggleVoiceClarity}
+            className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold transition-all border ${
+              isVoiceClarityEnabled
+                ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300 shadow-sm shadow-emerald-950/50'
+                : 'bg-white/5 border-white/10 text-gray-400 hover:text-gray-200'
+            }`}
+            title="Voice Clarity Filter: High-pass (175Hz) cuts pocket friction/wind noise, Peaking (2.4kHz) clarifies speech"
+          >
+            <Sparkles className={`w-3 h-3 ${isVoiceClarityEnabled ? 'text-emerald-400' : 'text-gray-400'}`} />
+            <span>Clarity: {isVoiceClarityEnabled ? 'ON' : 'OFF'}</span>
+          </button>
           <button
             onClick={togglePlaybackSpeed}
             className="px-2 py-0.5 rounded-md bg-white/10 hover:bg-white/20 text-[10px] font-mono font-bold text-gray-300 transition-colors"
@@ -226,13 +412,13 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
           ⚠️ Unable to stream audio directly. Use Direct Link above.
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           {/* Main Controls Row */}
           <div className="flex items-center gap-3">
             {/* Play/Pause */}
             <button
               onClick={togglePlay}
-              className="p-2.5 rounded-full bg-red-600 hover:bg-red-500 text-white shadow-lg transition-colors flex-shrink-0"
+              className="p-2.5 rounded-full bg-red-600 hover:bg-red-500 text-white shadow-lg transition-all active:scale-95 flex-shrink-0"
               title={isPlaying ? 'Pause' : 'Play'}
             >
               {isPlaying ? (
@@ -245,7 +431,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
             {/* Jump -5s */}
             <button
               onClick={() => skipTime(-5)}
-              className="p-1.5 rounded-lg bg-obsidian-800 hover:bg-obsidian-600 text-gray-300 hover:text-white transition-colors flex items-center gap-0.5 text-[11px] font-mono border border-white/5"
+              className="p-1.5 rounded-lg bg-obsidian-900 hover:bg-obsidian-700 text-gray-300 hover:text-white transition-colors flex items-center gap-0.5 text-[11px] font-mono border border-white/10"
               title="Rewind 5 seconds"
             >
               <RotateCcw className="w-3.5 h-3.5" />
@@ -255,29 +441,53 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
             {/* Jump +5s */}
             <button
               onClick={() => skipTime(5)}
-              className="p-1.5 rounded-lg bg-obsidian-800 hover:bg-obsidian-600 text-gray-300 hover:text-white transition-colors flex items-center gap-0.5 text-[11px] font-mono border border-white/5"
+              className="p-1.5 rounded-lg bg-obsidian-900 hover:bg-obsidian-700 text-gray-300 hover:text-white transition-colors flex items-center gap-0.5 text-[11px] font-mono border border-white/10"
               title="Forward 5 seconds"
             >
               <RotateCw className="w-3.5 h-3.5" />
               <span>+5s</span>
             </button>
 
-            {/* Scrub Slider & Timestamps */}
+            {/* Redesigned High-Precision Audio Scroll / Seek Bar */}
             <div className="flex-1 space-y-1">
-              <input
-                type="range"
-                min="0"
-                max="100"
-                step="0.1"
-                value={progress}
-                onChange={handleSliderInput}
-                onMouseUp={(e) => commitSeek(parseFloat((e.target as HTMLInputElement).value))}
-                onTouchEnd={(e) => commitSeek(parseFloat((e.target as HTMLInputElement).value))}
-                onKeyUp={(e) => commitSeek(parseFloat((e.target as HTMLInputElement).value))}
-                className="w-full h-1.5 bg-obsidian-900 rounded-lg appearance-none cursor-pointer accent-red-500 hover:h-2 transition-all"
-              />
+              <div
+                ref={trackRef}
+                onMouseDown={handleTrackMouseDown}
+                onTouchStart={handleTrackTouchStart}
+                onMouseMove={handleTrackMouseMove}
+                onMouseLeave={handleTrackMouseLeave}
+                className="relative py-2.5 cursor-pointer group select-none"
+                title="Click or drag to seek anywhere in the audio recording"
+              >
+                {/* Hover Tooltip Timestamp */}
+                {hoverTime && hoverPosition !== null && (
+                  <div
+                    className="absolute -top-6 px-1.5 py-0.5 rounded bg-black/95 border border-white/20 text-[10px] font-mono font-semibold text-gray-200 pointer-events-none transform -translate-x-1/2 shadow-lg"
+                    style={{ left: `${hoverPosition}%` }}
+                  >
+                    {hoverTime}
+                  </div>
+                )}
+
+                {/* Scrubber Track Bar */}
+                <div className="w-full h-2 group-hover:h-2.5 rounded-full bg-obsidian-950 border border-white/10 overflow-hidden transition-all shadow-inner relative">
+                  {/* Played Fill Gradient */}
+                  <div
+                    className="h-full bg-gradient-to-r from-red-600 via-red-500 to-amber-500 rounded-full transition-[width] duration-75"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+
+                {/* Glowing Thumb / Playhead Indicator */}
+                <div
+                  className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3.5 h-3.5 rounded-full bg-white border-2 border-red-500 shadow-[0_0_8px_rgba(239,68,68,0.9)] opacity-90 group-hover:opacity-100 group-hover:scale-125 transition-transform pointer-events-none"
+                  style={{ left: `${progress}%` }}
+                />
+              </div>
+
+              {/* Time Display */}
               <div className="flex justify-between text-[11px] font-mono text-gray-400">
-                <span className="text-gray-200">{currentTime}</span>
+                <span className="text-gray-200 font-semibold">{currentTime}</span>
                 <span>{duration}</span>
               </div>
             </div>
@@ -302,7 +512,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
                 step="0.05"
                 value={isMuted ? 0 : volume}
                 onChange={handleVolumeChange}
-                className="w-16 h-1 bg-obsidian-900 rounded-lg appearance-none cursor-pointer accent-gray-400"
+                className="w-16 h-1 bg-obsidian-900 rounded-lg appearance-none cursor-pointer accent-red-400"
                 title={`Volume: ${Math.round((isMuted ? 0 : volume) * 100)}%`}
               />
             </div>

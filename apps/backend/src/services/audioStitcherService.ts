@@ -196,39 +196,60 @@ export class AudioStitcherService {
       const sortedSeqs = Array.from(session.chunks.keys()).sort(
         (a, b) => a - b,
       );
-      const pcmPayloads: Buffer[] = [];
-      let totalPcmLength = 0;
 
-      for (const seq of sortedSeqs) {
-        const rawChunk = session.chunks.get(seq);
-        if (rawChunk) {
-          const pcm = extractPcmData(rawChunk);
-          pcmPayloads.push(pcm);
-          totalPcmLength += pcm.length;
+      const firstChunk = session.chunks.get(sortedSeqs[0]);
+      const isCompressed =
+        firstChunk &&
+        (firstChunk.toString("ascii", 0, 4) === "OggS" ||
+          (firstChunk.length >= 8 &&
+            firstChunk.toString("ascii", 4, 8) === "ftyp"));
+
+      let finalAudioBuffer: Buffer;
+
+      if (isCompressed) {
+        // If device was interrupted while streaming compressed slices (Opus / AAC),
+        // use the latest received rescue slice for Cloudinary storage
+        const lastSeq = sortedSeqs[sortedSeqs.length - 1];
+        finalAudioBuffer = session.chunks.get(lastSeq)!;
+        console.log(
+          `[AudioStitcher] Alert ${alertKey}: Preserving compressed hardware audio slice #${lastSeq} (${finalAudioBuffer.length} bytes) for rescue evidence.`,
+        );
+      } else {
+        // Standard PCM WAV concatenation
+        const pcmPayloads: Buffer[] = [];
+        let totalPcmLength = 0;
+
+        for (const seq of sortedSeqs) {
+          const rawChunk = session.chunks.get(seq);
+          if (rawChunk) {
+            const pcm = extractPcmData(rawChunk);
+            pcmPayloads.push(pcm);
+            totalPcmLength += pcm.length;
+          }
         }
+
+        if (totalPcmLength === 0) {
+          this.cleanupSession(alertKey);
+          return null;
+        }
+
+        // Prepend valid RIFF/WAVE header
+        const header = createWavHeader(
+          totalPcmLength,
+          session.sampleRate,
+          session.channels,
+          session.bitsPerSample,
+        );
+        finalAudioBuffer = Buffer.concat([header, ...pcmPayloads]);
+
+        console.log(
+          `[AudioStitcher] Alert ${alertKey}: Stitched ${sortedSeqs.length} chunks into ${finalAudioBuffer.length} bytes. Uploading rescue fallback to Cloudinary...`,
+        );
       }
-
-      if (totalPcmLength === 0) {
-        this.cleanupSession(alertKey);
-        return null;
-      }
-
-      // Prepend valid RIFF/WAVE header
-      const header = createWavHeader(
-        totalPcmLength,
-        session.sampleRate,
-        session.channels,
-        session.bitsPerSample,
-      );
-      const fullWavBuffer = Buffer.concat([header, ...pcmPayloads]);
-
-      console.log(
-        `[AudioStitcher] Alert ${alertKey}: Stitched ${sortedSeqs.length} chunks into ${fullWavBuffer.length} bytes. Uploading rescue fallback to Cloudinary...`,
-      );
 
       // Upload to Cloudinary
       const { url } = await CloudinaryService.uploadAudioEvidence(
-        fullWavBuffer,
+        finalAudioBuffer,
         `sos_${alertKey}_stitched`,
       );
 
