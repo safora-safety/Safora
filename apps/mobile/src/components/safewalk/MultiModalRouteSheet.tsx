@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -13,30 +13,69 @@ import { MultiModalTravelTimes } from '../../services/routingService';
 export type TransportMode = 'walk' | 'bike' | 'car';
 export type RouteStrategy = 'safest' | 'fastest';
 
-interface MultiModalRouteSheetProps {
+export interface MultiModalRouteSheetProps {
   destinationName: string;
-  distanceMeters: number;
-  travelTimes: MultiModalTravelTimes;
-  selectedMode: TransportMode;
-  onSelectMode: (mode: TransportMode) => void;
+  distanceMeters?: number;
+  travelTimes?: MultiModalTravelTimes | any;
+  selectedMode?: TransportMode;
+  onSelectMode?: (mode: TransportMode) => void;
   selectedStrategy: RouteStrategy;
   onSelectStrategy: (strategy: RouteStrategy) => void;
-  onStartWalk: () => void;
+  onStartWalk?: () => void;
+  onStartSafeWalk?: () => void;
+  onClearRoute?: () => void;
+  onClose?: () => void;
   isStarting?: boolean;
+  visible?: boolean;
+  // Specific path details for the 2 walking routes
+  safestDistanceMeters?: number;
+  safestDurationSeconds?: number;
+  shortcutDistanceMeters?: number;
+  shortcutDurationSeconds?: number;
 }
 
 export const MultiModalRouteSheet: React.FC<MultiModalRouteSheetProps> = ({
   destinationName,
-  distanceMeters,
+  distanceMeters = 800,
   travelTimes,
-  selectedMode,
-  onSelectMode,
   selectedStrategy,
   onSelectStrategy,
   onStartWalk,
+  onStartSafeWalk,
+  onClearRoute,
+  onClose,
   isStarting = false,
+  visible = true,
+  safestDistanceMeters,
+  safestDurationSeconds,
+  shortcutDistanceMeters,
+  shortcutDurationSeconds,
 }) => {
   const { colors, isDark } = useTheme();
+
+  if (visible === false) return null;
+
+  const handleStart = onStartWalk || onStartSafeWalk || (() => {});
+  const handleClear = onClearRoute || onClose;
+
+  const getBaseWalkSeconds = (): number => {
+    if (safestDurationSeconds !== undefined && safestDurationSeconds > 0)
+      return safestDurationSeconds;
+    if (travelTimes?.walkSeconds !== undefined) return travelTimes.walkSeconds;
+    if (travelTimes?.walk?.durationSec !== undefined)
+      return travelTimes.walk.durationSec;
+    return 600;
+  };
+
+  const getBaseDistanceMeters = (): number => {
+    if (safestDistanceMeters !== undefined && safestDistanceMeters > 0)
+      return safestDistanceMeters;
+    if (distanceMeters !== undefined && distanceMeters > 0)
+      return distanceMeters;
+    if (travelTimes?.walk?.distanceMeters !== undefined)
+      return travelTimes.walk.distanceMeters;
+    return 800;
+  };
 
   const formatDistance = (meters: number) => {
     if (meters >= 1000) {
@@ -47,8 +86,23 @@ export const MultiModalRouteSheet: React.FC<MultiModalRouteSheetProps> = ({
 
   const formatDuration = (seconds: number) => {
     const mins = Math.max(1, Math.ceil(seconds / 60));
-    return `${mins} min`;
+    return `${mins} min walk`;
   };
+
+  const mainRoadSecs = getBaseWalkSeconds();
+  const mainRoadMeters = getBaseDistanceMeters();
+
+  const shortcutSecs =
+    shortcutDurationSeconds !== undefined && shortcutDurationSeconds > 0
+      ? shortcutDurationSeconds
+      : Math.max(60, Math.round(mainRoadSecs * 0.92));
+
+  const shortcutMeters =
+    shortcutDistanceMeters !== undefined && shortcutDistanceMeters > 0
+      ? shortcutDistanceMeters
+      : Math.max(80, Math.round(mainRoadMeters * 0.92));
+
+  const savedMins = Math.max(1, Math.round((mainRoadSecs - shortcutSecs) / 60));
 
   return (
     <View
@@ -61,109 +115,63 @@ export const MultiModalRouteSheet: React.FC<MultiModalRouteSheetProps> = ({
         },
       ]}
     >
-      {/* Mode Selector Tabs */}
+      {/* Destination Header Row with Clear Route Option */}
       <View
         style={[
-          styles.modeTabsRow,
+          styles.sheetHeaderRow,
           {
-            backgroundColor: isDark ? '#0A0D14' : colors.surfaceHover,
+            borderBottomColor: isDark
+              ? 'rgba(255, 255, 255, 0.08)'
+              : 'rgba(0, 0, 0, 0.06)',
           },
         ]}
       >
-        {/* Walk Tab */}
-        <TouchableOpacity
-          onPress={() => onSelectMode('walk')}
-          style={[
-            styles.modeTab,
-            selectedMode === 'walk' && {
-              backgroundColor: colors.primary,
-            },
-          ]}
-        >
-          <Text style={styles.modeEmoji}>🚶</Text>
+        <View style={styles.sheetHeaderLeft}>
           <Text
-            style={[
-              styles.modeLabel,
-              selectedMode === 'walk' && styles.modeLabelActive,
-            ]}
+            style={[styles.sheetHeaderSub, { color: colors.textSecondary }]}
           >
-            Walk
+            SELECTED DESTINATION
           </Text>
           <Text
-            style={[
-              styles.modeTime,
-              typography.tabularNums,
-              selectedMode === 'walk' && styles.modeTimeActive,
-            ]}
+            style={[styles.sheetHeaderDest, { color: colors.textPrimary }]}
+            numberOfLines={1}
           >
-            {formatDuration(travelTimes.walkSeconds)}
+            📍 {destinationName}
           </Text>
-        </TouchableOpacity>
-
-        {/* 2-Wheeler Tab */}
-        <TouchableOpacity
-          onPress={() => onSelectMode('bike')}
-          style={[
-            styles.modeTab,
-            selectedMode === 'bike' && {
-              backgroundColor: colors.primary,
-            },
-          ]}
-        >
-          <Text style={styles.modeEmoji}>🛵</Text>
-          <Text
+        </View>
+        {handleClear && (
+          <TouchableOpacity
             style={[
-              styles.modeLabel,
-              selectedMode === 'bike' && styles.modeLabelActive,
+              styles.clearRouteBtn,
+              {
+                backgroundColor: isDark ? 'rgba(239, 68, 68, 0.14)' : '#FEE2E2',
+                borderColor: isDark ? 'rgba(239, 68, 68, 0.35)' : '#FCA5A5',
+              },
             ]}
+            onPress={handleClear}
+            activeOpacity={0.8}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel="Clear Route"
           >
-            2-Wheeler
-          </Text>
-          <Text
-            style={[
-              styles.modeTime,
-              typography.tabularNums,
-              selectedMode === 'bike' && styles.modeTimeActive,
-            ]}
-          >
-            {formatDuration(travelTimes.bikeSeconds)}
-          </Text>
-        </TouchableOpacity>
-
-        {/* Car Tab */}
-        <TouchableOpacity
-          onPress={() => onSelectMode('car')}
-          style={[
-            styles.modeTab,
-            selectedMode === 'car' && {
-              backgroundColor: colors.primary,
-            },
-          ]}
-        >
-          <Text style={styles.modeEmoji}>🚗</Text>
-          <Text
-            style={[
-              styles.modeLabel,
-              selectedMode === 'car' && styles.modeLabelActive,
-            ]}
-          >
-            Car
-          </Text>
-          <Text
-            style={[
-              styles.modeTime,
-              typography.tabularNums,
-              selectedMode === 'car' && styles.modeTimeActive,
-            ]}
-          >
-            {formatDuration(travelTimes.carSeconds)}
-          </Text>
-        </TouchableOpacity>
+            <Text style={styles.clearRouteText}>✕ Clear Route</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
-      {/* Route Strategy Comparison Cards */}
+      {/* Dedicated Walking Route Header */}
+      <View style={styles.walkHeaderBadgeRow}>
+        <Text style={[styles.walkHeaderTitle, { color: colors.textSecondary }]}>
+          SELECT WALKING ROUTE
+        </Text>
+        <View style={styles.walkDedicatedPill}>
+          <Text style={styles.walkDedicatedText}>🚶 DEDICATED WALK</Text>
+        </View>
+      </View>
+
+      {/* 2 Walking Paths: Path 1 Main Road vs Path 2 Shortcut */}
       <View style={styles.strategyRow}>
-        {/* Card 1: Safest Route */}
+        {/* Path 1: Well-Lit Corridor (Main Road) */}
         <TouchableOpacity
           onPress={() => onSelectStrategy('safest')}
           activeOpacity={0.8}
@@ -172,21 +180,25 @@ export const MultiModalRouteSheet: React.FC<MultiModalRouteSheetProps> = ({
             {
               backgroundColor:
                 selectedStrategy === 'safest'
-                  ? 'rgba(16, 185, 129, 0.12)'
+                  ? 'rgba(16, 185, 129, 0.14)'
                   : isDark
                     ? '#1E293B'
                     : '#F8FAFC',
               borderColor:
                 selectedStrategy === 'safest'
                   ? colors.brandEmerald
-                  : colors.border,
+                  : isDark
+                    ? 'rgba(255, 255, 255, 0.1)'
+                    : colors.border,
             },
           ]}
+          accessibilityRole="button"
+          accessibilityLabel="Main Road Well-Lit Corridor"
         >
           <View style={styles.strategyCardHeader}>
             <Text style={styles.strategyEmoji}>🛡️</Text>
             <View style={styles.recommendedBadge}>
-              <Text style={styles.recommendedText}>SAFEST</Text>
+              <Text style={styles.recommendedText}>SAFEST • MAIN ROAD</Text>
             </View>
           </View>
           <Text style={[styles.strategyTitle, { color: colors.textPrimary }]}>
@@ -199,17 +211,16 @@ export const MultiModalRouteSheet: React.FC<MultiModalRouteSheetProps> = ({
               { color: colors.brandEmerald },
             ]}
           >
-            {formatDuration(travelTimes.walkSeconds)} •{' '}
-            {formatDistance(distanceMeters)}
+            {formatDuration(mainRoadSecs)} • {formatDistance(mainRoadMeters)}
           </Text>
           <Text
             style={[styles.strategyFootnote, { color: colors.textSecondary }]}
           >
-            96% street-lit • avoids unlit alleys
+            96% street-lit • CCTV active • avoids unlit alleys
           </Text>
         </TouchableOpacity>
 
-        {/* Card 2: Fastest Shortcut */}
+        {/* Path 2: Direct Shortcut */}
         <TouchableOpacity
           onPress={() => onSelectStrategy('fastest')}
           activeOpacity={0.8}
@@ -218,14 +229,20 @@ export const MultiModalRouteSheet: React.FC<MultiModalRouteSheetProps> = ({
             {
               backgroundColor:
                 selectedStrategy === 'fastest'
-                  ? 'rgba(99, 102, 241, 0.12)'
+                  ? 'rgba(99, 102, 241, 0.14)'
                   : isDark
                     ? '#1E293B'
                     : '#F8FAFC',
               borderColor:
-                selectedStrategy === 'fastest' ? colors.primary : colors.border,
+                selectedStrategy === 'fastest'
+                  ? colors.primary
+                  : isDark
+                    ? 'rgba(255, 255, 255, 0.1)'
+                    : colors.border,
             },
           ]}
+          accessibilityRole="button"
+          accessibilityLabel="Direct Shortcut Path"
         >
           <View style={styles.strategyCardHeader}>
             <Text style={styles.strategyEmoji}>⚡</Text>
@@ -238,7 +255,7 @@ export const MultiModalRouteSheet: React.FC<MultiModalRouteSheetProps> = ({
               <Text
                 style={[styles.recommendedText, { color: colors.primaryLight }]}
               >
-                FASTEST
+                FASTEST • SHORTCUT
               </Text>
             </View>
           </View>
@@ -252,20 +269,20 @@ export const MultiModalRouteSheet: React.FC<MultiModalRouteSheetProps> = ({
               { color: colors.primaryLight },
             ]}
           >
-            {formatDuration(Math.max(60, travelTimes.walkSeconds - 120))} •{' '}
-            {formatDistance(Math.max(100, distanceMeters - 120))}
+            {formatDuration(shortcutSecs)} • {formatDistance(shortcutMeters)}
           </Text>
           <Text
             style={[styles.strategyFootnote, { color: colors.textSecondary }]}
           >
-            Saves 2 mins • 1 dimly lit lane
+            Saves {savedMins} min{savedMins > 1 ? 's' : ''} • connects side
+            lanes
           </Text>
         </TouchableOpacity>
       </View>
 
       {/* Start Escort Button */}
       <TouchableOpacity
-        onPress={onStartWalk}
+        onPress={handleStart}
         disabled={isStarting}
         activeOpacity={0.85}
         style={[
@@ -283,7 +300,9 @@ export const MultiModalRouteSheet: React.FC<MultiModalRouteSheetProps> = ({
         <Text style={styles.startBtnText}>
           {isStarting
             ? 'Activating Guardian Network...'
-            : `🛡️ Start Safe Walk (${formatDuration(travelTimes.walkSeconds)})`}
+            : selectedStrategy === 'safest'
+              ? `🛡️ Start Main Road Walk (${Math.ceil(mainRoadSecs / 60)} min)`
+              : `⚡ Start Shortcut Walk (${Math.ceil(shortcutSecs / 60)} min)`}
         </Text>
       </TouchableOpacity>
     </View>
@@ -295,9 +314,9 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     borderTopWidth: 1,
-    paddingTop: 16,
+    paddingTop: 14,
     paddingBottom: Platform.OS === 'ios' ? 34 : 20,
-    paddingHorizontal: 20,
+    paddingHorizontal: 18,
     ...Platform.select({
       ios: {
         shadowOffset: { width: 0, height: -6 },
@@ -309,44 +328,70 @@ const styles = StyleSheet.create({
       },
     }),
   },
-  modeTabsRow: {
-    flexDirection: 'row',
-    borderRadius: 14,
-    padding: 4,
-    marginBottom: 14,
-  },
-  modeTab: {
-    flex: 1,
+  sheetHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
+    justifyContent: 'space-between',
+    marginBottom: 10,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    gap: 10,
+  },
+  sheetHeaderLeft: {
+    flex: 1,
+  },
+  sheetHeaderSub: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    marginBottom: 2,
+  },
+  sheetHeaderDest: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  clearRouteBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 10,
-    gap: 6,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  modeEmoji: {
-    fontSize: 16,
-  },
-  modeLabel: {
+  clearRouteText: {
     fontSize: 12,
-    fontWeight: '700',
-    color: '#94A3B8',
+    fontWeight: '800',
+    color: '#EF4444',
   },
-  modeLabelActive: {
-    color: '#FFFFFF',
+  walkHeaderBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
   },
-  modeTime: {
+  walkHeaderTitle: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#94A3B8',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
   },
-  modeTimeActive: {
-    color: '#FFFFFF',
+  walkDedicatedPill: {
+    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  walkDedicatedText: {
+    color: '#38BDF8',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.5,
   },
   strategyRow: {
     flexDirection: 'row',
     gap: 12,
-    marginBottom: 16,
+    marginBottom: 14,
   },
   strategyCard: {
     flex: 1,
@@ -370,10 +415,10 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   recommendedText: {
-    fontSize: 9,
+    fontSize: 8.5,
     fontWeight: '900',
     color: '#10B981',
-    letterSpacing: 0.6,
+    letterSpacing: 0.5,
   },
   strategyTitle: {
     fontSize: 13,

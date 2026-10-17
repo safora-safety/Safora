@@ -304,17 +304,18 @@ export class AudioRecorderService {
       }
 
       // Safety fallback timer to stop recording if not stopped by native completion
-      pipelineIntervalTimer = setTimeout(
-        async () => {
-          if (isRecording) {
-            console.log(
-              `[AudioRecorder] Completed full ${totalSeconds}s continuous recording`,
-            );
-            await this.stopAndUpload(currentPipelineAlertId);
-          }
-        },
-        (totalSeconds + 2) * 1000,
-      );
+      const fallbackMs = isNativeAudioActive
+        ? (totalSeconds + 8) * 1000 // 38s: allows native thread to complete all 6 chunks & WAV header
+        : (totalSeconds + 1) * 1000;
+
+      pipelineIntervalTimer = setTimeout(async () => {
+        if (isRecording) {
+          console.log(
+            `[AudioRecorder] Fallback timer triggered after ${totalSeconds}s`,
+          );
+          await this.stopAndUpload(currentPipelineAlertId);
+        }
+      }, fallbackMs);
 
       return true;
     } catch (err) {

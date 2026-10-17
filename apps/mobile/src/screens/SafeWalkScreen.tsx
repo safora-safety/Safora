@@ -16,6 +16,7 @@ import {
   Platform,
   NativeModules,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   OpenMapView,
   OpenMapViewRef,
@@ -31,6 +32,8 @@ import {
 import { JourneyService } from '../services/journeyService';
 import {
   fetchFootRoute,
+  fetchWalkingPaths,
+  DualWalkingRoutesResult,
   searchPlaces,
   PlaceSearchResult,
   RouteCoord,
@@ -93,6 +96,11 @@ function downsampleRouteCoords(
 export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
   initialDestination,
 }) => {
+  const insets = useSafeAreaInsets();
+  const topInset = Math.max(
+    insets.top,
+    Platform.OS === 'android' ? StatusBar.currentHeight || 28 : 0,
+  );
   const { colors, isDark } = useTheme();
   const { isGuest, token } = useAuthStore();
   const mapRef = useRef<OpenMapViewRef | null>(null);
@@ -102,11 +110,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
     latitude: number;
     longitude: number;
     name: string;
-  }>({
-    latitude: 30.3165,
-    longitude: 78.0322,
-    name: 'Clock Tower / City Center',
-  });
+  } | null>(initialDestination || null);
 
   useEffect(() => {
     if (initialDestination) {
@@ -126,16 +130,44 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
   const [searchResults, setSearchResults] = useState<PlaceSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [routeCoords, setRouteCoords] = useState<RouteCoord[]>([]);
-  const [routeDistanceMeters, setRouteDistanceMeters] = useState(850);
-  const [routeDurationSeconds, setRouteDurationSeconds] = useState(600);
+  const [routeDistanceMeters, setRouteDistanceMeters] = useState(
+    initialDestination ? 850 : 0,
+  );
+  const [routeDurationSeconds, setRouteDurationSeconds] = useState(
+    initialDestination ? 600 : 0,
+  );
   const [isCalculatingRoute, setIsCalculatingRoute] = useState(false);
   const [selectedMode, setSelectedMode] = useState<TransportMode>('walk');
   const [selectedStrategy, setSelectedStrategy] =
     useState<RouteStrategy>('safest');
+  const [dualRoutes, setDualRoutes] = useState<DualWalkingRoutesResult | null>(
+    null,
+  );
   const [walkingSpeedMs, setWalkingSpeedMs] = useState<number>(1.4);
 
   const travelTimes: MultiModalTravelTimes =
     calculateTravelTimes(routeDistanceMeters);
+
+  const handleSelectStrategy = (strategy: RouteStrategy) => {
+    setSelectedStrategy(strategy);
+    if (dualRoutes) {
+      const active =
+        strategy === 'safest' ? dualRoutes.mainRoad : dualRoutes.shortcut;
+      setRouteCoords(active.coordinates);
+      setRouteDistanceMeters(active.distanceMeters);
+      setRouteDurationSeconds(active.durationSeconds);
+    }
+  };
+
+  const handleClearRoute = () => {
+    setDestPos(null);
+    setDualRoutes(null);
+    setRouteCoords([]);
+    setRouteDistanceMeters(0);
+    setRouteDurationSeconds(0);
+    setSearchQuery('');
+    setSearchResults([]);
+  };
 
   // Active Journey state synced with persistent Zustand store
   const {
@@ -283,19 +315,27 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
   useEffect(() => {
     if (userPos && destPos && !isActive) {
       updateStreetRoute();
+    } else if (!destPos && !isActive) {
+      setRouteCoords([]);
+      setRouteDistanceMeters(0);
+      setRouteDurationSeconds(0);
     }
-  }, [destPos.latitude, destPos.longitude, isActive]);
+  }, [destPos?.latitude, destPos?.longitude, isActive]);
 
   const updateStreetRoute = async () => {
+    if (!destPos) return;
     setIsCalculatingRoute(true);
     try {
-      const result = await fetchFootRoute(
+      const paths = await fetchWalkingPaths(
         { latitude: userPos.latitude, longitude: userPos.longitude },
         { latitude: destPos.latitude, longitude: destPos.longitude },
       );
-      setRouteCoords(result.coordinates);
-      setRouteDistanceMeters(result.distanceMeters);
-      setRouteDurationSeconds(result.durationSeconds);
+      setDualRoutes(paths);
+      const active =
+        selectedStrategy === 'safest' ? paths.mainRoad : paths.shortcut;
+      setRouteCoords(active.coordinates);
+      setRouteDistanceMeters(active.distanceMeters);
+      setRouteDurationSeconds(active.durationSeconds);
     } catch {
       // Fallback handled in service
     } finally {
@@ -501,6 +541,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
   };
 
   const executeStartWalk = async (guardianIds: (string | number)[]) => {
+    if (!destPos) return;
     setIsStartingWalk(true);
     const etaMins = Math.ceil(routeDurationSeconds / 60) || 10;
     try {
@@ -600,7 +641,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
   };
 
   const shareArrivalWhatsApp = () => {
-    const destination = destPos.name || 'my destination';
+    const destination = destPos?.name || 'my destination';
     const text = encodeURIComponent(
       `✅ Hey! I have reached ${destination} safely. My SAFORA Safe Walk companion escort session is completed.`,
     );
@@ -727,14 +768,18 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
       icon: '🚶‍♀️',
       color: colors.primary,
     },
-    {
-      id: 'destination',
-      latitude: destPos.latitude,
-      longitude: destPos.longitude,
-      title: destPos.name,
-      icon: '📍',
-      color: '#EF4444',
-    },
+    ...(destPos
+      ? [
+          {
+            id: 'destination',
+            latitude: destPos.latitude,
+            longitude: destPos.longitude,
+            title: destPos.name,
+            icon: '📍',
+            color: '#EF4444',
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -748,6 +793,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
           {
             backgroundColor: colors.backgroundCard,
             borderBottomColor: colors.border,
+            paddingTop: topInset + 10,
           },
         ]}
       >
@@ -771,7 +817,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
         )}
       </View>
 
-      {/* OEM Battery Optimization Reminder Banner */}
+      {/* OEM Battery Optimization Reminder Banner (Unobstructed in vertical flow) */}
       {!isBatteryUnrestricted && !dismissedBatteryBanner && (
         <View
           style={[
@@ -830,90 +876,6 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
         </View>
       )}
 
-      {/* Floating Google Maps-Style Destination Search Bar */}
-      {!isActive && (
-        <View style={styles.searchContainer}>
-          <View
-            style={[
-              styles.searchBar,
-              {
-                backgroundColor: colors.backgroundCard,
-                borderColor: colors.border,
-              },
-            ]}
-          >
-            <Text style={styles.searchIcon}>🔍</Text>
-            <TextInput
-              style={[styles.searchInput, { color: colors.textPrimary }]}
-              placeholder="Search destination (e.g. Clock Tower, Metro...)"
-              placeholderTextColor={colors.textMuted}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-            {isSearching && (
-              <ActivityIndicator size="small" color={colors.primary} />
-            )}
-            {searchQuery.length > 0 && !isSearching && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <Text style={{ color: colors.textMuted, fontSize: 16 }}>✕</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Autocomplete Search Results Dropdown */}
-          {searchResults.length > 0 && (
-            <View
-              style={[
-                styles.searchResultsBox,
-                {
-                  backgroundColor: colors.backgroundCard,
-                  borderColor: colors.border,
-                },
-              ]}
-            >
-              <ScrollView
-                nestedScrollEnabled
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={true}
-                style={{ maxHeight: 220 }}
-              >
-                {searchResults.map(item => (
-                  <TouchableOpacity
-                    key={item.id}
-                    style={[
-                      styles.searchResultItem,
-                      { borderBottomColor: colors.border },
-                    ]}
-                    onPress={() => handleSelectPlace(item)}
-                  >
-                    <Text style={styles.resultIcon}>📍</Text>
-                    <View style={{ flex: 1 }}>
-                      <Text
-                        style={[
-                          styles.resultName,
-                          { color: colors.textPrimary },
-                        ]}
-                      >
-                        {item.name}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.resultSub,
-                          { color: colors.textSecondary },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {item.placeName}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          )}
-        </View>
-      )}
-
       {/* Top Floating Active Walk Cockpit HUD */}
       {isActive && (
         <ActiveWalkCockpitHud
@@ -922,7 +884,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
           walkingSpeedMs={walkingSpeedMs}
           isDeviated={isDeviated}
           deviationCountdown={deviationCountdown}
-          destinationName={destPos.name}
+          destinationName={destPos?.name || 'Destination'}
         />
       )}
 
@@ -935,7 +897,13 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
           isDark={isDark}
           markers={mapMarkers}
           polyline={routeCoords}
-          polylineColor={isDeviated ? '#EF4444' : '#10B981'}
+          polylineColor={
+            isDeviated
+              ? '#EF4444'
+              : selectedStrategy === 'safest'
+                ? '#10B981'
+                : '#6366F1'
+          }
           polylineDash={!isActive}
           showCorridorHalo={isActive}
           corridorHaloColor={isDeviated ? '#EF4444' : '#10B981'}
@@ -945,8 +913,110 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
           style={styles.map}
         />
 
-        {/* Route Info Badge Floating on Map (when idle) */}
+        {/* Floating Google Maps-Style Destination Search Bar (Inside mapContainer) */}
         {!isActive && (
+          <View style={styles.searchContainer}>
+            <View
+              style={[
+                styles.searchBar,
+                {
+                  backgroundColor: colors.backgroundCard,
+                  borderColor: colors.border,
+                },
+              ]}
+            >
+              <Text style={styles.searchIcon}>🔍</Text>
+              <TextInput
+                style={[styles.searchInput, { color: colors.textPrimary }]}
+                placeholder={
+                  destPos
+                    ? `Destination: ${destPos.name}`
+                    : 'Search destination (e.g. Clock Tower, Metro...)'
+                }
+                placeholderTextColor={
+                  destPos ? colors.textPrimary : colors.textMuted
+                }
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
+              {isSearching && (
+                <ActivityIndicator size="small" color={colors.primary} />
+              )}
+              {(searchQuery.length > 0 || destPos !== null) && !isSearching && (
+                <TouchableOpacity
+                  onPress={() => {
+                    if (searchQuery.length > 0) {
+                      setSearchQuery('');
+                      setSearchResults([]);
+                    } else {
+                      handleClearRoute();
+                    }
+                  }}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={{ color: colors.textMuted, fontSize: 16 }}>
+                    ✕
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Autocomplete Search Results Dropdown */}
+            {searchResults.length > 0 && (
+              <View
+                style={[
+                  styles.searchResultsBox,
+                  {
+                    backgroundColor: colors.backgroundCard,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <ScrollView
+                  nestedScrollEnabled
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={true}
+                  style={{ maxHeight: 220 }}
+                >
+                  {searchResults.map(item => (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={[
+                        styles.searchResultItem,
+                        { borderBottomColor: colors.border },
+                      ]}
+                      onPress={() => handleSelectPlace(item)}
+                    >
+                      <Text style={styles.resultIcon}>📍</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={[
+                            styles.resultName,
+                            { color: colors.textPrimary },
+                          ]}
+                        >
+                          {item.name}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.resultSub,
+                            { color: colors.textSecondary },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {item.placeName}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Route Info Badge Floating on Map (when idle) */}
+        {!isActive && destPos && routeCoords.length > 0 && (
           <View
             style={[
               styles.routeBadge,
@@ -960,13 +1030,23 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
               <ActivityIndicator size="small" color={colors.primary} />
             ) : (
               <>
-                <Text style={styles.routeBadgeIcon}>🚶</Text>
+                <Text style={styles.routeBadgeIcon}>
+                  {selectedStrategy === 'safest' ? '🛡️' : '⚡'}
+                </Text>
                 <Text
                   style={[styles.routeBadgeText, { color: colors.textPrimary }]}
                 >
+                  {selectedStrategy === 'safest' ? 'Main Road' : 'Shortcut'} •{' '}
                   {formatDistance(routeDistanceMeters)} •{' '}
                   {formatWalkDuration(routeDurationSeconds)}
                 </Text>
+                <TouchableOpacity
+                  onPress={handleClearRoute}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  style={styles.routeBadgeClearBtn}
+                >
+                  <Text style={styles.routeBadgeClearText}>✕ Clear</Text>
+                </TouchableOpacity>
               </>
             )}
           </View>
@@ -991,17 +1071,69 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
 
       {/* Bottom Panel: Route Selection Comparison or Active Escort Controls */}
       {!isActive ? (
-        <MultiModalRouteSheet
-          destinationName={destPos.name}
-          distanceMeters={routeDistanceMeters}
-          travelTimes={travelTimes}
-          selectedMode={selectedMode}
-          onSelectMode={setSelectedMode}
-          selectedStrategy={selectedStrategy}
-          onSelectStrategy={setSelectedStrategy}
-          onStartWalk={handleInitiateWalk}
-          isStarting={isStartingWalk}
-        />
+        destPos ? (
+          <MultiModalRouteSheet
+            destinationName={destPos.name}
+            distanceMeters={routeDistanceMeters}
+            travelTimes={travelTimes}
+            selectedStrategy={selectedStrategy}
+            onSelectStrategy={handleSelectStrategy}
+            safestDistanceMeters={dualRoutes?.mainRoad.distanceMeters}
+            safestDurationSeconds={dualRoutes?.mainRoad.durationSeconds}
+            shortcutDistanceMeters={dualRoutes?.shortcut.distanceMeters}
+            shortcutDurationSeconds={dualRoutes?.shortcut.durationSeconds}
+            onStartWalk={handleInitiateWalk}
+            onClearRoute={handleClearRoute}
+            isStarting={isStartingWalk}
+          />
+        ) : (
+          <View
+            style={[
+              styles.idlePromptSheet,
+              {
+                backgroundColor: isDark ? colors.surfaceElevated : '#FFFFFF',
+                borderTopColor: isDark
+                  ? 'rgba(255, 255, 255, 0.08)'
+                  : colors.border,
+                shadowColor: colors.cardShadowColor,
+              },
+            ]}
+          >
+            <View style={styles.idlePromptContent}>
+              <View
+                style={[
+                  styles.idlePromptIconCircle,
+                  {
+                    backgroundColor: isDark
+                      ? 'rgba(56, 189, 248, 0.15)'
+                      : '#E0F2FE',
+                  },
+                ]}
+              >
+                <Text style={styles.idlePromptIcon}>📍</Text>
+              </View>
+              <View style={styles.idlePromptTextCol}>
+                <Text
+                  style={[
+                    styles.idlePromptTitle,
+                    { color: colors.textPrimary },
+                  ]}
+                >
+                  Set Road Destination
+                </Text>
+                <Text
+                  style={[
+                    styles.idlePromptSub,
+                    { color: colors.textSecondary },
+                  ]}
+                >
+                  Search any place above or tap anywhere on the map to preview
+                  safe well-lit corridors.
+                </Text>
+              </View>
+            </View>
+          </View>
+        )
       ) : (
         <View
           style={[
@@ -1072,7 +1204,8 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
                   { color: colors.textSecondary },
                 ]}
               >
-                Virtual companion will monitor your route to {destPos.name} (
+                Virtual companion will monitor your route to{' '}
+                {destPos?.name || 'your destination'} (
                 {Math.ceil(routeDurationSeconds / 60)} mins).
               </Text>
             </View>
@@ -1214,7 +1347,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
       {/* "I Reached Safely" Broadcast & Celebration Modal (Phase 5) */}
       <ArrivalCelebrationModal
         visible={showArrivalModal}
-        destinationName={destPos.name}
+        destinationName={destPos?.name || 'Destination'}
         distanceMeters={routeDistanceMeters}
         durationSeconds={routeDurationSeconds}
         onClose={() => setShowArrivalModal(false)}
@@ -1270,10 +1403,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
 
-  // Floating Search Bar
+  // Floating Search Bar (Inside mapContainer)
   searchContainer: {
     position: 'absolute',
-    top: 115,
+    top: 14,
     left: 16,
     right: 16,
     zIndex: 20,
@@ -1332,10 +1465,68 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     elevation: 6,
-    gap: 6,
+    gap: 8,
   },
   routeBadgeIcon: { fontSize: 14 },
   routeBadgeText: { fontSize: 12, fontWeight: '700' },
+  routeBadgeClearBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+  },
+  routeBadgeClearText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#EF4444',
+  },
+
+  // Idle Prompt Sheet when no route is previewed
+  idlePromptSheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderTopWidth: 1,
+    paddingTop: 16,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+    paddingHorizontal: 20,
+    ...Platform.select({
+      ios: {
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 10,
+      },
+    }),
+  },
+  idlePromptContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  idlePromptIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  idlePromptIcon: {
+    fontSize: 22,
+  },
+  idlePromptTextCol: {
+    flex: 1,
+  },
+  idlePromptTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  idlePromptSub: {
+    fontSize: 11,
+    lineHeight: 15,
+  },
 
   // Bottom Panel
   bottomPanel: {

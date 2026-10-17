@@ -12,7 +12,9 @@ import {
   BackHandler,
   ScrollView,
   Linking,
+  Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import {
   OpenMapView,
@@ -62,6 +64,11 @@ export const MapScreen: React.FC<MapScreenProps> = ({
   onNavigateTab,
   route,
 }) => {
+  const insets = useSafeAreaInsets();
+  const topInset = Math.max(
+    insets.top,
+    Platform.OS === 'android' ? StatusBar.currentHeight || 28 : 0,
+  );
   const navigation = useNavigation<any>();
   const { colors, isDark } = useTheme();
   const { isGuest } = useAuthStore();
@@ -540,7 +547,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
                 : '#6366F1'
           }
           polylineDash={false}
-          layerSwitcherTop={116}
+          layerSwitcherTop={topInset + 104}
           onMapPress={handleMapPress}
           onMarkerPress={markerId => {
             const found = hazards.find(h => String(h.id) === String(markerId));
@@ -552,7 +559,10 @@ export const MapScreen: React.FC<MapScreenProps> = ({
         />
 
         {/* Floating Google Maps-Style Capsule & Quick Filter Chips */}
-        <View style={styles.searchOverlay} pointerEvents="box-none">
+        <View
+          style={[styles.searchOverlay, { top: topInset + 8 }]}
+          pointerEvents="box-none"
+        >
           <FloatingSearchCapsule
             placeholder="Where are you walking to?"
             safetyScore={safetyScore}
@@ -636,7 +646,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
 
         {/* Offline Queued Hazard Reports Sync Banner */}
         {pendingSyncCount > 0 && (
-          <View style={styles.offlineSyncBanner}>
+          <View style={[styles.offlineSyncBanner, { top: topInset + 104 }]}>
             <View
               style={{
                 flexDirection: 'row',
@@ -712,6 +722,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
             style={[
               styles.loadingPill,
               {
+                top: topInset + 104,
                 backgroundColor: colors.backgroundCard,
                 borderColor: colors.border,
               },
@@ -1142,7 +1153,7 @@ const styles = StyleSheet.create({
   // Floating Google Maps Location Search Bar
   searchOverlay: {
     position: 'absolute',
-    top: 14,
+    top: 0,
     left: 0,
     right: 0,
     zIndex: 30,
