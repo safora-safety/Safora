@@ -796,13 +796,13 @@ class SafeWalkService : Service(), LocationListener {
                 var totalBytesRecorded = 0
                 val chunkBuffer = ByteArrayOutputStream(target5SecBytes)
                 var chunkSeq = 1
-                val maxDurationMs = 30000L
+                val maxDurationMs = 36000L // 36s wall-clock safety cap: allows audio hardware buffer latency while guaranteeing all 6 chunks
                 val startTime = System.currentTimeMillis()
                 val fileOut = FileOutputStream(currentAudioFile)
                 fileOut.write(ByteArray(44)) // WAV header placeholder
 
                 try {
-                    while (isRecordingAudio && (System.currentTimeMillis() - startTime < maxDurationMs)) {
+                    while (isRecordingAudio && chunkSeq <= 6 && (System.currentTimeMillis() - startTime < maxDurationMs)) {
                         val read = audioRecord?.read(buffer, 0, buffer.size) ?: 0
                         if (read > 0) {
                             fileOut.write(buffer, 0, read)
@@ -823,6 +823,8 @@ class SafeWalkService : Service(), LocationListener {
                                     alertId
                                 }
 
+                                val isLastChunk = (chunkSeq == 6)
+
                                 val map = Arguments.createMap().apply {
                                     putString("alertId", activeAlertId)
                                     putInt("seq", chunkSeq)
@@ -831,7 +833,7 @@ class SafeWalkService : Service(), LocationListener {
                                     putInt("sampleRate", sampleRate)
                                     putString("mimeType", encoded.mimeType)
                                     putString("data", base64Chunk)
-                                    putBoolean("isLast", false)
+                                    putBoolean("isLast", isLastChunk)
                                 }
                                 SafeWalkServiceModule.emitEvent("onSosAudioChunk", map)
 
@@ -844,16 +846,19 @@ class SafeWalkService : Service(), LocationListener {
                                     sampleRate = sampleRate,
                                     mimeType = encoded.mimeType,
                                     base64Data = base64Chunk,
-                                    isLast = false
+                                    isLast = isLastChunk
                                 )
 
                                 chunkSeq++
                             }
+                        } else if (read < 0) {
+                            Log.w(TAG, "AudioRecord read error: $read")
+                            break
                         }
                     }
 
-                    // Flush any remaining partial bytes if recording ended early or at 30s
-                    if (chunkBuffer.size() > 0) {
+                    // Flush any remaining partial bytes only if recording was interrupted before reaching 6 full chunks
+                    if (chunkBuffer.size() > 0 && chunkSeq <= 6) {
                         val pcmBytes = chunkBuffer.toByteArray()
                         chunkBuffer.reset()
                         val encoded = encodePcmChunkWithHardware(pcmBytes, sampleRate)
@@ -868,7 +873,7 @@ class SafeWalkService : Service(), LocationListener {
                         val map = Arguments.createMap().apply {
                             putString("alertId", activeAlertId)
                             putInt("seq", chunkSeq)
-                            putInt("totalChunksExpected", chunkSeq)
+                            putInt("totalChunksExpected", Math.max(6, chunkSeq))
                             putDouble("durationSec", pcmBytes.size.toDouble() / bytesPerSecond.toDouble())
                             putInt("sampleRate", sampleRate)
                             putString("mimeType", encoded.mimeType)
@@ -881,7 +886,7 @@ class SafeWalkService : Service(), LocationListener {
                         postAudioChunkNatively(
                             alertId = activeAlertId,
                             seq = chunkSeq,
-                            totalExpected = chunkSeq,
+                            totalExpected = Math.max(6, chunkSeq),
                             durationSec = pcmBytes.size.toDouble() / bytesPerSecond.toDouble(),
                             sampleRate = sampleRate,
                             mimeType = encoded.mimeType,
@@ -1127,6 +1132,7 @@ class SafeWalkService : Service(), LocationListener {
             val pcmLength = pcmBytes.size
             var inputEndOfStream = false
             var attempts = 0
+            var eosRetries = 0
             val maxAttempts = 1500 // Prevents infinite loop
 
             while (attempts++ < maxAttempts) {
@@ -1189,7 +1195,11 @@ class SafeWalkService : Service(), LocationListener {
                     }
                 } else if (outputBufIdx == MediaCodec.INFO_TRY_AGAIN_LATER) {
                     if (inputEndOfStream) {
-                        break
+                        eosRetries++
+                        if (eosRetries >= 20) {
+                            break
+                        }
+                        try { Thread.sleep(5) } catch (_: Exception) {}
                     }
                 }
             }

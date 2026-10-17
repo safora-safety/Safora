@@ -48,8 +48,21 @@ app.use(
 );
 
 app.use(morgan("dev"));
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+
+// Body parser with security scoping:
+// Standard endpoints capped at 1MB to prevent payload/memory exhaustion attacks
+// Audio chunk streaming endpoints allowed up to 10MB for base64 audio slices
+app.use((req: Request, res: Response, next) => {
+  const isAudioChunk = req.originalUrl?.includes("/audio-chunk");
+  const limit = isAudioChunk ? "10mb" : "1mb";
+  return express.json({ limit })(req, res, next);
+});
+
+app.use((req: Request, res: Response, next) => {
+  const isAudioChunk = req.originalUrl?.includes("/audio-chunk");
+  const limit = isAudioChunk ? "10mb" : "1mb";
+  return express.urlencoded({ extended: true, limit })(req, res, next);
+});
 
 // Root route
 app.get("/", (_req: Request, res: Response) => {
