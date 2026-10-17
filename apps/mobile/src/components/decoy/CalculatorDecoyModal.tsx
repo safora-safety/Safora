@@ -14,6 +14,7 @@ import {
 import { SosService } from '../../services/sosService';
 import { getCurrentCoordinates } from '../../services/locationService';
 import { AudioRecorderService } from '../../services/audioRecorderService';
+import { typography } from '../../theme/typography';
 
 interface CalculatorDecoyModalProps {
   visible: boolean;
@@ -200,7 +201,7 @@ export const CalculatorDecoyModal: React.FC<CalculatorDecoyModalProps> = ({
         {/* Calculator Display */}
         <View style={styles.displayArea}>
           <Text
-            style={styles.displayText}
+            style={[styles.displayText, typography.tabularNums]}
             numberOfLines={1}
             adjustsFontSizeToFit
           >

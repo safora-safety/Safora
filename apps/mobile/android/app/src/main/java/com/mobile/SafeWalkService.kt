@@ -13,6 +13,10 @@ import android.location.LocationManager
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.media.MediaCodec
+import android.media.MediaCodecInfo
+import android.media.MediaFormat
+import android.media.MediaMuxer
 import android.content.pm.ServiceInfo
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
@@ -43,6 +47,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.CopyOnWriteArrayList
+import android.database.sqlite.SQLiteDatabase
 
 class SafeWalkService : Service(), LocationListener {
 
@@ -92,11 +98,24 @@ class SafeWalkService : Service(), LocationListener {
     private var audioRecord: AudioRecord? = null
     private var currentAudioFile: File? = null
     private var audioWakeLock: PowerManager.WakeLock? = null
+    private val pendingNativeChunks = CopyOnWriteArrayList<PendingAudioChunk>()
+
+    data class PendingAudioChunk(
+        val seq: Int,
+        val totalExpected: Int,
+        val durationSec: Double,
+        val sampleRate: Int,
+        val mimeType: String,
+        val base64Data: String,
+        val isLast: Boolean
+    )
 
     private val httpClient by lazy {
         OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .writeTimeout(20, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
             .build()
     }
 
@@ -124,6 +143,10 @@ class SafeWalkService : Service(), LocationListener {
             }
             ACTION_RECORD_AUDIO -> {
                 val alertId = intent.getStringExtra(EXTRA_ALERT_ID) ?: "emergency"
+                val token = intent.getStringExtra(EXTRA_AUTH_TOKEN)
+                if (!token.isNullOrEmpty()) {
+                    authToken = token
+                }
                 if (alertId.isNotEmpty() && alertId != "emergency" && alertId != "sos_emergency") {
                     currentRecordingAlertId = alertId
                 }
@@ -132,9 +155,14 @@ class SafeWalkService : Service(), LocationListener {
             }
             ACTION_UPDATE_ALERT_ID -> {
                 val alertId = intent.getStringExtra(EXTRA_ALERT_ID) ?: ""
+                val token = intent.getStringExtra(EXTRA_AUTH_TOKEN)
+                if (!token.isNullOrEmpty()) {
+                    authToken = token
+                }
                 if (alertId.isNotEmpty() && alertId != "emergency" && alertId != "sos_emergency") {
                     currentRecordingAlertId = alertId
                     Log.i(TAG, "Native alert ID updated to: $alertId")
+                    flushPendingNativeAudioChunks(alertId)
                 }
             }
             ACTION_STOP_AUDIO -> {
@@ -407,6 +435,167 @@ class SafeWalkService : Service(), LocationListener {
         }
     }
 
+    private fun getStoredAuthToken(): String {
+        if (authToken.isNotEmpty()) return authToken
+        try {
+            val dbFile = getDatabasePath("RKStorage")
+            if (dbFile.exists()) {
+                val db = SQLiteDatabase.openDatabase(
+                    dbFile.path,
+                    null,
+                    SQLiteDatabase.OPEN_READONLY
+                )
+                db.use {
+                    val cursor = it.rawQuery(
+                        "SELECT value FROM catalystLocalStorage WHERE key = ? LIMIT 1",
+                        arrayOf("@safora_token")
+                    )
+                    cursor.use { c ->
+                        if (c.moveToFirst()) {
+                            val rawToken = c.getString(0)
+                            val token = rawToken?.trim()?.removeSurrounding("\"")
+                            if (!token.isNullOrEmpty()) {
+                                authToken = token
+                                Log.i(TAG, "Retrieved auth token from RKStorage SQLite successfully")
+                                return token
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not read auth token from RKStorage: ${e.message}")
+        }
+        return authToken
+    }
+
+    /**
+     * Native OkHttp Audio Chunk Streamer:
+     * Transmits 5-second PCM/WAV slices natively from Kotlin over OkHttp.
+     * Guarantees chunk-by-chunk live audio streaming reaches the admin dashboard
+     * in real-time, even when the phone screen is locked and Android throttles the JS thread.
+     */
+    private fun postAudioChunkNatively(
+        alertId: String,
+        seq: Int,
+        totalExpected: Int,
+        durationSec: Double,
+        sampleRate: Int,
+        mimeType: String,
+        base64Data: String,
+        isLast: Boolean,
+        retryCount: Int = 0
+    ) {
+        if (alertId.isEmpty() || alertId == "emergency" || alertId == "sos_emergency") {
+            pendingNativeChunks.add(
+                PendingAudioChunk(seq, totalExpected, durationSec, sampleRate, mimeType, base64Data, isLast)
+            )
+            Log.i(TAG, "Buffered native audio chunk #$seq pending real alertId (queue size=${pendingNativeChunks.size})")
+            return
+        }
+
+        try {
+            val token = getStoredAuthToken()
+            val json = JSONObject().apply {
+                put("alertId", alertId)
+                put("seq", seq)
+                put("totalChunksExpected", totalExpected)
+                put("durationSec", durationSec)
+                put("sampleRate", sampleRate)
+                put("mimeType", mimeType)
+                put("data", base64Data)
+                put("isLast", isLast)
+            }
+
+            val body = json.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+            val reqBuilder = Request.Builder()
+                .url("https://safora-backend.onrender.com/api/sos/$alertId/audio-chunk")
+                .post(body)
+
+            if (token.isNotEmpty()) {
+                reqBuilder.header("Authorization", "Bearer $token")
+            }
+
+            httpClient.newCall(reqBuilder.build()).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    Log.w(TAG, "Native audio chunk #$seq HTTP transmission failed: ${e.message}")
+                    if (retryCount < 2) {
+                        Log.i(TAG, "Scheduling retry for audio chunk #$seq (attempt ${retryCount + 1})...")
+                        Thread {
+                            try {
+                                Thread.sleep(1500)
+                                postAudioChunkNatively(
+                                    alertId,
+                                    seq,
+                                    totalExpected,
+                                    durationSec,
+                                    sampleRate,
+                                    mimeType,
+                                    base64Data,
+                                    isLast,
+                                    retryCount + 1
+                                )
+                            } catch (_: Exception) {}
+                        }.start()
+                    }
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    val code = response.code
+                    response.close()
+                    if (code in 200..299) {
+                        Log.i(TAG, "Native audio chunk #$seq transmitted successfully (HTTP $code, isLast=$isLast)")
+                    } else if (code in 500..599 && retryCount < 2) {
+                        Log.w(TAG, "Server returned $code for chunk #$seq, retrying once...")
+                        Thread {
+                            try {
+                                Thread.sleep(2000)
+                                postAudioChunkNatively(
+                                    alertId,
+                                    seq,
+                                    totalExpected,
+                                    durationSec,
+                                    sampleRate,
+                                    mimeType,
+                                    base64Data,
+                                    isLast,
+                                    retryCount + 1
+                                )
+                            } catch (_: Exception) {}
+                        }.start()
+                    } else {
+                        Log.w(TAG, "Native audio chunk #$seq response HTTP $code")
+                    }
+                }
+            })
+        } catch (e: Exception) {
+            Log.e(TAG, "Error posting audio chunk #$seq natively: ${e.message}")
+        }
+    }
+
+    private fun flushPendingNativeAudioChunks(validAlertId: String) {
+        if (validAlertId.isEmpty() || validAlertId == "emergency" || validAlertId == "sos_emergency") return
+        if (pendingNativeChunks.isEmpty()) return
+
+        val chunksToFlush = ArrayList(pendingNativeChunks)
+        pendingNativeChunks.clear()
+        Log.i(TAG, "Flushing ${chunksToFlush.size} buffered native audio chunk(s) to alert $validAlertId")
+
+        for (chunk in chunksToFlush) {
+            postAudioChunkNatively(
+                validAlertId,
+                chunk.seq,
+                chunk.totalExpected,
+                chunk.durationSec,
+                chunk.sampleRate,
+                chunk.mimeType,
+                chunk.base64Data,
+                chunk.isLast
+            )
+        }
+    }
+
+
     private fun getBatteryPercentage(): Int? {
         return try {
             val bm = getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
@@ -522,6 +711,7 @@ class SafeWalkService : Service(), LocationListener {
     private fun stopAudioThreadOnly() {
         isRecordingAudio = false
         currentRecordingAlertId = ""
+        pendingNativeChunks.clear()
         try {
             audioRecordThread?.join(600)
         } catch (_: Exception) {}
@@ -623,8 +813,9 @@ class SafeWalkService : Service(), LocationListener {
                             if (chunkBuffer.size() >= target5SecBytes) {
                                 val pcmBytes = chunkBuffer.toByteArray()
                                 chunkBuffer.reset()
-                                val chunkWav = createWavHeaderBytes(pcmBytes.size, sampleRate, 1, 16) + pcmBytes
-                                val base64Chunk = Base64.encodeToString(chunkWav, Base64.NO_WRAP)
+                                
+                                val encoded = encodePcmChunkWithHardware(pcmBytes, sampleRate)
+                                val base64Chunk = Base64.encodeToString(encoded.bytes, Base64.NO_WRAP)
 
                                 val activeAlertId = if (currentRecordingAlertId.isNotEmpty() && currentRecordingAlertId != "emergency" && currentRecordingAlertId != "sos_emergency") {
                                     currentRecordingAlertId
@@ -638,11 +829,24 @@ class SafeWalkService : Service(), LocationListener {
                                     putInt("totalChunksExpected", 6)
                                     putDouble("durationSec", 5.0)
                                     putInt("sampleRate", sampleRate)
-                                    putString("mimeType", "audio/wav")
+                                    putString("mimeType", encoded.mimeType)
                                     putString("data", base64Chunk)
                                     putBoolean("isLast", false)
                                 }
                                 SafeWalkServiceModule.emitEvent("onSosAudioChunk", map)
+
+                                // Transmit natively over OkHttp so audio streams live even when phone is locked
+                                postAudioChunkNatively(
+                                    alertId = activeAlertId,
+                                    seq = chunkSeq,
+                                    totalExpected = 6,
+                                    durationSec = 5.0,
+                                    sampleRate = sampleRate,
+                                    mimeType = encoded.mimeType,
+                                    base64Data = base64Chunk,
+                                    isLast = false
+                                )
+
                                 chunkSeq++
                             }
                         }
@@ -652,8 +856,8 @@ class SafeWalkService : Service(), LocationListener {
                     if (chunkBuffer.size() > 0) {
                         val pcmBytes = chunkBuffer.toByteArray()
                         chunkBuffer.reset()
-                        val chunkWav = createWavHeaderBytes(pcmBytes.size, sampleRate, 1, 16) + pcmBytes
-                        val base64Chunk = Base64.encodeToString(chunkWav, Base64.NO_WRAP)
+                        val encoded = encodePcmChunkWithHardware(pcmBytes, sampleRate)
+                        val base64Chunk = Base64.encodeToString(encoded.bytes, Base64.NO_WRAP)
 
                         val activeAlertId = if (currentRecordingAlertId.isNotEmpty() && currentRecordingAlertId != "emergency" && currentRecordingAlertId != "sos_emergency") {
                             currentRecordingAlertId
@@ -667,11 +871,23 @@ class SafeWalkService : Service(), LocationListener {
                             putInt("totalChunksExpected", chunkSeq)
                             putDouble("durationSec", pcmBytes.size.toDouble() / bytesPerSecond.toDouble())
                             putInt("sampleRate", sampleRate)
-                            putString("mimeType", "audio/wav")
+                            putString("mimeType", encoded.mimeType)
                             putString("data", base64Chunk)
                             putBoolean("isLast", true)
                         }
                         SafeWalkServiceModule.emitEvent("onSosAudioChunk", map)
+
+                        // Transmit final chunk natively over OkHttp
+                        postAudioChunkNatively(
+                            alertId = activeAlertId,
+                            seq = chunkSeq,
+                            totalExpected = chunkSeq,
+                            durationSec = pcmBytes.size.toDouble() / bytesPerSecond.toDouble(),
+                            sampleRate = sampleRate,
+                            mimeType = encoded.mimeType,
+                            base64Data = base64Chunk,
+                            isLast = true
+                        )
                     }
                 } catch (e: Exception) {
                     Log.w(TAG, "Audio recording thread error: ${e.message}")
@@ -816,6 +1032,185 @@ class SafeWalkService : Service(), LocationListener {
         return header
     }
 
+    data class EncodedChunk(
+        val bytes: ByteArray,
+        val mimeType: String
+    )
+
+    /**
+     * Phase 3: Hardware-Accelerated Audio Compression
+     * Compresses 5s PCM audio slices (~160 KB) into Opus (~16 KB) or AAC (~18 KB),
+     * reducing cellular bandwidth consumption by ~90% while surviving 2G/EDGE networks.
+     */
+    private fun encodePcmChunkWithHardware(pcmBytes: ByteArray, sampleRate: Int): EncodedChunk {
+        // Priority 1: Hardware Opus on Android 10+ (API 29+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                val opusResult = encodeWithMediaCodec(
+                    pcmBytes = pcmBytes,
+                    sampleRate = sampleRate,
+                    codecMime = MediaFormat.MIMETYPE_AUDIO_OPUS,
+                    muxerFormat = MediaMuxer.OutputFormat.MUXER_OUTPUT_OGG,
+                    bitRate = 24000,
+                    outputMime = "audio/ogg",
+                    tempFileSuffix = ".ogg"
+                )
+                if (opusResult != null && opusResult.bytes.isNotEmpty()) {
+                    val savedPct = 100 - (opusResult.bytes.size * 100 / pcmBytes.size)
+                    Log.i(TAG, "Hardware Opus chunk: ${pcmBytes.size} -> ${opusResult.bytes.size} bytes ($savedPct% bandwidth reduction)")
+                    return opusResult
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Hardware Opus encoder fallback: ${e.message}")
+            }
+        }
+
+        // Priority 2: Universal Hardware AAC on API 24+
+        try {
+            val aacResult = encodeWithMediaCodec(
+                pcmBytes = pcmBytes,
+                sampleRate = sampleRate,
+                codecMime = MediaFormat.MIMETYPE_AUDIO_AAC,
+                muxerFormat = MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4,
+                bitRate = 32000,
+                outputMime = "audio/mp4",
+                tempFileSuffix = ".m4a"
+            )
+            if (aacResult != null && aacResult.bytes.isNotEmpty()) {
+                val savedPct = 100 - (aacResult.bytes.size * 100 / pcmBytes.size)
+                Log.i(TAG, "Hardware AAC chunk: ${pcmBytes.size} -> ${aacResult.bytes.size} bytes ($savedPct% bandwidth reduction)")
+                return aacResult
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Hardware AAC encoder fallback: ${e.message}")
+        }
+
+        // Fail-safe Fallback: Standard PCM WAV
+        val wavBytes = createWavHeaderBytes(pcmBytes.size, sampleRate, 1, 16) + pcmBytes
+        return EncodedChunk(wavBytes, "audio/wav")
+    }
+
+    private fun encodeWithMediaCodec(
+        pcmBytes: ByteArray,
+        sampleRate: Int,
+        codecMime: String,
+        muxerFormat: Int,
+        bitRate: Int,
+        outputMime: String,
+        tempFileSuffix: String
+    ): EncodedChunk? {
+        var codec: MediaCodec? = null
+        var muxer: MediaMuxer? = null
+        var tempFile: File? = null
+
+        try {
+            tempFile = File.createTempFile("slice_enc_", tempFileSuffix, cacheDir)
+
+            val format = MediaFormat.createAudioFormat(codecMime, sampleRate, 1).apply {
+                setInteger(MediaFormat.KEY_BIT_RATE, bitRate)
+                if (codecMime == MediaFormat.MIMETYPE_AUDIO_AAC) {
+                    setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
+                }
+                setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 16384)
+            }
+
+            codec = MediaCodec.createEncoderByType(codecMime)
+            codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+            codec.start()
+
+            muxer = MediaMuxer(tempFile.absolutePath, muxerFormat)
+            var audioTrackIndex = -1
+            var muxerStarted = false
+
+            val bufferInfo = MediaCodec.BufferInfo()
+            var pcmOffset = 0
+            val pcmLength = pcmBytes.size
+            var inputEndOfStream = false
+            var attempts = 0
+            val maxAttempts = 1500 // Prevents infinite loop
+
+            while (attempts++ < maxAttempts) {
+                // 1. Feed input buffers
+                if (!inputEndOfStream) {
+                    val inputBufIdx = codec.dequeueInputBuffer(5000L)
+                    if (inputBufIdx >= 0) {
+                        val inputBuf = codec.getInputBuffer(inputBufIdx)
+                        inputBuf?.clear()
+                        val bytesToCopy = Math.min(inputBuf?.remaining() ?: 0, pcmLength - pcmOffset)
+                        if (bytesToCopy > 0 && inputBuf != null) {
+                            inputBuf.put(pcmBytes, pcmOffset, bytesToCopy)
+                            pcmOffset += bytesToCopy
+                        }
+
+                        if (pcmOffset >= pcmLength) {
+                            inputEndOfStream = true
+                            codec.queueInputBuffer(
+                                inputBufIdx,
+                                0,
+                                bytesToCopy,
+                                System.nanoTime() / 1000L,
+                                MediaCodec.BUFFER_FLAG_END_OF_STREAM
+                            )
+                        } else {
+                            codec.queueInputBuffer(
+                                inputBufIdx,
+                                0,
+                                bytesToCopy,
+                                System.nanoTime() / 1000L,
+                                0
+                            )
+                        }
+                    }
+                }
+
+                // 2. Drain output buffers
+                val outputBufIdx = codec.dequeueOutputBuffer(bufferInfo, 5000L)
+                if (outputBufIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                    if (!muxerStarted) {
+                        val newFormat = codec.outputFormat
+                        audioTrackIndex = muxer.addTrack(newFormat)
+                        muxer.start()
+                        muxerStarted = true
+                    }
+                } else if (outputBufIdx >= 0) {
+                    val encodedData = codec.getOutputBuffer(outputBufIdx)
+                    if (encodedData != null && (bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == 0) {
+                        if (bufferInfo.size != 0 && muxerStarted) {
+                            encodedData.position(bufferInfo.offset)
+                            encodedData.limit(bufferInfo.offset + bufferInfo.size)
+                            muxer.writeSampleData(audioTrackIndex, encodedData, bufferInfo)
+                        }
+                    }
+
+                    codec.releaseOutputBuffer(outputBufIdx, false)
+
+                    if ((bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
+                        break
+                    }
+                } else if (outputBufIdx == MediaCodec.INFO_TRY_AGAIN_LATER) {
+                    if (inputEndOfStream) {
+                        break
+                    }
+                }
+            }
+
+            if (muxerStarted) {
+                try { muxer.stop() } catch (_: Exception) {}
+            }
+
+            if (tempFile.exists() && tempFile.length() > 0) {
+                val bytes = tempFile.readBytes()
+                return EncodedChunk(bytes, outputMime)
+            }
+            return null
+        } finally {
+            try { codec?.stop() } catch (_: Exception) {}
+            try { codec?.release() } catch (_: Exception) {}
+            try { muxer?.release() } catch (_: Exception) {}
+            try { tempFile?.delete() } catch (_: Exception) {}
+        }
+    }
+
     private fun stopSafeWalk() {
         isServiceRunning = false
 
@@ -867,6 +1262,15 @@ class SafeWalkService : Service(), LocationListener {
     override fun onDestroy() {
         isServiceRunning = false
         stopAudioThreadOnly()
+        try {
+            locationManager?.removeUpdates(this)
+        } catch (_: Exception) {}
+        try {
+            if (wakeLock?.isHeld == true) {
+                wakeLock?.release()
+            }
+        } catch (_: Exception) {}
+        wakeLock = null
         super.onDestroy()
     }
 

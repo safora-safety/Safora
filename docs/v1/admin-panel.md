@@ -14,6 +14,13 @@
 | Diagnostics | **Interactive (V1)** — top KPI StatCards; individual "Test Service" action buttons for PostGIS, Cloudinary, Firebase, MapTiler, Nominatim, and Express with live measured latency ms |
 | Settings | **Interactive (V1)** — credentials change; audible SOS alarm toggle with Web Audio API "🔔 Test Chime" preview button |
 | Navigation Sidebar | **Live (V1)** — auto-updating badge counters for active SOS alerts and pending community hazards |
+| **Global Spotlight Command Palette** | **New (CAD)** — triggerable globally via `Ctrl+K` / `Cmd+K`; fuzzy action launcher, live route jumping, emergency drill simulation (`Alt+S`), Voice Clarity toggle (`C`) |
+| **Dispatcher Keyboard Shortcuts Manual** | **New (CAD)** — triggerable globally via `?`; Linear-style cheatsheet for navigation, incident triage, Web Audio controls, and batch actions |
+| **Automated Offline Failover Banner** | **New (CAD)** — ceiling banner drops down on WSS link interruption with manual reconnection trigger |
+| **Tactical Audio Chime Mute Switch** | **New (CAD)** — persistent top-bar speaker toggle (`M`) allowing dispatchers to silence non-critical chimes during high-stress operations |
+| **High-Resolution Evidence Lightbox** | **New (CAD)** — thumbnail click expands high-res image with EXIF timestamp, verified GPS coordinates with Google Maps shortcut, and 1-click status moderation |
+| **Batch Multi-Select Range Selection** | **New (CAD)** — `Shift`+Click on checkboxes selects continuous range of hazard reports for instantaneous batch approval/dismissal |
+| **Tabular Numerics CSS** | **New (CAD)** — `font-variant-numeric: tabular-nums` globally enforced to eliminate character width jitter on clocks, GPS coords, and latency pings |
 
 ## Why the sample-data fix matters for the submission
 An evaluator who opens the admin panel during a demo and sees moving "journeys" that don't correspond to anything real is an easy, damaging thing to notice. This is a small code change (delete the fallback function, show an empty state) with a large credibility payoff — it's in the V1 must-do list (`tasks.md`, SEC-9) for that reason, not because it's technically hard.

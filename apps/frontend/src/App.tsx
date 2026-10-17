@@ -4,6 +4,9 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
 import { Navbar } from './components/common/Navbar';
 import { Sidebar } from './components/common/Sidebar';
+import { CommandPalette } from './components/common/CommandPalette';
+import { KeyboardShortcutsModal } from './components/common/KeyboardShortcutsModal';
+import { OfflineFailoverBanner } from './components/common/OfflineFailoverBanner';
 import { SosBannerAlert } from './components/emergency/SosBannerAlert';
 import { LoginPage } from './pages/LoginPage';
 
@@ -86,13 +89,45 @@ export class ErrorBoundary extends React.Component<
 // Layout wrapper for authenticated command views
 const AdminLayout: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = React.useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const isInput =
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA' ||
+        target?.isContentEditable;
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setCommandPaletteOpen((prev) => !prev);
+      } else if (e.key === '?' && !isInput) {
+        e.preventDefault();
+        setShortcutsOpen((prev) => !prev);
+      } else if (e.key.toLowerCase() === 'm' && !isInput && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        const currentMuted = localStorage.getItem('safora_sound_alerts') === 'false';
+        const nextMuted = !currentMuted;
+        localStorage.setItem('safora_sound_alerts', nextMuted ? 'false' : 'true');
+        window.dispatchEvent(new CustomEvent('safora:sound-toggle', { detail: { muted: nextMuted } }));
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   return (
     <div className="min-h-screen bg-obsidian-900 text-gray-100 flex flex-col">
       <Navbar
         onToggleMobileMenu={() => setMobileMenuOpen(!mobileMenuOpen)}
         isMobileMenuOpen={mobileMenuOpen}
+        onOpenCommandPalette={() => setCommandPaletteOpen(true)}
+        onOpenShortcuts={() => setShortcutsOpen(true)}
       />
+      <OfflineFailoverBanner />
       <SosBannerAlert />
       <div className="flex-1 flex relative">
         <Sidebar
@@ -111,6 +146,15 @@ const AdminLayout: React.FC = () => {
           </Suspense>
         </main>
       </div>
+
+      <CommandPalette
+        isOpen={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
+      />
+      <KeyboardShortcutsModal
+        isOpen={shortcutsOpen}
+        onClose={() => setShortcutsOpen(false)}
+      />
     </div>
   );
 };

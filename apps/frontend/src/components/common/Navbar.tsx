@@ -1,21 +1,51 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
-import { Shield, LogOut, Clock, Menu, X } from 'lucide-react';
+import { Shield, LogOut, Clock, Menu, X, Search, Keyboard, Volume2, VolumeX } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 interface NavbarProps {
   onToggleMobileMenu?: () => void;
   isMobileMenuOpen?: boolean;
+  onOpenCommandPalette?: () => void;
+  onOpenShortcuts?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   onToggleMobileMenu,
   isMobileMenuOpen = false,
+  onOpenCommandPalette,
+  onOpenShortcuts,
 }) => {
   const { user, logout } = useAuth();
   const { isConnected } = useSocket();
   const [currentTime, setCurrentTime] = useState<string>('');
   const [timeZone, setTimeZone] = useState<'IST' | 'UTC'>('IST');
+  const [soundMuted, setSoundMuted] = useState<boolean>(() => {
+    return localStorage.getItem('safora_sound_alerts') === 'false';
+  });
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const handleSoundToggleEvent = (e: CustomEvent<{ muted: boolean }> | Event) => {
+      const isMuted = localStorage.getItem('safora_sound_alerts') === 'false';
+      setSoundMuted(isMuted);
+    };
+
+    window.addEventListener('safora:sound-toggle', handleSoundToggleEvent as EventListener);
+    window.addEventListener('storage', handleSoundToggleEvent as EventListener);
+    return () => {
+      window.removeEventListener('safora:sound-toggle', handleSoundToggleEvent as EventListener);
+      window.removeEventListener('storage', handleSoundToggleEvent as EventListener);
+    };
+  }, []);
+
+  const toggleSoundMute = () => {
+    const newMuted = !soundMuted;
+    setSoundMuted(newMuted);
+    localStorage.setItem('safora_sound_alerts', newMuted ? 'false' : 'true');
+    window.dispatchEvent(new CustomEvent('safora:sound-toggle', { detail: { muted: newMuted } }));
+  };
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -64,7 +94,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         )}
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => navigate('/')}>
           <div className="p-2 rounded-xl bg-indigo-600/20 border border-indigo-500/40 text-indigo-400 shadow-indigo-950/50 shadow-md">
             <Shield className="w-5 h-5 text-indigo-400" />
           </div>
@@ -79,7 +109,12 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="h-6 w-px bg-white/10 mx-2 hidden sm:block"></div>
 
         {/* Backend & Socket Health Beacon */}
-        <div className="hidden md:flex items-center gap-2 px-3 py-1 rounded-full bg-obsidian-700/60 border border-white/5 text-xs font-mono">
+        <button
+          type="button"
+          onClick={() => navigate('/diagnostics')}
+          className="hidden md:flex items-center gap-2 px-3 py-1 rounded-full bg-obsidian-700/60 hover:bg-obsidian-700 border border-white/5 text-xs font-mono transition-colors"
+          title="Click to view live server telemetry & diagnostics"
+        >
           <span className="relative flex h-2 w-2">
             {isConnected ? (
               <>
@@ -91,13 +126,68 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </span>
           <span className="text-gray-300">
-            {isConnected ? 'LIVE DISPATCH SOCKET' : 'CONNECTING...'}
+            {isConnected ? 'LIVE DISPATCH WSS' : 'CONNECTING...'}
           </span>
-        </div>
+        </button>
+
+        {/* Command Palette Quick Launcher */}
+        {onOpenCommandPalette && (
+          <button
+            type="button"
+            onClick={onOpenCommandPalette}
+            className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-obsidian-750/70 hover:bg-obsidian-700 border border-white/10 text-xs font-mono text-gray-400 hover:text-white transition-colors"
+            title="Open Command Palette (Ctrl + K)"
+          >
+            <Search className="w-3.5 h-3.5 text-indigo-400" />
+            <span>Search CAD / Actions</span>
+            <kbd className="px-1.5 py-0.5 rounded text-[10px] bg-obsidian-850 border border-white/10 text-gray-400 font-semibold">
+              ⌘K
+            </kbd>
+          </button>
+        )}
       </div>
 
       {/* Clock & Operator Controls */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2.5 sm:gap-4">
+        {/* Tactical Audio Alert Mute Switch */}
+        <button
+          type="button"
+          onClick={toggleSoundMute}
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border transition-colors text-xs font-mono ${
+            soundMuted
+              ? 'bg-amber-500/10 border-amber-500/30 text-amber-300 hover:bg-amber-500/20'
+              : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20'
+          }`}
+          title={
+            soundMuted
+              ? 'Tactical Chimes: MUTED (Press M to unmute)'
+              : 'Tactical Chimes: ACTIVE (Press M to mute)'
+          }
+        >
+          {soundMuted ? (
+            <VolumeX className="w-4 h-4 text-amber-400" />
+          ) : (
+            <Volume2 className="w-4 h-4 text-emerald-400" />
+          )}
+          <span className="hidden xl:inline text-[11px] font-semibold">
+            {soundMuted ? 'MUTED' : 'CHIMES ON'}
+          </span>
+          <kbd className="hidden xl:inline px-1 py-0.5 rounded text-[9px] bg-black/40 border border-white/10 text-gray-400">
+            M
+          </kbd>
+        </button>
+
+        {/* Keyboard Shortcuts Trigger */}
+        {onOpenShortcuts && (
+          <button
+            type="button"
+            onClick={onOpenShortcuts}
+            className="hidden sm:flex items-center justify-center p-2 rounded-xl bg-obsidian-750/70 hover:bg-obsidian-700 border border-white/10 text-gray-400 hover:text-white transition-colors"
+            title="Dispatcher Keyboard Shortcuts (?)"
+          >
+            <Keyboard className="w-4 h-4" />
+          </button>
+        )}
         {/* Tactical Clock */}
         <button
           onClick={() => setTimeZone(timeZone === 'IST' ? 'UTC' : 'IST')}

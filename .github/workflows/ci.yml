@@ -104,6 +104,9 @@ jobs:
       - name: Build Web Admin Production Bundle
         run: npm run build --workspace=apps/frontend
 
+      - name: Run Web Admin Unit Tests
+        run: npm run test --workspace=@safora/frontend
+
   # ── 4. Validate Mobile App (React Native Client) ───────────────────────────
   mobile:
     name: Validate Mobile App (React Native)
@@ -130,3 +133,6 @@ jobs:
 
       - name: Typecheck Mobile App TypeScript
         run: npx tsc --noEmit -p apps/mobile/tsconfig.json
+
+      - name: Run Mobile Unit Tests
+        run: npm run test --workspace=mobile

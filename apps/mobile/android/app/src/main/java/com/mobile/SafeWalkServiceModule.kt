@@ -13,6 +13,12 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import android.os.PowerManager
+import android.provider.Settings
+import android.net.Uri
+import android.content.ComponentName
+import com.facebook.react.bridge.Arguments
+import com.facebook.react.bridge.WritableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import java.lang.ref.WeakReference
 
@@ -353,10 +359,18 @@ class SafeWalkServiceModule(private val reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun startEmergencyAudio(alertId: String, promise: Promise) {
+        startEmergencyAudioWithToken(alertId, null, promise)
+    }
+
+    @ReactMethod
+    fun startEmergencyAudioWithToken(alertId: String, authToken: String?, promise: Promise) {
         try {
             val intent = Intent(reactContext, SafeWalkService::class.java).apply {
                 action = SafeWalkService.ACTION_RECORD_AUDIO
                 putExtra(SafeWalkService.EXTRA_ALERT_ID, alertId)
+                if (!authToken.isNullOrEmpty()) {
+                    putExtra(SafeWalkService.EXTRA_AUTH_TOKEN, authToken)
+                }
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 reactContext.startForegroundService(intent)
@@ -375,6 +389,23 @@ class SafeWalkServiceModule(private val reactContext: ReactApplicationContext) :
             val intent = Intent(reactContext, SafeWalkService::class.java).apply {
                 action = SafeWalkService.ACTION_UPDATE_ALERT_ID
                 putExtra(SafeWalkService.EXTRA_ALERT_ID, alertId)
+            }
+            reactContext.startService(intent)
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.resolve(false)
+        }
+    }
+
+    @ReactMethod
+    fun updateEmergencyAlertIdWithToken(alertId: String, authToken: String?, promise: Promise) {
+        try {
+            val intent = Intent(reactContext, SafeWalkService::class.java).apply {
+                action = SafeWalkService.ACTION_UPDATE_ALERT_ID
+                putExtra(SafeWalkService.EXTRA_ALERT_ID, alertId)
+                if (!authToken.isNullOrEmpty()) {
+                    putExtra(SafeWalkService.EXTRA_AUTH_TOKEN, authToken)
+                }
             }
             reactContext.startService(intent)
             promise.resolve(true)
@@ -412,6 +443,133 @@ class SafeWalkServiceModule(private val reactContext: ReactApplicationContext) :
     @ReactMethod
     fun isRunning(promise: Promise) {
         promise.resolve(SafeWalkService.isServiceRunning)
+    }
+
+    // Phase 4: OEM Battery Optimization & Lock-Screen Protection Methods
+    @ReactMethod
+    fun isIgnoringBatteryOptimizations(promise: Promise) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val powerManager = reactContext.getSystemService(Context.POWER_SERVICE) as? PowerManager
+                val isIgnoring = powerManager?.isIgnoringBatteryOptimizations(reactContext.packageName) ?: false
+                promise.resolve(isIgnoring)
+            } else {
+                promise.resolve(true)
+            }
+        } catch (e: Exception) {
+            promise.resolve(false)
+        }
+    }
+
+    @ReactMethod
+    fun requestIgnoreBatteryOptimizations(promise: Promise) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val intent = Intent().apply {
+                    action = Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+                    data = Uri.parse("package:${reactContext.packageName}")
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                reactContext.startActivity(intent)
+                promise.resolve(true)
+            } else {
+                promise.resolve(false)
+            }
+        } catch (e: Exception) {
+            // Fallback to general battery saver settings page if direct prompt fails
+            try {
+                val fallbackIntent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                reactContext.startActivity(fallbackIntent)
+                promise.resolve(true)
+            } catch (e2: Exception) {
+                promise.reject("BATTERY_INTENT_ERROR", e2.message, e2)
+            }
+        }
+    }
+
+    @ReactMethod
+    fun openManufacturerPowerSettings(promise: Promise) {
+        val manufacturer = Build.MANUFACTURER.lowercase(Locale.getDefault())
+        val intent = Intent().apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+
+        var intentFound = false
+        when {
+            manufacturer.contains("xiaomi") || manufacturer.contains("redmi") || manufacturer.contains("poco") -> {
+                try {
+                    intent.component = ComponentName(
+                        "com.miui.securitycenter",
+                        "com.miui.permcenter.autostart.AutoStartManagementActivity"
+                    )
+                    reactContext.startActivity(intent)
+                    intentFound = true
+                } catch (_: Exception) {}
+            }
+            manufacturer.contains("samsung") -> {
+                try {
+                    intent.component = ComponentName(
+                        "com.samsung.android.lool",
+                        "com.samsung.android.sm.battery.ui.BatteryActivity"
+                    )
+                    reactContext.startActivity(intent)
+                    intentFound = true
+                } catch (_: Exception) {}
+            }
+            manufacturer.contains("oneplus") || manufacturer.contains("oppo") || manufacturer.contains("realme") -> {
+                try {
+                    intent.component = ComponentName(
+                        "com.coloros.safecenter",
+                        "com.coloros.safecenter.permission.startup.StartupAppListActivity"
+                    )
+                    reactContext.startActivity(intent)
+                    intentFound = true
+                } catch (_: Exception) {}
+            }
+            manufacturer.contains("huawei") || manufacturer.contains("honor") -> {
+                try {
+                    intent.component = ComponentName(
+                        "com.huawei.systemmanager",
+                        "com.huawei.systemmanager.optimize.process.ProtectActivity"
+                    )
+                    reactContext.startActivity(intent)
+                    intentFound = true
+                } catch (_: Exception) {}
+            }
+        }
+
+        if (!intentFound) {
+            // General application details fallback
+            try {
+                val appSettingsIntent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.parse("package:${reactContext.packageName}")
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                reactContext.startActivity(appSettingsIntent)
+                promise.resolve(true)
+            } catch (e: Exception) {
+                promise.reject("SETTINGS_ERROR", e.message, e)
+            }
+        } else {
+            promise.resolve(true)
+        }
+    }
+
+    @ReactMethod
+    fun getDeviceManufacturerInfo(promise: Promise) {
+        try {
+            val map = Arguments.createMap().apply {
+                putString("manufacturer", Build.MANUFACTURER)
+                putString("brand", Build.BRAND)
+                putString("model", Build.MODEL)
+                putInt("sdkInt", Build.VERSION.SDK_INT)
+            }
+            promise.resolve(map)
+        } catch (e: Exception) {
+            promise.reject("DEVICE_INFO_ERROR", e.message, e)
+        }
     }
 
     override fun onCatalystInstanceDestroy() {

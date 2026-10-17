@@ -563,3 +563,28 @@ Voice notes ≤ 2 minutes / 1 MB (Opus/AAC); images resized on the phone to ≤ 
 6. Three-tier contact list, no acks → primary at T+0, secondary at T+2min, tertiary at T+4min, then no further escalation (TRK-11).
 7. Battery drop across two consecutive 5% thresholds during one walk → two independent, separately-cancellable warnings (TRK-10).
 8. Codeword typed in chat → SOS triggers with no visible on-screen confirmation (CHT-4).
+
+---
+
+## 12. Forensic Evidentiary Dossier (ADM-4) & Municipal CAD Connector (ADM-5)
+
+### ADM-4: One-Click Forensic Evidence Packet (PDF Export)
+**Goal:** Generate a court-admissible, tamper-evident forensic PDF dossier of an emergency incident for police First Information Reports (FIRs) or campus disciplinary hearings.
+
+**Architecture & Contents:**
+1. **Case Metadata:** Alert ID, citizen profile (name, emergency contacts, medical notes), start/stop timestamps, device model, battery progression.
+2. **GPS Forensic Breadcrumb Map:** High-resolution map snapshot with timestamped corridor waypoints, speed telemetry, and lateral deviation markers.
+3. **Acoustic Evidence Log:**
+   - Link to signed Cloudinary master 30s audio recording and/or stitched rescue slices.
+   - Spectral waveform thumbnail and audio format specifications (Opus 24 kbps / AAC 32 kbps / 16kHz PCM WAV).
+   - Voice clarity DSP status log.
+4. **Guardian & Dispatcher Audit Trail:** Chronological ledger of WebSocket broadcasts, FCM push delivery confirmations, SMS transmissions, and staff triage notes (`dispatched ➔ acknowledged ➔ resolved`).
+5. **Cryptographic Checksum:** SHA-256 hash of the audio binary and payload json embedded in the footer to prove evidence chain-of-custody.
+
+### ADM-5: Public Safety CAD & 112 ERSS Connector (RapidSOS Model)
+**Goal:** Interoperability with municipal 112 emergency response systems (ERSS) and campus security control rooms.
+
+**Architecture:**
+- **Standardized Common Alerting Protocol (CAP v1.2):** Formats active SOS incidents into standardized XML/JSON payloads with location polygon, caller urgency, and verified audio URL.
+- **Webhook Egress:** Configurable authenticated webhook endpoints firing on emergency state transitions (`sos.created`, `sos.audio_finalized`, `sos.resolved`).
+- **Mutual TLS (mTLS):** Direct secure channel ensuring encrypted transit to municipal control room dispatch servers.

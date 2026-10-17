@@ -67,6 +67,7 @@ Desktop.ini
 # Testing & Coverage
 **/coverage/
 **/.nyc_output/
+**/.vitest-cache/
 
 # Temporary / Bundling files
 .metro-health-check*
@@ -75,3 +76,7 @@ Desktop.ini
 .project
 .classpath
 .settings/
+.eslintcache
+**/.eslintcache
+vite.config.js
+vite.config.d.ts

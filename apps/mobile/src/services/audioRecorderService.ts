@@ -270,7 +270,18 @@ export class AudioRecorderService {
           const nativeId = String(
             currentPipelineAlertId || alertId || 'sos_emergency',
           );
-          await NativeModules.SafeWalkService.startEmergencyAudio(nativeId);
+          const token = await AsyncStorage.getItem('@safora_token');
+          if (
+            token &&
+            NativeModules.SafeWalkService?.startEmergencyAudioWithToken
+          ) {
+            await NativeModules.SafeWalkService.startEmergencyAudioWithToken(
+              nativeId,
+              token,
+            );
+          } else {
+            await NativeModules.SafeWalkService.startEmergencyAudio(nativeId);
+          }
           isNativeAudioActive = true;
           isRecording = true;
           console.log(
@@ -323,13 +334,30 @@ export class AudioRecorderService {
     joinSosAlertRoom(alertId);
 
     // Notify native Android service so any subsequent chunks/master completion carry real alertId
-    if (
-      Platform.OS === 'android' &&
-      NativeModules.SafeWalkService?.updateEmergencyAlertId
-    ) {
-      NativeModules.SafeWalkService.updateEmergencyAlertId(
-        String(alertId),
-      ).catch(() => {});
+    if (Platform.OS === 'android') {
+      AsyncStorage.getItem('@safora_token')
+        .then(token => {
+          if (
+            token &&
+            NativeModules.SafeWalkService?.updateEmergencyAlertIdWithToken
+          ) {
+            NativeModules.SafeWalkService.updateEmergencyAlertIdWithToken(
+              String(alertId),
+              token,
+            ).catch(() => {});
+          } else if (NativeModules.SafeWalkService?.updateEmergencyAlertId) {
+            NativeModules.SafeWalkService.updateEmergencyAlertId(
+              String(alertId),
+            ).catch(() => {});
+          }
+        })
+        .catch(() => {
+          if (NativeModules.SafeWalkService?.updateEmergencyAlertId) {
+            NativeModules.SafeWalkService.updateEmergencyAlertId(
+              String(alertId),
+            ).catch(() => {});
+          }
+        });
     }
 
     console.log(

@@ -1,6 +1,7 @@
 import { Response, NextFunction } from "express";
 import { AuthenticatedRequest } from "../middleware/auth";
 import { SosService } from "../services/sosService";
+import { processSosAudioChunk } from "../services/sosAudioService";
 import { AppError } from "../errors/AppError";
 
 export async function triggerSOS(
@@ -243,6 +244,45 @@ export async function attachAudio(
       success: true,
       message: "Audio evidence attached to SOS alert",
       alert,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function streamAudioChunk(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (!req.user) throw new AppError("Unauthorized", 401);
+
+    const alertId = req.params.id || req.body.alertId || req.body.alert_id;
+    if (!alertId) {
+      throw new AppError("Alert ID is required", 400);
+    }
+
+    const result = await processSosAudioChunk({
+      alertId,
+      userId: req.user.id,
+      userRole: req.user.role,
+      seq: Number(req.body.seq),
+      totalChunksExpected: req.body.totalChunksExpected
+        ? Number(req.body.totalChunksExpected)
+        : undefined,
+      durationSec: req.body.durationSec
+        ? Number(req.body.durationSec)
+        : undefined,
+      sampleRate: req.body.sampleRate ? Number(req.body.sampleRate) : undefined,
+      mimeType: req.body.mimeType,
+      data: req.body.data,
+      isLast: Boolean(req.body.isLast),
+    });
+
+    res.status(200).json({
+      message: "Audio chunk processed",
+      ...result,
     });
   } catch (err) {
     next(err);

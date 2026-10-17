@@ -19,6 +19,7 @@
 | `mobile-app-features.md` | What the app does, screen by screen, for V1 |
 | `admin-panel.md` | What the admin site does for V1 |
 | `dual-pipe-audio-streaming.md` | Real-time 5s audio chunk delivery, Android AudioRecord dual-sink, server fail-safe watchdog & Cloudinary archival |
+| `safora-v1-features-industry-research.md` | Comprehensive feature audit, global benchmarking (SafetiPin, Noonlight, Citizen, bSafe, WalkSafe, RapidSOS), and unique engineering innovations |
 | `setup.md` | Local dev setup (mostly unchanged from your current docs) |
 | `tasks.md` | The concrete V1 ticket list, in priority order, with a cut list |
 | `testing-and-submission.md` | Self-testing checklist and demo/viva readiness |

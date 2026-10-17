@@ -175,7 +175,8 @@ Chat (M7) and Hindi/local polish (M8) come **after** v1. If you cannot commit 4 
 | TRK-6 | Guardian web tracking link (for guardians without the app) — deferred | L |
 | ADM-1 | Dispatch workflow: assign responder, notes, call-back log, audit trail | M |
 | ADM-3 | Analytics: time-of-day heatmap, response-time metrics | M |
-| ADM-4 | PDF evidence packet | M |
+| ADM-4 | PDF evidence packet (forensic incident dossier) | M |
+| ADM-5 | Municipal 112 ERSS & Campus CAD Connector (CAP protocol & webhooks) | M |
 | PUB-1 | Terms of use, privacy policy, grievance contact (drafted with a template, checked by someone qualified) | M |
 | PUB-2 | Hosting upgrade to an always-on paid instance and paid database before real users | S |
 | PUB-3 | Moderation tools: report queue for hazards and chat reports, block lists | M |

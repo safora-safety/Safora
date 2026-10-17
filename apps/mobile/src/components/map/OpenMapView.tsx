@@ -50,6 +50,9 @@ export interface OpenMapViewProps {
   polyline?: Array<{ latitude: number; longitude: number }>;
   polylineColor?: string;
   polylineDash?: boolean;
+  showCorridorHalo?: boolean;
+  corridorHaloColor?: string;
+  tilt3D?: boolean;
   onMarkerPress?: (markerId: string | number) => void;
   onMapPress?: (coord: { latitude: number; longitude: number }) => void;
   onOfflineCached?: (tileCount: number) => void;
@@ -60,6 +63,7 @@ export interface OpenMapViewRef {
   recenter: (latitude: number, longitude: number, zoom?: number) => void;
   cache10km: (latitude: number, longitude: number) => void;
   setMapLayer: (layer: MapLayerType) => void;
+  set3DTilt: (enabled: boolean) => void;
 }
 
 const generateHtml = (
@@ -277,6 +281,71 @@ const generateHtml = (
         }
       });
 
+      // Google Maps style one-handed gestures:
+      // 1. Two-finger tap -> Zoom out by 1 level
+      // 2. Double-tap and drag -> Zoom in / out smoothly
+      var mapContainer = document.getElementById('map');
+      if (mapContainer) {
+        var lastTapTime = 0;
+        var lastTapX = 0;
+        var lastTapY = 0;
+        var isDoubleTapDragging = false;
+        var dragStartY = 0;
+        var dragStartZoom = 0;
+        var twoFingerTapCandidate = false;
+        var touchStartTime = 0;
+
+        mapContainer.addEventListener('touchstart', function(e) {
+          var now = Date.now();
+          if (e.touches.length === 2) {
+            twoFingerTapCandidate = true;
+            touchStartTime = now;
+            return;
+          }
+          twoFingerTapCandidate = false;
+
+          if (e.touches.length === 1) {
+            var touch = e.touches[0];
+            var dist = Math.hypot(touch.clientX - lastTapX, touch.clientY - lastTapY);
+            if (now - lastTapTime < 340 && dist < 45) {
+              // Second tap started - enter one-finger zoom mode
+              isDoubleTapDragging = true;
+              dragStartY = touch.clientY;
+              dragStartZoom = map.getZoom();
+              map.dragging.disable();
+              e.preventDefault();
+            }
+            lastTapTime = now;
+            lastTapX = touch.clientX;
+            lastTapY = touch.clientY;
+          }
+        }, { passive: false });
+
+        mapContainer.addEventListener('touchmove', function(e) {
+          if (isDoubleTapDragging && e.touches.length === 1) {
+            var currentY = e.touches[0].clientY;
+            var deltaY = currentY - dragStartY; // dragging down zooms in, up zooms out
+            var newZoom = Math.max(3, Math.min(19, dragStartZoom + (deltaY / 65)));
+            map.setZoom(newZoom, { animate: false });
+            e.preventDefault();
+          }
+          if (twoFingerTapCandidate && e.touches.length === 2) {
+            twoFingerTapCandidate = false;
+          }
+        }, { passive: false });
+
+        mapContainer.addEventListener('touchend', function(e) {
+          if (isDoubleTapDragging) {
+            isDoubleTapDragging = false;
+            map.dragging.enable();
+          }
+          if (twoFingerTapCandidate && (Date.now() - touchStartTime < 280)) {
+            twoFingerTapCandidate = false;
+            map.zoomOut(1);
+          }
+        });
+      }
+
       setTimeout(function() {
         if (window.cacheSurrounding10km) {
           window.cacheSurrounding10km(${initialCenter.latitude}, ${initialCenter.longitude});
@@ -417,21 +486,51 @@ const generateHtml = (
       });
     };
 
-    window.renderPolyline = function(points, color, isDashed) {
+    var corridorHaloLayer = null;
+    window.renderPolyline = function(points, color, isDashed, showHalo, haloColor) {
       if (!map) return;
       if (polylineLayer) {
         map.removeLayer(polylineLayer);
         polylineLayer = null;
       }
+      if (corridorHaloLayer) {
+        map.removeLayer(corridorHaloLayer);
+        corridorHaloLayer = null;
+      }
       if (!points || points.length < 2) return;
 
       var latlngs = points.map(function(p) { return [p.latitude, p.longitude]; });
+
+      // 150m Corridor Halo Buffer
+      if (showHalo) {
+        corridorHaloLayer = L.polyline(latlngs, {
+          color: haloColor || '#10B981',
+          weight: 42,
+          opacity: 0.22,
+          lineCap: 'round',
+          lineJoin: 'round'
+        }).addTo(map);
+      }
+
       polylineLayer = L.polyline(latlngs, {
         color: color || '#4F46E5',
-        weight: 4,
-        opacity: 0.9,
+        weight: 5,
+        opacity: 0.95,
         dashArray: isDashed ? '8, 8' : undefined
       }).addTo(map);
+    };
+
+    window.set3DTilt = function(enabled) {
+      var mapEl = document.getElementById('map');
+      if (!mapEl) return;
+      if (enabled) {
+        document.body.style.perspective = '1000px';
+        mapEl.style.transform = 'rotateX(35deg) scale(1.15)';
+        mapEl.style.transformOrigin = 'center bottom';
+        mapEl.style.transition = 'transform 0.6s cubic-bezier(0.16, 1, 0.3, 1)';
+      } else {
+        mapEl.style.transform = 'none';
+      }
     };
 
     var clustersLayer = null;
@@ -497,6 +596,9 @@ export const OpenMapView = forwardRef<OpenMapViewRef, OpenMapViewProps>(
       polyline,
       polylineColor = '#4F46E5',
       polylineDash = false,
+      showCorridorHalo = false,
+      corridorHaloColor = '#10B981',
+      tilt3D = false,
       onMarkerPress,
       onMapPress,
       onOfflineCached,
@@ -520,6 +622,10 @@ export const OpenMapView = forwardRef<OpenMapViewRef, OpenMapViewProps>(
       },
       setMapLayer: (layer: MapLayerType) => {
         switchLayer(layer);
+      },
+      set3DTilt: (enabled: boolean) => {
+        const script = `if (window.set3DTilt) { window.set3DTilt(${Boolean(enabled)}); }; true;`;
+        webViewRef.current?.injectJavaScript(script);
       },
     }));
 
@@ -554,9 +660,23 @@ export const OpenMapView = forwardRef<OpenMapViewRef, OpenMapViewProps>(
     // Send polyline update whenever polyline changes
     useEffect(() => {
       if (!isMapLoaded) return;
-      const script = `if (window.renderPolyline) { window.renderPolyline(${JSON.stringify(polyline || [])}, "${polylineColor}", ${polylineDash}); }; true;`;
+      const script = `if (window.renderPolyline) { window.renderPolyline(${JSON.stringify(polyline || [])}, "${polylineColor}", ${polylineDash}, ${Boolean(showCorridorHalo)}, "${corridorHaloColor}"); }; true;`;
       webViewRef.current?.injectJavaScript(script);
-    }, [polyline, polylineColor, polylineDash, isMapLoaded]);
+    }, [
+      polyline,
+      polylineColor,
+      polylineDash,
+      showCorridorHalo,
+      corridorHaloColor,
+      isMapLoaded,
+    ]);
+
+    // Send 3D tilt update whenever tilt3D changes
+    useEffect(() => {
+      if (!isMapLoaded) return;
+      const script = `if (window.set3DTilt) { window.set3DTilt(${Boolean(tilt3D)}); }; true;`;
+      webViewRef.current?.injectJavaScript(script);
+    }, [tilt3D, isMapLoaded]);
 
     // Send theme update whenever isDark changes
     useEffect(() => {
@@ -573,7 +693,8 @@ export const OpenMapView = forwardRef<OpenMapViewRef, OpenMapViewProps>(
           const initScript = `
             if (window.renderMarkers) { window.renderMarkers(${JSON.stringify(markers)}); }
             if (window.renderClusters) { window.renderClusters(${JSON.stringify(clusters || [])}); }
-            if (window.renderPolyline) { window.renderPolyline(${JSON.stringify(polyline || [])}, "${polylineColor}", ${polylineDash}); }
+            if (window.renderPolyline) { window.renderPolyline(${JSON.stringify(polyline || [])}, "${polylineColor}", ${polylineDash}, ${Boolean(showCorridorHalo)}, "${corridorHaloColor}"); }
+            if (window.set3DTilt) { window.set3DTilt(${Boolean(tilt3D)}); }
             if (window.setMapLayer) { window.setMapLayer('${activeLayer}'); }
             true;
           `;

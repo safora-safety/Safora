@@ -16,8 +16,8 @@ interface HazardTableProps {
   selectedIds: Set<string | number>;
   allFilteredSelected: boolean;
   onToggleSelectAll: () => void;
-  onToggleSelect: (id: string | number) => void;
-  onInspectPhoto: (url: string) => void;
+  onToggleSelect: (id: string | number, event?: React.MouseEvent) => void;
+  onInspectPhoto: (report: HazardReport) => void;
   onOpenAudit: (report: HazardReport) => void;
   onOpenResolve: (report: HazardReport) => void;
   onModerateStatus: (id: string | number, status: HazardStatus) => void;
@@ -97,7 +97,7 @@ export const HazardTable: React.FC<HazardTableProps> = ({
                   {/* Checkbox */}
                   <td className="py-3 px-4 text-center">
                     <button
-                      onClick={() => onToggleSelect(report.id)}
+                      onClick={(e) => onToggleSelect(report.id, e)}
                       className="text-gray-400 hover:text-white transition-colors"
                     >
                       {isSelected ? (
@@ -114,7 +114,7 @@ export const HazardTable: React.FC<HazardTableProps> = ({
                       <img
                         src={report.photoUrl}
                         alt="Thumbnail"
-                        onClick={() => onInspectPhoto(report.photoUrl!)}
+                        onClick={() => onInspectPhoto(report)}
                         className="w-12 h-12 object-cover rounded-lg border border-white/10 cursor-pointer hover:scale-105 transition-transform"
                       />
                     ) : (
