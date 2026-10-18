@@ -305,7 +305,7 @@ export class AudioRecorderService {
 
       // Safety fallback timer to stop recording if not stopped by native completion
       const fallbackMs = isNativeAudioActive
-        ? (totalSeconds + 8) * 1000 // 38s: allows native thread to complete all 6 chunks & WAV header
+        ? (totalSeconds + 4) * 1000 // 34s: allows native thread to complete all 30s & finalize WAV header
         : (totalSeconds + 1) * 1000;
 
       pipelineIntervalTimer = setTimeout(async () => {

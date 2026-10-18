@@ -55,6 +55,7 @@ Screen-by-screen, marking what's existing vs new/changed for V1.
 |---|---|
 | 5 s cancel countdown, GPS + battery dispatch | Existing (immediate 0s emergency broadcast) |
 | **Dual-Pipe Progressive Audio Streaming** | **New** — 16kHz PCM audio sliced in memory into 5s WAV chunks emitted live over Socket.IO (`sos:audio_chunk`) to Guardians & Admin, while simultaneously recording unbroken 30s local master file for Cloudinary archival |
+| **Guardian Live SOS HUD & Transmission Player** | **New** — when a companion triggers SOS, guardian app pops up an emergency HUD with live beacon, SOS vibration, real-time 5s audio slice player (`#1..6`) with soundwave visualizer, mute toggle, live GPS navigation, companion phone call, and 30s master playback |
 | **Fail-Safe Watchdog Archival** | **New** — if mobile phone is smashed or battery dies mid-stream, server 8s watchdog auto-stitches received slices and uploads partial evidence to Cloudinary |
 | **High-Decibel Siren Audio Deterrent** | **New** — 4-second multi-harmonic looping siren (`siren_alarm.wav`) playing at maximum hardware alarm volume (`STREAM_ALARM`) even when phone is on silent |
 | **Dual-Mode SOS Execution** | **New** — respecting `@safora_pref_loud_siren`: loud alarm deterrent vs stealth mode (silent progressive audio streaming to Cloudinary) |

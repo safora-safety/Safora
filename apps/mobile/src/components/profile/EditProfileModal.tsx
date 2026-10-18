@@ -13,6 +13,7 @@ import {
   Alert,
 } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../store/authStore';
 
 interface EditProfileModalProps {
@@ -27,6 +28,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
   onClose,
 }) => {
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const { user, isGuest, updateProfile, isLoading, error, clearError } =
     useAuthStore();
 
@@ -122,6 +124,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
             {
               backgroundColor: colors.backgroundCard,
               borderColor: colors.border,
+              paddingBottom: Math.max(insets.bottom, 16) + 12,
             },
           ]}
         >

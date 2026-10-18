@@ -48,6 +48,8 @@ import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.Executors
+import java.util.concurrent.ExecutorService
 import android.database.sqlite.SQLiteDatabase
 
 class SafeWalkService : Service(), LocationListener {
@@ -99,6 +101,7 @@ class SafeWalkService : Service(), LocationListener {
     private var currentAudioFile: File? = null
     private var audioWakeLock: PowerManager.WakeLock? = null
     private val pendingNativeChunks = CopyOnWriteArrayList<PendingAudioChunk>()
+    private val audioEncoderExecutor: ExecutorService = Executors.newSingleThreadExecutor()
 
     data class PendingAudioChunk(
         val seq: Int,
@@ -796,13 +799,14 @@ class SafeWalkService : Service(), LocationListener {
                 var totalBytesRecorded = 0
                 val chunkBuffer = ByteArrayOutputStream(target5SecBytes)
                 var chunkSeq = 1
-                val maxDurationMs = 36000L // 36s wall-clock safety cap: allows audio hardware buffer latency while guaranteeing all 6 chunks
+                val totalTargetBytes = bytesPerSecond * 30 // Exactly 30 seconds of contiguous audio data (960,000 bytes at 16kHz 16-bit mono)
+                val maxDurationMs = 33000L // 33s wall-clock safety cap: 30s audio + hardware start latency
                 val startTime = System.currentTimeMillis()
                 val fileOut = FileOutputStream(currentAudioFile)
                 fileOut.write(ByteArray(44)) // WAV header placeholder
 
                 try {
-                    while (isRecordingAudio && chunkSeq <= 6 && (System.currentTimeMillis() - startTime < maxDurationMs)) {
+                    while (isRecordingAudio && totalBytesRecorded < totalTargetBytes && (System.currentTimeMillis() - startTime < maxDurationMs)) {
                         val read = audioRecord?.read(buffer, 0, buffer.size) ?: 0
                         if (read > 0) {
                             fileOut.write(buffer, 0, read)
@@ -813,7 +817,67 @@ class SafeWalkService : Service(), LocationListener {
                             if (chunkBuffer.size() >= target5SecBytes) {
                                 val pcmBytes = chunkBuffer.toByteArray()
                                 chunkBuffer.reset()
-                                
+                                val currentSeq = chunkSeq
+                                val isLastChunk = (currentSeq >= 6 || totalBytesRecorded >= totalTargetBytes)
+                                chunkSeq++
+
+                                // Offload compression and network transmission to background executor
+                                // The audioRecordThread continues reading immediately without dropping samples!
+                                audioEncoderExecutor.execute {
+                                    try {
+                                        val encoded = encodePcmChunkWithHardware(pcmBytes, sampleRate)
+                                        val base64Chunk = Base64.encodeToString(encoded.bytes, Base64.NO_WRAP)
+
+                                        val activeAlertId = if (currentRecordingAlertId.isNotEmpty() && currentRecordingAlertId != "emergency" && currentRecordingAlertId != "sos_emergency") {
+                                            currentRecordingAlertId
+                                        } else {
+                                            alertId
+                                        }
+
+                                        val map = Arguments.createMap().apply {
+                                            putString("alertId", activeAlertId)
+                                            putInt("seq", currentSeq)
+                                            putInt("totalChunksExpected", 6)
+                                            putDouble("durationSec", 5.0)
+                                            putInt("sampleRate", sampleRate)
+                                            putString("mimeType", encoded.mimeType)
+                                            putString("data", base64Chunk)
+                                            putBoolean("isLast", isLastChunk)
+                                        }
+                                        SafeWalkServiceModule.emitEvent("onSosAudioChunk", map)
+
+                                        // Transmit natively over OkHttp so audio streams live even when phone is locked
+                                        postAudioChunkNatively(
+                                            alertId = activeAlertId,
+                                            seq = currentSeq,
+                                            totalExpected = 6,
+                                            durationSec = 5.0,
+                                            sampleRate = sampleRate,
+                                            mimeType = encoded.mimeType,
+                                            base64Data = base64Chunk,
+                                            isLast = isLastChunk
+                                        )
+                                    } catch (e: Exception) {
+                                        Log.w(TAG, "Background audio slice encoding error: ${e.message}")
+                                    }
+                                }
+                            }
+                        } else if (read < 0) {
+                            Log.w(TAG, "AudioRecord read error: $read")
+                            break
+                        }
+                    }
+
+                    // Flush any remaining partial bytes if recording ended before the 5s boundary
+                    if (chunkBuffer.size() > 0 && chunkSeq <= 6) {
+                        val pcmBytes = chunkBuffer.toByteArray()
+                        chunkBuffer.reset()
+                        val currentSeq = chunkSeq
+                        val duration = pcmBytes.size.toDouble() / bytesPerSecond.toDouble()
+                        chunkSeq++
+
+                        audioEncoderExecutor.execute {
+                            try {
                                 val encoded = encodePcmChunkWithHardware(pcmBytes, sampleRate)
                                 val base64Chunk = Base64.encodeToString(encoded.bytes, Base64.NO_WRAP)
 
@@ -823,76 +887,32 @@ class SafeWalkService : Service(), LocationListener {
                                     alertId
                                 }
 
-                                val isLastChunk = (chunkSeq == 6)
-
                                 val map = Arguments.createMap().apply {
                                     putString("alertId", activeAlertId)
-                                    putInt("seq", chunkSeq)
-                                    putInt("totalChunksExpected", 6)
-                                    putDouble("durationSec", 5.0)
+                                    putInt("seq", currentSeq)
+                                    putInt("totalChunksExpected", Math.max(6, currentSeq))
+                                    putDouble("durationSec", duration)
                                     putInt("sampleRate", sampleRate)
                                     putString("mimeType", encoded.mimeType)
                                     putString("data", base64Chunk)
-                                    putBoolean("isLast", isLastChunk)
+                                    putBoolean("isLast", true)
                                 }
                                 SafeWalkServiceModule.emitEvent("onSosAudioChunk", map)
 
-                                // Transmit natively over OkHttp so audio streams live even when phone is locked
                                 postAudioChunkNatively(
                                     alertId = activeAlertId,
-                                    seq = chunkSeq,
-                                    totalExpected = 6,
-                                    durationSec = 5.0,
+                                    seq = currentSeq,
+                                    totalExpected = Math.max(6, currentSeq),
+                                    durationSec = duration,
                                     sampleRate = sampleRate,
                                     mimeType = encoded.mimeType,
                                     base64Data = base64Chunk,
-                                    isLast = isLastChunk
+                                    isLast = true
                                 )
-
-                                chunkSeq++
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Background final slice encoding error: ${e.message}")
                             }
-                        } else if (read < 0) {
-                            Log.w(TAG, "AudioRecord read error: $read")
-                            break
                         }
-                    }
-
-                    // Flush any remaining partial bytes only if recording was interrupted before reaching 6 full chunks
-                    if (chunkBuffer.size() > 0 && chunkSeq <= 6) {
-                        val pcmBytes = chunkBuffer.toByteArray()
-                        chunkBuffer.reset()
-                        val encoded = encodePcmChunkWithHardware(pcmBytes, sampleRate)
-                        val base64Chunk = Base64.encodeToString(encoded.bytes, Base64.NO_WRAP)
-
-                        val activeAlertId = if (currentRecordingAlertId.isNotEmpty() && currentRecordingAlertId != "emergency" && currentRecordingAlertId != "sos_emergency") {
-                            currentRecordingAlertId
-                        } else {
-                            alertId
-                        }
-
-                        val map = Arguments.createMap().apply {
-                            putString("alertId", activeAlertId)
-                            putInt("seq", chunkSeq)
-                            putInt("totalChunksExpected", Math.max(6, chunkSeq))
-                            putDouble("durationSec", pcmBytes.size.toDouble() / bytesPerSecond.toDouble())
-                            putInt("sampleRate", sampleRate)
-                            putString("mimeType", encoded.mimeType)
-                            putString("data", base64Chunk)
-                            putBoolean("isLast", true)
-                        }
-                        SafeWalkServiceModule.emitEvent("onSosAudioChunk", map)
-
-                        // Transmit final chunk natively over OkHttp
-                        postAudioChunkNatively(
-                            alertId = activeAlertId,
-                            seq = chunkSeq,
-                            totalExpected = Math.max(6, chunkSeq),
-                            durationSec = pcmBytes.size.toDouble() / bytesPerSecond.toDouble(),
-                            sampleRate = sampleRate,
-                            mimeType = encoded.mimeType,
-                            base64Data = base64Chunk,
-                            isLast = true
-                        )
                     }
                 } catch (e: Exception) {
                     Log.w(TAG, "Audio recording thread error: ${e.message}")
@@ -1281,6 +1301,9 @@ class SafeWalkService : Service(), LocationListener {
             }
         } catch (_: Exception) {}
         wakeLock = null
+        try {
+            audioEncoderExecutor.shutdown()
+        } catch (_: Exception) {}
         super.onDestroy()
     }
 

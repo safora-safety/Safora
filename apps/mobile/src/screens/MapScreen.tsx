@@ -56,6 +56,8 @@ export interface MapScreenProps {
   route?: {
     params?: {
       showHeatmap?: boolean;
+      openReport?: boolean;
+      timestamp?: number;
     };
   };
 }
@@ -135,6 +137,20 @@ export const MapScreen: React.FC<MapScreenProps> = ({
 
     return () => clearTimeout(timer);
   }, [searchQuery, userLivePos.latitude, userLivePos.longitude]);
+
+  // Handle incoming deep navigation route params (e.g. Report Hazard from Home or Heatmap trigger)
+  useEffect(() => {
+    if (route?.params?.openReport) {
+      handlePinHazardPress();
+    }
+    if (route?.params?.showHeatmap !== undefined) {
+      setShowHeatmap(Boolean(route?.params?.showHeatmap));
+    }
+  }, [
+    route?.params?.openReport,
+    route?.params?.showHeatmap,
+    route?.params?.timestamp,
+  ]);
 
   // Handle hardware back press inside MapScreen
   useEffect(() => {

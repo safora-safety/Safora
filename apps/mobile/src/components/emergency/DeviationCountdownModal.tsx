@@ -87,7 +87,7 @@ export const DeviationCountdownModal: React.FC<
               style={[styles.warningDot, { backgroundColor: accentColor }]}
             />
             <Text style={[styles.warningBadgeText, { color: accentColor }]}>
-              CORRIDOR DEVIATION DETECTED
+              OFF SAFE ROUTE DETECTED
             </Text>
           </View>
 
@@ -121,11 +121,11 @@ export const DeviationCountdownModal: React.FC<
             </Animated.View>
           </View>
 
-          <Text style={styles.titleText}>Are you okay?</Text>
+          <Text style={styles.titleText}>Are you safe?</Text>
           <Text style={styles.descriptionText}>
-            You have departed from your planned Safe Walk corridor. Emergency
-            SOS with your live GPS and ambient audio will automatically dispatch
-            to your guardians when the timer expires.
+            You moved away from your planned walking route. An emergency SOS
+            alert with your live location will automatically be sent to your
+            guardians when the timer ends.
           </Text>
 
           {/* High-Contrast Action Buttons */}
@@ -136,12 +136,12 @@ export const DeviationCountdownModal: React.FC<
               activeOpacity={0.85}
               onPress={onDisarmSafe}
               accessibilityRole="button"
-              accessibilityLabel="I Am Safe. Disarm route deviation"
+              accessibilityLabel="I Am Safe. Cancel emergency countdown"
             >
               <Text style={styles.disarmButtonIcon}>✅</Text>
               <View style={styles.btnTextCol}>
                 <Text style={styles.disarmButtonMainText}>
-                  I AM SAFE (DISARM)
+                  I AM SAFE (CANCEL ALERT)
                 </Text>
                 <Text style={styles.disarmButtonSubText}>
                   Cancel alert and resume walk
@@ -155,15 +155,15 @@ export const DeviationCountdownModal: React.FC<
               activeOpacity={0.85}
               onPress={onEscalateSos}
               accessibilityRole="button"
-              accessibilityLabel="Need Help Now. Immediately dispatch Emergency SOS"
+              accessibilityLabel="Need Help Now. Immediately send Emergency SOS"
             >
               <Text style={styles.escalateButtonIcon}>🚨</Text>
               <View style={styles.btnTextCol}>
                 <Text style={styles.escalateButtonMainText}>
-                  NEED HELP NOW (SOS)
+                  NEED HELP NOW (SEND SOS)
                 </Text>
                 <Text style={styles.escalateButtonSubText}>
-                  Immediately notify guardians & police
+                  Immediately alert guardians & police (112)
                 </Text>
               </View>
             </TouchableOpacity>

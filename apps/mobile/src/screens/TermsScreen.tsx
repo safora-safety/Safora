@@ -11,7 +11,9 @@ import {
   ActivityIndicator,
   Alert,
   BackHandler,
+  Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/authStore';
 import { colors } from '../theme/colors';
 
@@ -24,6 +26,11 @@ export const TermsScreen: React.FC<TermsScreenProps> = ({
   navigation,
   route: _route,
 }) => {
+  const insets = useSafeAreaInsets();
+  const topInset = Math.max(
+    insets.top,
+    Platform.OS === 'android' ? StatusBar.currentHeight || 28 : 0,
+  );
   const { user, updateProfile, isLoading } = useAuthStore();
 
   // Determine if we're in a mandatory flow (no back stack) vs opened from Settings
@@ -99,7 +106,15 @@ export const TermsScreen: React.FC<TermsScreenProps> = ({
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View
+      style={[
+        styles.container,
+        {
+          paddingTop: topInset + (canGoBack ? 4 : 12),
+          paddingBottom: Math.max(insets.bottom, 16),
+        },
+      ]}
+    >
       <StatusBar barStyle="light-content" />
 
       {/* Top Action Bar — only show Back when navigated from Settings */}
@@ -274,7 +289,7 @@ export const TermsScreen: React.FC<TermsScreenProps> = ({
           )}
         </TouchableOpacity>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 };
 

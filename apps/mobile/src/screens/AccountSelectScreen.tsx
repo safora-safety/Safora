@@ -7,7 +7,9 @@ import {
   ScrollView,
   StatusBar,
   Alert,
+  Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore, SavedProfile } from '../store/authStore';
 import { colors } from '../theme/colors';
 
@@ -18,6 +20,11 @@ interface AccountSelectScreenProps {
 export const AccountSelectScreen: React.FC<AccountSelectScreenProps> = ({
   navigation,
 }) => {
+  const insets = useSafeAreaInsets();
+  const topInset = Math.max(
+    insets.top,
+    Platform.OS === 'android' ? StatusBar.currentHeight || 28 : 0,
+  );
   const { savedProfiles, enterAsGuest, removeSavedProfile } = useAuthStore();
 
   const handleEnterGuest = async () => {
@@ -51,7 +58,15 @@ export const AccountSelectScreen: React.FC<AccountSelectScreenProps> = ({
   };
 
   return (
-    <View style={styles.container}>
+    <View
+      style={[
+        styles.container,
+        {
+          paddingTop: topInset + 14,
+          paddingBottom: Math.max(insets.bottom, 24),
+        },
+      ]}
+    >
       <StatusBar barStyle="light-content" />
 
       {/* Ambient Top Glow Header */}

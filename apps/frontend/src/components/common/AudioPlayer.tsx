@@ -347,6 +347,10 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
     const newMuted = !isMuted;
     audioRef.current.muted = newMuted;
     setIsMuted(newMuted);
+    if (!newMuted && volume === 0) {
+      setVolume(0.5);
+      audioRef.current.volume = 0.5;
+    }
   };
 
   if (!audioUrl) {
@@ -492,30 +496,69 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
               </div>
             </div>
 
-            {/* Volume Control */}
-            <div className="flex items-center gap-1.5 pl-2 border-l border-white/10">
-              <button
-                onClick={toggleMute}
-                className="text-gray-400 hover:text-gray-200 transition-colors"
-                title={isMuted ? 'Unmute' : 'Mute'}
-              >
-                {isMuted || volume === 0 ? (
-                  <VolumeX className="w-4 h-4 text-red-400" />
-                ) : (
-                  <Volume2 className="w-4 h-4 text-gray-300" />
-                )}
-              </button>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                value={isMuted ? 0 : volume}
-                onChange={handleVolumeChange}
-                className="w-16 h-1 bg-obsidian-900 rounded-lg appearance-none cursor-pointer accent-red-400"
-                title={`Volume: ${Math.round((isMuted ? 0 : volume) * 100)}%`}
-              />
-            </div>
+            {/* Volume Control matching audio track styling */}
+            {(() => {
+              const effectiveVol = isMuted ? 0 : volume;
+              const volumePct = Math.round(effectiveVol * 100);
+              return (
+                <div className="flex items-center gap-2 pl-3 border-l border-white/10 select-none">
+                  <button
+                    onClick={toggleMute}
+                    className="text-gray-400 hover:text-gray-200 transition-colors p-1 rounded-lg hover:bg-white/5"
+                    title={isMuted ? 'Unmute' : 'Mute'}
+                  >
+                    {isMuted || volume === 0 ? (
+                      <VolumeX className="w-4 h-4 text-red-400" />
+                    ) : (
+                      <Volume2 className="w-4 h-4 text-gray-300" />
+                    )}
+                  </button>
+
+                  {/* Volume Slider Track (matching audio track gradient & glowing thumb) */}
+                  <div
+                    className="relative flex items-center w-20 sm:w-24 h-6 group/vol cursor-pointer"
+                    title={`Sound Level: ${volumePct}%`}
+                  >
+                    {/* Track Background */}
+                    <div className="w-full h-2 group-hover/vol:h-2.5 rounded-full bg-obsidian-950 border border-white/10 overflow-hidden transition-all shadow-inner relative">
+                      {/* Gradient Fill Bar */}
+                      <div
+                        className="h-full bg-gradient-to-r from-red-600 via-red-500 to-amber-500 rounded-full transition-[width] duration-75"
+                        style={{ width: `${volumePct}%` }}
+                      />
+                    </div>
+
+                    {/* Glowing Thumb Indicator */}
+                    <div
+                      className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3.5 h-3.5 rounded-full bg-white border-2 border-red-500 shadow-[0_0_8px_rgba(239,68,68,0.9)] opacity-95 group-hover/vol:scale-125 transition-transform pointer-events-none"
+                      style={{ left: `${volumePct}%` }}
+                    />
+
+                    {/* Native invisible range input for responsive click & drag seeking */}
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      value={effectiveVol}
+                      onChange={handleVolumeChange}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                      aria-label="Sound volume level"
+                    />
+                  </div>
+
+                  {/* Exact Sound Level Percentage Readout */}
+                  <span
+                    className={`text-[11px] font-mono font-semibold tabular-nums w-8 text-right ${
+                      isMuted || volumePct === 0 ? 'text-red-400/90' : 'text-gray-300'
+                    }`}
+                    title={`Sound Level: ${volumePct}%`}
+                  >
+                    {volumePct}%
+                  </span>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}

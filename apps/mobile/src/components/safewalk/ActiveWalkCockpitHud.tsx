@@ -10,6 +10,7 @@ interface ActiveWalkCockpitHudProps {
   isDeviated?: boolean;
   deviationCountdown?: number;
   destinationName: string;
+  topInset?: number;
 }
 
 export const ActiveWalkCockpitHud: React.FC<ActiveWalkCockpitHudProps> = ({
@@ -19,6 +20,7 @@ export const ActiveWalkCockpitHud: React.FC<ActiveWalkCockpitHudProps> = ({
   isDeviated = false,
   deviationCountdown = 60,
   destinationName,
+  topInset,
 }) => {
   const { colors, isDark } = useTheme();
 
@@ -49,6 +51,12 @@ export const ActiveWalkCockpitHud: React.FC<ActiveWalkCockpitHudProps> = ({
       style={[
         styles.hudContainer,
         {
+          top:
+            topInset !== undefined && topInset > 0
+              ? topInset + 10
+              : Platform.OS === 'android'
+                ? 38
+                : 14,
           backgroundColor: isDark ? colors.surfaceElevated : '#FFFFFF',
           borderColor: isDeviated ? colors.danger : colors.border,
           shadowColor: colors.cardShadowColor,

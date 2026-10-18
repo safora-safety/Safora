@@ -8,6 +8,7 @@ import {
   ToastAndroid,
   Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
 import { HomeScreen } from '../screens/HomeScreen';
 import { MapScreen } from '../screens/MapScreen';
@@ -30,6 +31,11 @@ const TABS: TabItem[] = [
 ];
 
 export const MainTabNavigator: React.FC = () => {
+  const insets = useSafeAreaInsets();
+  // Safe bottom padding for Android 3-button navigation (~48dp), gesture bar (~16-24dp), or hardware buttons (0dp)
+  const bottomBarPadding =
+    Math.max(insets.bottom, 12) + (insets.bottom > 0 ? 4 : 0);
+
   const [activeTab, setActiveTab] = useState<TabKey>('Home');
   const [safeWalkDestination, setSafeWalkDestination] = useState<
     | {
@@ -39,12 +45,17 @@ export const MainTabNavigator: React.FC = () => {
       }
     | undefined
   >(undefined);
+  const [mapParams, setMapParams] = useState<any>(undefined);
   const [tabHistory, setTabHistory] = useState<TabKey[]>(['Home']);
   const lastBackPressRef = useRef<number>(0);
 
   const handleNavigateTab = (tab: TabKey, params?: any) => {
     if (params?.destination) {
       setSafeWalkDestination(params.destination);
+    }
+    if (tab === 'Map' && params) {
+      // Set or update mapParams (e.g. { openReport: true, showHeatmap: boolean })
+      setMapParams({ ...params, timestamp: Date.now() });
     }
     if (tab === activeTab) return;
 
@@ -102,9 +113,18 @@ export const MainTabNavigator: React.FC = () => {
   const renderActiveScreen = () => {
     switch (activeTab) {
       case 'Home':
-        return <HomeScreen onNavigateTab={tab => handleNavigateTab(tab)} />;
+        return (
+          <HomeScreen
+            onNavigateTab={(tab, params) => handleNavigateTab(tab, params)}
+          />
+        );
       case 'Map':
-        return <MapScreen onNavigateTab={handleNavigateTab} />;
+        return (
+          <MapScreen
+            onNavigateTab={handleNavigateTab}
+            route={mapParams ? { params: mapParams } : undefined}
+          />
+        );
       case 'SafeWalk':
         return <SafeWalkScreen initialDestination={safeWalkDestination} />;
       case 'Profile':
@@ -122,7 +142,9 @@ export const MainTabNavigator: React.FC = () => {
             activeTab === 'Home' ? styles.visible : styles.hidden,
           ]}
         >
-          <HomeScreen onNavigateTab={tab => handleNavigateTab(tab)} />
+          <HomeScreen
+            onNavigateTab={(tab, params) => handleNavigateTab(tab, params)}
+          />
         </View>
 
         <View
@@ -131,7 +153,10 @@ export const MainTabNavigator: React.FC = () => {
             activeTab === 'Map' ? styles.visible : styles.hidden,
           ]}
         >
-          <MapScreen onNavigateTab={handleNavigateTab} />
+          <MapScreen
+            onNavigateTab={handleNavigateTab}
+            route={mapParams ? { params: mapParams } : undefined}
+          />
         </View>
 
         <View
@@ -154,7 +179,7 @@ export const MainTabNavigator: React.FC = () => {
       </View>
 
       {/* Sleek Bottom Navigation Bar */}
-      <View style={styles.bottomTabBar}>
+      <View style={[styles.bottomTabBar, { paddingBottom: bottomBarPadding }]}>
         {TABS.map(tab => {
           const isActive = activeTab === tab.key;
           return (
@@ -201,7 +226,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.backgroundCard,
     borderTopWidth: 1,
     borderTopColor: colors.border,
-    paddingBottom: 20,
+    paddingBottom: 12,
     paddingTop: 8,
     paddingHorizontal: 8,
     justifyContent: 'space-around',

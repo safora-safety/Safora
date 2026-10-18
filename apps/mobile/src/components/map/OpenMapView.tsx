@@ -61,6 +61,8 @@ export interface OpenMapViewProps {
 
 export interface OpenMapViewRef {
   recenter: (latitude: number, longitude: number, zoom?: number) => void;
+  zoomIn: () => void;
+  zoomOut: () => void;
   cache10km: (latitude: number, longitude: number) => void;
   setMapLayer: (layer: MapLayerType) => void;
   set3DTilt: (enabled: boolean) => void;
@@ -434,6 +436,14 @@ const generateHtml = (
       }
     };
 
+    window.zoomIn = function() {
+      if (map) map.zoomIn();
+    };
+
+    window.zoomOut = function() {
+      if (map) map.zoomOut();
+    };
+
     window.renderMarkers = function(markersList) {
       if (!map) return;
       for (var id in markersMap) {
@@ -614,6 +624,14 @@ export const OpenMapView = forwardRef<OpenMapViewRef, OpenMapViewProps>(
     useImperativeHandle(ref, () => ({
       recenter: (latitude: number, longitude: number, newZoom?: number) => {
         const script = `if (window.recenterMap) { window.recenterMap(${latitude}, ${longitude}, ${newZoom || zoom}); }; true;`;
+        webViewRef.current?.injectJavaScript(script);
+      },
+      zoomIn: () => {
+        const script = `if (window.zoomIn) { window.zoomIn(); }; true;`;
+        webViewRef.current?.injectJavaScript(script);
+      },
+      zoomOut: () => {
+        const script = `if (window.zoomOut) { window.zoomOut(); }; true;`;
         webViewRef.current?.injectJavaScript(script);
       },
       cache10km: (latitude: number, longitude: number) => {

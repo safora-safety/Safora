@@ -4,12 +4,12 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
   StatusBar,
   Linking,
   Alert,
   Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   OpenMapView,
   OpenMapViewRef,
@@ -22,7 +22,7 @@ import {
   leaveJourneyRoom,
 } from '../services/socketService';
 import { JourneyService } from '../services/journeyService';
-import { colors } from '../theme/colors';
+import { useTheme } from '../theme/ThemeContext';
 
 interface GuardianLiveScreenProps {
   route?: {
@@ -40,6 +40,14 @@ export const GuardianLiveScreen: React.FC<GuardianLiveScreenProps> = ({
   navigation,
 }) => {
   const mapRef = useRef<OpenMapViewRef | null>(null);
+  const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
+
+  const topInset = Math.max(
+    insets.top,
+    Platform.OS === 'android' ? StatusBar.currentHeight || 24 : 0,
+  );
+  const bottomInset = Math.max(insets.bottom, 16) + 12;
 
   const initialJourneyId = route?.params?.journeyId;
   const initialName = route?.params?.walkerName || 'Companion Walker';
@@ -172,9 +180,10 @@ export const GuardianLiveScreen: React.FC<GuardianLiveScreenProps> = ({
       id: 'walker-marker',
       latitude: coords.latitude,
       longitude: coords.longitude,
-      title: `${walkerName} (Live)`,
+      title: `${walkerName} (Live GPS)`,
       description: isDeviated ? 'Route Deviation Warning' : 'Safe Walk Active',
       color: isDeviated ? '#EF4444' : '#10B981',
+      icon: '🚶‍♀️',
       isUser: true,
     },
     ...(originCoord
@@ -204,9 +213,21 @@ export const GuardianLiveScreen: React.FC<GuardianLiveScreenProps> = ({
   ];
 
   const handleCallEmergency = () => {
-    Linking.openURL('tel:112').catch(() => {
-      Alert.alert('Call Failed', 'Unable to initiate dialer for 112.');
-    });
+    Alert.alert(
+      '🚨 Dial Emergency 112',
+      `Connect directly to national police and emergency response services for ${walkerName}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Call 112',
+          style: 'destructive',
+          onPress: () =>
+            Linking.openURL('tel:112').catch(() => {
+              Alert.alert('Call Failed', 'Unable to initiate dialer for 112.');
+            }),
+        },
+      ],
+    );
   };
 
   const handleCenter = () => {
@@ -216,21 +237,42 @@ export const GuardianLiveScreen: React.FC<GuardianLiveScreenProps> = ({
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" />
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
-      {/* Header */}
-      <View style={styles.header}>
+      {/* Modern High-Aesthetic Header */}
+      <View
+        style={[
+          styles.header,
+          {
+            backgroundColor: colors.backgroundCard,
+            borderBottomColor: colors.border,
+            paddingTop: topInset + 10,
+          },
+        ]}
+      >
         <TouchableOpacity
-          style={styles.backButton}
+          style={[
+            styles.backButton,
+            {
+              backgroundColor: colors.backgroundInput,
+              borderColor: colors.border,
+            },
+          ]}
           onPress={() => navigation.goBack()}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          accessibilityLabel="Back to Safety Network"
         >
-          <Text style={styles.backButtonText}>←</Text>
+          <Text style={[styles.backButtonText, { color: colors.textPrimary }]}>
+            ←
+          </Text>
         </TouchableOpacity>
 
         <View style={styles.headerInfo}>
-          <Text style={styles.headerTitle} numberOfLines={1}>
+          <Text
+            style={[styles.headerTitle, { color: colors.textPrimary }]}
+            numberOfLines={1}
+          >
             {walkerName}
           </Text>
           <View style={styles.statusRow}>
@@ -240,13 +282,30 @@ export const GuardianLiveScreen: React.FC<GuardianLiveScreenProps> = ({
                 { backgroundColor: isDeviated ? '#EF4444' : '#10B981' },
               ]}
             />
-            <Text style={styles.headerSubtitle}>
-              {isDeviated ? 'Route Deviated' : 'Safe Walk Escort Active'}
+            <Text
+              style={[
+                styles.headerSubtitle,
+                { color: isDeviated ? '#EF4444' : colors.textSecondary },
+              ]}
+            >
+              {isDeviated
+                ? '⚠️ Off Route Corridor'
+                : '🛡️ Live Guardian Escort Active'}
             </Text>
           </View>
         </View>
 
-        <TouchableOpacity style={styles.centerBtn} onPress={handleCenter}>
+        <TouchableOpacity
+          style={[
+            styles.centerBtn,
+            {
+              backgroundColor: colors.backgroundInput,
+              borderColor: colors.border,
+            },
+          ]}
+          onPress={handleCenter}
+          accessibilityLabel="Center on Walker"
+        >
           <Text style={styles.centerBtnText}>🎯</Text>
         </TouchableOpacity>
       </View>
@@ -255,7 +314,7 @@ export const GuardianLiveScreen: React.FC<GuardianLiveScreenProps> = ({
       {isDeviated && (
         <View style={styles.deviationBanner}>
           <Text style={styles.deviationBannerText}>
-            ⚠️ Walker has deviated from their safe corridor route!
+            🚨 ALERT: {walkerName} has deviated from their safe corridor route!
           </Text>
         </View>
       )}
@@ -266,20 +325,44 @@ export const GuardianLiveScreen: React.FC<GuardianLiveScreenProps> = ({
           ref={mapRef}
           center={coords}
           zoom={16}
-          isDark={true}
+          isDark={isDark}
           markers={markers}
           polyline={plannedRoute.length >= 2 ? plannedRoute : undefined}
-          polylineColor={isDeviated ? '#EF4444' : '#4F46E5'}
+          polylineColor={isDeviated ? '#EF4444' : '#6366F1'}
           showLayerSwitcher={true}
+          layerSwitcherTop={topInset + 64}
         />
       </View>
 
-      {/* Telemetry / Status Bottom Card */}
-      <View style={styles.bottomCard}>
-        <View style={styles.telemetryRow}>
+      {/* Telemetry HUD Bottom Card */}
+      <View
+        style={[
+          styles.bottomCard,
+          {
+            backgroundColor: colors.backgroundCard,
+            borderTopColor: colors.border,
+            paddingBottom: bottomInset,
+          },
+        ]}
+      >
+        <View
+          style={[
+            styles.telemetryRow,
+            {
+              backgroundColor: isDark
+                ? 'rgba(15, 23, 42, 0.7)'
+                : colors.surfaceHover,
+              borderColor: colors.border,
+            },
+          ]}
+        >
           <View style={styles.telemetryItem}>
-            <Text style={styles.telemetryLabel}>Last Update</Text>
-            <Text style={styles.telemetryValue}>
+            <Text style={[styles.telemetryLabel, { color: colors.textMuted }]}>
+              Last Signal
+            </Text>
+            <Text
+              style={[styles.telemetryValue, { color: colors.textPrimary }]}
+            >
               {lastUpdated.toLocaleTimeString([], {
                 hour: '2-digit',
                 minute: '2-digit',
@@ -289,81 +372,114 @@ export const GuardianLiveScreen: React.FC<GuardianLiveScreenProps> = ({
           </View>
 
           <View style={styles.telemetryItem}>
-            <Text style={styles.telemetryLabel}>Status</Text>
+            <Text style={[styles.telemetryLabel, { color: colors.textMuted }]}>
+              Corridor
+            </Text>
             <Text
               style={[
                 styles.telemetryValue,
                 { color: isDeviated ? '#EF4444' : '#10B981' },
               ]}
             >
-              {isDeviated ? 'Off Route' : 'On Route'}
+              {isDeviated ? 'Off Corridor' : 'Protected'}
             </Text>
           </View>
 
           {battery !== null && (
             <View style={styles.telemetryItem}>
-              <Text style={styles.telemetryLabel}>Battery</Text>
-              <Text style={styles.telemetryValue}>{battery}%</Text>
+              <Text
+                style={[styles.telemetryLabel, { color: colors.textMuted }]}
+              >
+                Battery
+              </Text>
+              <Text
+                style={[
+                  styles.telemetryValue,
+                  {
+                    color:
+                      battery <= 20
+                        ? '#EF4444'
+                        : battery <= 40
+                          ? '#F59E0B'
+                          : '#10B981',
+                  },
+                ]}
+              >
+                🔋 {battery}%
+              </Text>
             </View>
           )}
 
           {speed !== null && (
             <View style={styles.telemetryItem}>
-              <Text style={styles.telemetryLabel}>Speed</Text>
-              <Text style={styles.telemetryValue}>
+              <Text
+                style={[styles.telemetryLabel, { color: colors.textMuted }]}
+              >
+                Speed
+              </Text>
+              <Text
+                style={[styles.telemetryValue, { color: colors.textPrimary }]}
+              >
                 {(speed * 3.6).toFixed(1)} km/h
               </Text>
             </View>
           )}
         </View>
 
+        {/* Action Buttons Row */}
         <View style={styles.actionRow}>
           <TouchableOpacity
-            style={styles.recenterButton}
+            style={[
+              styles.recenterButton,
+              {
+                backgroundColor: colors.backgroundInput,
+                borderColor: colors.border,
+              },
+            ]}
             onPress={handleCenter}
+            activeOpacity={0.85}
           >
-            <Text style={styles.recenterButtonText}>Center on Walker</Text>
+            <Text
+              style={[styles.recenterButtonText, { color: colors.textPrimary }]}
+            >
+              🎯 Center Map
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.emergencyButton}
             onPress={handleCallEmergency}
+            activeOpacity={0.85}
           >
             <Text style={styles.emergencyButtonText}>🚨 Call 112</Text>
           </TouchableOpacity>
         </View>
       </View>
-    </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#070A11',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingTop:
-      Platform.OS === 'android' ? (StatusBar.currentHeight || 16) + 8 : 12,
     paddingBottom: 12,
-    backgroundColor: '#0D111D',
     borderBottomWidth: 1,
-    borderBottomColor: '#1E293B',
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#1E293B',
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
   backButtonText: {
-    color: '#F8FAFC',
     fontSize: 22,
     fontWeight: '700',
   },
@@ -371,31 +487,30 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerTitle: {
-    color: '#F8FAFC',
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '900',
+    letterSpacing: 0.3,
   },
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 2,
+    gap: 6,
   },
   statusDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    marginRight: 6,
   },
   headerSubtitle: {
-    color: '#94A3B8',
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '700',
   },
   centerBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#1E293B',
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: 8,
@@ -404,33 +519,35 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   deviationBanner: {
-    backgroundColor: '#7F1D1D',
-    paddingVertical: 8,
+    backgroundColor: '#EF4444',
+    paddingVertical: 10,
     paddingHorizontal: 16,
   },
   deviationBannerText: {
-    color: '#FEF2F2',
+    color: '#FFFFFF',
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '800',
     textAlign: 'center',
   },
   mapContainer: {
     flex: 1,
   },
   bottomCard: {
-    backgroundColor: '#0D111D',
     borderTopWidth: 1,
-    borderTopColor: '#1E293B',
     paddingHorizontal: 16,
     paddingTop: 14,
-    paddingBottom: 24,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 10,
   },
   telemetryRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    marginBottom: 16,
-    backgroundColor: '#131A2A',
-    borderRadius: 12,
+    marginBottom: 14,
+    borderRadius: 14,
+    borderWidth: 1,
     paddingVertical: 10,
     paddingHorizontal: 12,
   },
@@ -438,15 +555,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   telemetryLabel: {
-    color: '#64748B',
     fontSize: 11,
-    fontWeight: '500',
+    fontWeight: '600',
     marginBottom: 2,
   },
   telemetryValue: {
-    color: '#F8FAFC',
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
   },
   actionRow: {
     flexDirection: 'row',
@@ -454,28 +570,35 @@ const styles = StyleSheet.create({
   },
   recenterButton: {
     flex: 1,
-    backgroundColor: '#1E293B',
-    borderRadius: 12,
-    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   recenterButtonText: {
-    color: '#E2E8F0',
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '800',
   },
   emergencyButton: {
     flex: 1,
-    backgroundColor: '#DC2626',
-    borderRadius: 12,
-    paddingVertical: 12,
+    backgroundColor: '#EF4444',
+    borderRadius: 14,
+    paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 6,
   },
   emergencyButtonText: {
     color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '900',
+    letterSpacing: 0.5,
   },
 });
+
+export default GuardianLiveScreen;

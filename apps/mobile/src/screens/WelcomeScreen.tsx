@@ -6,7 +6,9 @@ import {
   TouchableOpacity,
   Image,
   StatusBar,
+  Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
 import { useAuthStore } from '../store/authStore';
 
@@ -15,6 +17,11 @@ interface WelcomeScreenProps {
 }
 
 export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ navigation }) => {
+  const insets = useSafeAreaInsets();
+  const topInset = Math.max(
+    insets.top,
+    Platform.OS === 'android' ? StatusBar.currentHeight || 28 : 0,
+  );
   const enterAsGuest = useAuthStore(state => state.enterAsGuest);
 
   const handleEnterGuest = async () => {
@@ -26,7 +33,15 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ navigation }) => {
   };
 
   return (
-    <View style={styles.container}>
+    <View
+      style={[
+        styles.container,
+        {
+          paddingTop: topInset + 12,
+          paddingBottom: Math.max(insets.bottom, 24),
+        },
+      ]}
+    >
       <StatusBar barStyle="light-content" />
 
       {/* Hero Visual Area */}

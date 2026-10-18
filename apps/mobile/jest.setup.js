@@ -48,7 +48,7 @@ jest.mock('@react-native-firebase/app', () => ({
   app: jest.fn(),
 }));
 
-jest.mock('@react-native-firebase/messaging', () => () => ({
+const mockMessagingInstance = {
   requestPermission: jest.fn().mockResolvedValue(1),
   hasPermission: jest.fn().mockResolvedValue(1),
   getToken: jest.fn().mockResolvedValue('mock-fcm-token'),
@@ -56,7 +56,44 @@ jest.mock('@react-native-firebase/messaging', () => () => ({
   onNotificationOpenedApp: jest.fn(() => () => {}),
   getInitialNotification: jest.fn().mockResolvedValue(null),
   setBackgroundMessageHandler: jest.fn(),
-}));
+};
+
+jest.mock('@react-native-firebase/messaging', () => {
+  const messagingFn = () => mockMessagingInstance;
+  return {
+    __esModule: true,
+    default: messagingFn,
+    getMessaging: () => mockMessagingInstance,
+    AuthorizationStatus: {
+      NOT_DETERMINED: -1,
+      DENIED: 0,
+      AUTHORIZED: 1,
+      PROVISIONAL: 2,
+    },
+  };
+});
+
+// Mock socket.io-client
+jest.mock('socket.io-client', () => {
+  const mSocket = {
+    connected: true,
+    id: 'mock-socket-id',
+    auth: {},
+    connect: jest.fn().mockReturnThis(),
+    disconnect: jest.fn().mockReturnThis(),
+    on: jest.fn().mockReturnThis(),
+    off: jest.fn().mockReturnThis(),
+    emit: jest.fn().mockReturnThis(),
+    once: jest.fn((event, cb) => {
+      if (event === 'connect') setTimeout(cb, 0);
+      return mSocket;
+    }),
+  };
+  return {
+    io: jest.fn(() => mSocket),
+    Socket: jest.fn(() => mSocket),
+  };
+});
 
 // Mock React Native Maps
 jest.mock('react-native-maps', () => {
@@ -77,12 +114,18 @@ jest.mock('react-native-maps', () => {
 
 // Mock Safe Area Context
 jest.mock('react-native-safe-area-context', () => {
+  const React = require('react');
   const inset = { top: 0, right: 0, bottom: 0, left: 0 };
+  const frame = { x: 0, y: 0, width: 390, height: 844 };
+  const SafeAreaInsetsContext = React.createContext(inset);
+  const SafeAreaFrameContext = React.createContext(frame);
   return {
     SafeAreaProvider: ({ children }) => children,
     SafeAreaConsumer: ({ children }) => children(inset),
+    SafeAreaInsetsContext,
+    SafeAreaFrameContext,
     useSafeAreaInsets: () => inset,
-    useSafeAreaFrame: () => ({ x: 0, y: 0, width: 390, height: 844 }),
+    useSafeAreaFrame: () => frame,
   };
 });
 
@@ -136,5 +179,24 @@ jest.mock('react-native-config', () => ({
   API_BASE_URL: 'http://localhost:3000',
   WS_URL: 'ws://localhost:3000',
 }));
+
+// Mock NativeModules.SafeWalkService
+const { NativeModules } = require('react-native');
+NativeModules.SafeWalkService = {
+  playLiveAudioChunk: jest.fn().mockResolvedValue(true),
+  stopLiveAudio: jest.fn().mockResolvedValue(true),
+  isLiveAudioPlaying: jest.fn().mockResolvedValue(false),
+  playSiren: jest.fn().mockResolvedValue(true),
+  stopSiren: jest.fn().mockResolvedValue(true),
+  isSirenPlaying: jest.fn().mockResolvedValue(false),
+  startWithDetails: jest.fn().mockResolvedValue(true),
+  stop: jest.fn().mockResolvedValue(true),
+  isRunning: jest.fn().mockResolvedValue(false),
+  recordSosAudio: jest.fn().mockResolvedValue(true),
+  startEmergencyAudio: jest.fn().mockResolvedValue(true),
+  stopEmergencyAudio: jest.fn().mockResolvedValue(true),
+  playFakeCall: jest.fn().mockResolvedValue(true),
+  stopFakeCall: jest.fn().mockResolvedValue(true),
+};
 
 

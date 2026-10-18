@@ -201,6 +201,17 @@ Broadcasted immediately to room `sos:alert:{alertId}`, room `staff` (admin opera
 - **Aligned 720px Dashboard Layout:**
   - Added `max-h-[720px] overflow-y-auto custom-scrollbar` to both the left beacon queue and right alert telemetry panel, ensuring sleek tactical alignment without layout overflow.
 
+### 4.5 Mobile Guardian Audio Queue & Live SOS HUD (`SafeWalkServiceModule.kt` & `GuardianSosLiveModal.tsx`)
+- **Native Hardware Audio Player:**
+  - `SafeWalkServiceModule.playLiveAudioChunk` decodes incoming Base64 WAV slices into cache storage and streams via `android.media.MediaPlayer`.
+  - Automatically emits `onLiveAudioChunkFinished` to trigger seamless chaining to the next sequential chunk (`#seq + 1`).
+- **Global Emergency Transmission HUD:**
+  - Mounted globally in `App.tsx` (`GuardianSosLiveModal`), popping up instantly across any screen when a companion triggers SOS.
+  - Live chunk progress pills (`#1..6`), soundwave visualizer, mute/unmute toggle, and automatic transition to 30s master audio.
+  - Includes instant action dispatch: Navigate to Live GPS Coordinates, Call Companion, or Call 112 Emergency Dispatch.
+- **Auto-Refreshing Guardian Inbox:**
+  - `NotificationScreen.tsx` listens directly to `sos:alert` and `sos:audio` socket events to keep the emergency inbox synchronised in real time.
+
 ---
 
 ## 5. Resilience & Edge-Case Matrix
