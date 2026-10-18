@@ -102,6 +102,9 @@ export const HoldToConfirmButton: React.FC<HoldToConfirmButtonProps> = ({
             {isCompleted ? '✅' : isHolding ? '⏳' : '🛡️'}
           </Text>
           <Text
+            numberOfLines={1}
+            adjustsFontSizeToFit={true}
+            minimumFontScale={0.7}
             style={[
               styles.buttonText,
               {
@@ -127,12 +130,13 @@ export const HoldToConfirmButton: React.FC<HoldToConfirmButtonProps> = ({
 
 const styles = StyleSheet.create({
   buttonContainer: {
-    height: 52,
+    height: 50,
     borderRadius: 16,
     borderWidth: 1.5,
     overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 8,
     position: 'relative',
     ...Platform.select({
       ios: {
@@ -155,15 +159,19 @@ const styles = StyleSheet.create({
   contentRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 4,
     zIndex: 2,
+    maxWidth: '100%',
   },
   buttonEmoji: {
-    fontSize: 18,
+    fontSize: 16,
   },
   buttonText: {
-    fontSize: 14,
+    fontSize: 12.5,
     fontWeight: '800',
-    letterSpacing: 0.4,
+    letterSpacing: 0.2,
+    flexShrink: 1,
   },
 });

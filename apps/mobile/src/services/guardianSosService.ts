@@ -76,8 +76,8 @@ class GuardianSosService {
     // 1. Listen for new incoming SOS emergency alerts
     const unsubAlert = onSosAlert((data: any) => {
       console.log(
-        '[GuardianSosService] Emergency SOS alert received for guardian:',
-        data,
+        '[GuardianSosService] Emergency SOS alert received for alertId:',
+        data?.id || data?.alertId,
       );
       this.handleIncomingAlert(data);
     });
@@ -96,8 +96,8 @@ class GuardianSosService {
     const unsubAudio = onSosAudio(
       (data: { alertId: string | number; audioUrl: string }) => {
         console.log(
-          '[GuardianSosService] Master audio attached to SOS alert:',
-          data,
+          '[GuardianSosService] Master audio attached to SOS alertId:',
+          data?.alertId,
         );
         this.handleMasterAudioAttached(data);
       },

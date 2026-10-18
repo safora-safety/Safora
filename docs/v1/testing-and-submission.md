@@ -27,7 +27,7 @@ Multiple Android brand/OEM coverage, battery-killer behaviour over hours, backgr
 
 ## Release checklist (once, before the submission build)
 - [x] All "must-do" items in `tasks.md` pass their test.
-- [ ] APK built in release mode, signed, installed fresh (not over a dev build) and re-run through T1–T4.
+- [x] APK built in release mode, signed, installed fresh (not over a dev build) and re-run through T1–T4.
 - [x] `INTERNAL_TICK_SECRET` set on Render and the external pinger configured and firing (check Render logs).
 - [x] No secrets visible if you `strings` the APK (MapTiler key is server-side only in this backend — verify it isn't compiled into the mobile bundle).
 
@@ -108,3 +108,14 @@ npm run test:mobile     # 5 suites, 20 tests (Jest + React Test Renderer)
 | **`apps/frontend`** | Vitest + Happy-DOM | 2 | 12 | Spotlight Command Palette fuzzy search and keyboard routing (`Ctrl+K`), Keyboard Shortcuts manual modal (`?`), Automated Offline Failover Banner on WSS drop, Badge variations, StatCard tabular metric stability, and Modal life-cycles. |
 | **`apps/mobile`** | Jest + React Test Renderer | 5 | 20 | Phase 1–5 UI components: Floating Search Capsule with Safety Score meter, Hazard Category Filter Chips, Persistent Safety FAB & Drawer, Active Walk Cockpit HUD, Hold-To-Confirm termination button, Multi-Modal Route Sheet, 5s SOS Abort Grace Period, Audio Waveform Equalizer, 60s Deviation Countdown, Calculator Decoy Duress PIN (`9999=`), Bilingual Fake Call simulator, and Safe Arrival Celebration. |
 | **Total** | **Unified Runner** | **15** | **104** | **100% pass rate across entire monorepo.** |
+ 
+ ---
+ 
+ ## Physical Hardware & Field Verification Status
+ 
+ Full field verification across physical Android devices (Walker Device A, Guardian Device B) and production Web Admin console is tracked in [`v1_manual_testing_checklist.md`](../v1_manual_testing_checklist.md).
+ 
+ - **Overall Checklist Progress:** **129 / 143 tests verified (90.2% complete)**
+ - **Core Workflows Passed (100%):** App Launch & Terms Consent (10/10), Authentication & Guest Mode (7/7), Profile & Settings (7/7), Home Radar & Tools (10/10), Community Map & Moderation (9/9), Safe Walk Walker Experience (9/9), Guardian Live Escort (9/9), SOS Emergency Dispatch & Ambient Audio (10/10), Decoy Suite & Tactical Safety Tools (5/5), Web Admin Operations & Moderation (26/26), and Google Sign-In OAuth (8/8).
+ - **Pending Edge Cases:** Battery-killer simulation over extended hours, extreme network blackout degradation (Section 9 & Section 15), scheduled for field stress-testing.
+

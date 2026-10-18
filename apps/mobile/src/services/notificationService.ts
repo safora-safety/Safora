@@ -69,10 +69,10 @@ class NotificationService {
         return token;
       }
       return null;
-    } catch (err) {
+    } catch (err: any) {
       console.warn(
         '[NotificationService] Failed to register token with backend:',
-        err,
+        err?.response?.data?.message || err?.message || 'Network error',
       );
       return null;
     }

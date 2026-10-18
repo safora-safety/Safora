@@ -26,3 +26,13 @@
 
 # AsyncStorage
 -keep class com.reactnativecommunity.asyncstorage.** { *; }
+
+# Google Play Services & OAuth
+-keep class com.google.android.gms.** { *; }
+-dontwarn com.google.android.gms.**
+
+# Custom Foreground Service & Bridge
+-keep class com.mobile.SafeWalkService** { *; }
+-keep class com.mobile.SafeWalkServiceModule** { *; }
+-keep class com.mobile.SafeWalkServicePackage** { *; }
+

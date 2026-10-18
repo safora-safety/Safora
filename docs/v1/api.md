@@ -2,15 +2,16 @@
 
 Base URL: your Render backend (see root README). All authenticated routes require `Authorization: Bearer <JWT>`. Unchanged endpoints are marked **existing**; anything else is **new in V1** or **changed in V1**.
 
-## Auth — `/api/auth` (existing, unchanged)
-
+## Auth — `/api/auth`
+ 
 | Method | Path | Notes |
 |---|---|---|
-| POST | `/register` | |
-| POST | `/login` | |
-| GET | `/me` | |
+| POST | `/register` | Standard email/password citizen registration |
+| POST | `/login` | Email/password login; issues JWT token |
+| POST | `/google` | **New in V1:** Google OAuth token verification via `idToken`; links existing email accounts or creates new profile; returns JWT |
+| GET | `/me` | Returns current user profile |
 | PATCH | `/profile` | **changed:** now also accepts `age` (integer) and `termsAcceptedAt` is set server-side on first call after the Terms screen |
-| POST | `/change-password` | |
+| POST | `/change-password` | Updates user password with current password verification |
 
 ## Users — `/api/users` (existing, unchanged)
 
@@ -180,6 +181,32 @@ Request now also accepts:
 { "age": 22, "ageNoticeAck": true, "termsAcceptedAt": "2026-10-15T10:00:00Z" }
 ```
 All three optional per-call; only the fields present are updated (standard partial-update semantics — confirm this matches how the existing handler already treats other profile fields like `name`/`bloodGroup`).
+
+### `POST /api/auth/google` (new in V1)
+Request:
+```json
+{
+  "idToken": "eyJhbGciOiJSUzI1NiIs..."
+}
+```
+Response (`200 OK`):
+```json
+{
+  "message": "Authenticated with Google",
+  "token": "eyJhbGciOiJIUzI1NiIsIn...",
+  "user": {
+    "id": 4,
+    "name": "Jane Doe",
+    "email": "jane@gmail.com",
+    "role": "citizen",
+    "authProvider": "google",
+    "avatarUrl": "https://lh3.googleusercontent.com/a/...",
+    "age": 21,
+    "termsAcceptedAt": "2026-10-18T05:00:00Z"
+  }
+}
+```
+*Note: Validates incoming Google ID token via `google-auth-library` `OAuth2Client` with fallback to Google's `tokeninfo` endpoint for network resilience. If email matches an existing email/password account, links `google_id` seamlessly without duplicating user rows.*
 
 ## Error response shape (apply consistently to every new endpoint above)
 ```json
