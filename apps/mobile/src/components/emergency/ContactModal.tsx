@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SosService } from '../../services/sosService';
 
 export interface EditableContact {
@@ -55,6 +56,7 @@ export const ContactModal: React.FC<ContactModalProps> = ({
   initialData,
 }) => {
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -385,7 +387,15 @@ export const ContactModal: React.FC<ContactModalProps> = ({
           </ScrollView>
 
           {/* Footer Actions */}
-          <View style={[styles.footer, { borderTopColor: colors.border }]}>
+          <View
+            style={[
+              styles.footer,
+              {
+                borderTopColor: colors.border,
+                paddingBottom: Math.max(insets.bottom, 16) + 8,
+              },
+            ]}
+          >
             <TouchableOpacity
               style={[
                 styles.cancelBtn,

@@ -17,12 +17,16 @@ import {
 } from 'react-native';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { useTheme } from '../../theme/ThemeContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HazardCategory, HazardReport } from '@safora/shared-types';
 import { ReportService } from '../../services/reportService';
-import { reverseGeocode } from '../../services/locationService';
+import {
+  reverseGeocode,
+  getCurrentCoordinates,
+} from '../../services/locationService';
 import { useAuthStore } from '../../store/authStore';
 import { navigationRef } from '../../navigation/RootNavigator';
-import { OpenMapView } from '../map/OpenMapView';
+import { OpenMapView, OpenMapViewRef } from '../map/OpenMapView';
 import { HazardCategoryChips } from './HazardCategoryChips';
 
 interface ReportHazardModalProps {
@@ -54,6 +58,7 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
   onReportCreated,
 }) => {
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const { isGuest } = useAuthStore();
   const [category, setCategory] = useState<HazardCategory>('lighting');
   const [customCategoryTitle, setCustomCategoryTitle] = useState('');
@@ -73,6 +78,9 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
   const [reportLng, setReportLng] = useState(coordinates.longitude);
   const [reportAddress, setReportAddress] = useState<string>('');
   const [isEditingPin, setIsEditingPin] = useState(false);
+  const [isMapInteracting, setIsMapInteracting] = useState(false);
+  const [isAcquiringGps, setIsAcquiringGps] = useState(false);
+  const miniMapRef = React.useRef<OpenMapViewRef | null>(null);
 
   React.useEffect(() => {
     setReportLat(coordinates.latitude);
@@ -88,6 +96,24 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
     }, 600);
     return () => clearTimeout(timer);
   }, [reportLat, reportLng]);
+
+  const handleUseLiveGps = async () => {
+    try {
+      setIsAcquiringGps(true);
+      const live = await getCurrentCoordinates();
+      setReportLat(live.latitude);
+      setReportLng(live.longitude);
+      setReportAddress(live.areaName);
+      miniMapRef.current?.recenter(live.latitude, live.longitude, 16);
+    } catch {
+      Alert.alert(
+        'GPS Signal Unavailable',
+        'Could not acquire live GPS. Please verify location permissions.',
+      );
+    } finally {
+      setIsAcquiringGps(false);
+    }
+  };
 
   const handleTakePhoto = async () => {
     if (photoList.length >= 3) {
@@ -358,6 +384,7 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
           <ScrollView
             contentContainerStyle={styles.form}
             showsVerticalScrollIndicator={false}
+            scrollEnabled={!isMapInteracting}
           >
             {/* Early Guest Mode Guard */}
             {isGuest ? (
@@ -480,16 +507,28 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
                   {/* Interactive Map Pin Adjuster */}
                   {isEditingPin && (
                     <View style={styles.miniMapWrapper}>
-                      <Text
+                      <View style={styles.miniMapHeaderRow}>
+                        <Text
+                          style={[
+                            styles.miniMapHelp,
+                            { color: colors.textSecondary },
+                          ]}
+                        >
+                          🗺️ Drag or tap to position hazard pin precisely:
+                        </Text>
+                      </View>
+
+                      <View
                         style={[
-                          styles.miniMapHelp,
-                          { color: colors.textSecondary },
+                          styles.miniMapBox,
+                          { borderColor: colors.border },
                         ]}
+                        onTouchStart={() => setIsMapInteracting(true)}
+                        onTouchEnd={() => setIsMapInteracting(false)}
+                        onTouchCancel={() => setIsMapInteracting(false)}
                       >
-                        🗺️ Tap anywhere on the map to reposition hazard pin:
-                      </Text>
-                      <View style={styles.miniMapBox}>
                         <OpenMapView
+                          ref={miniMapRef}
                           center={{ latitude: reportLat, longitude: reportLng }}
                           zoom={16}
                           isDark={isDark}
@@ -510,30 +549,100 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
                           }}
                           style={styles.miniMap}
                         />
+
+                        {/* Floating Zoom Controls for effortless zooming */}
+                        <View style={styles.zoomButtonsColumn}>
+                          <TouchableOpacity
+                            style={[
+                              styles.mapControlBtn,
+                              {
+                                backgroundColor: isDark
+                                  ? 'rgba(15, 23, 42, 0.92)'
+                                  : 'rgba(255, 255, 255, 0.95)',
+                                borderColor: colors.border,
+                              },
+                            ]}
+                            onPress={() => miniMapRef.current?.zoomIn()}
+                            activeOpacity={0.8}
+                          >
+                            <Text
+                              style={[
+                                styles.mapControlBtnText,
+                                { color: colors.textPrimary },
+                              ]}
+                            >
+                              +
+                            </Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[
+                              styles.mapControlBtn,
+                              {
+                                backgroundColor: isDark
+                                  ? 'rgba(15, 23, 42, 0.92)'
+                                  : 'rgba(255, 255, 255, 0.95)',
+                                borderColor: colors.border,
+                              },
+                            ]}
+                            onPress={() => miniMapRef.current?.zoomOut()}
+                            activeOpacity={0.8}
+                          >
+                            <Text
+                              style={[
+                                styles.mapControlBtnText,
+                                { color: colors.textPrimary },
+                              ]}
+                            >
+                              −
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
                       </View>
-                      <TouchableOpacity
-                        style={[
-                          styles.resetGpsBtn,
-                          {
-                            borderColor: colors.border,
-                            backgroundColor: colors.backgroundInput,
-                          },
-                        ]}
-                        onPress={() => {
-                          setReportLat(coordinates.latitude);
-                          setReportLng(coordinates.longitude);
-                        }}
-                        activeOpacity={0.8}
-                      >
-                        <Text
+
+                      {/* Map Action Buttons: Real Live GPS acquisition & Done confirmation */}
+                      <View style={styles.miniMapActionsRow}>
+                        <TouchableOpacity
                           style={[
-                            styles.resetGpsText,
-                            { color: colors.primary },
+                            styles.resetGpsBtn,
+                            {
+                              borderColor: colors.brandEmerald,
+                              backgroundColor: 'rgba(16, 185, 129, 0.12)',
+                            },
                           ]}
+                          onPress={handleUseLiveGps}
+                          disabled={isAcquiringGps}
+                          activeOpacity={0.8}
                         >
-                          📍 Reset to Current Live GPS Coordinates
-                        </Text>
-                      </TouchableOpacity>
+                          {isAcquiringGps ? (
+                            <ActivityIndicator
+                              size="small"
+                              color={colors.brandEmerald}
+                            />
+                          ) : (
+                            <Text
+                              style={[
+                                styles.resetGpsText,
+                                { color: colors.brandEmerald },
+                              ]}
+                            >
+                              🎯 Use My Live GPS
+                            </Text>
+                          )}
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={[
+                            styles.confirmPinBtn,
+                            { backgroundColor: colors.primary },
+                          ]}
+                          onPress={() => setIsEditingPin(false)}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={styles.confirmPinBtnText}>
+                            ✓ Confirm Pin
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
                   )}
                 </View>
@@ -891,7 +1000,15 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
           </ScrollView>
 
           {/* Footer */}
-          <View style={[styles.footer, { borderTopColor: colors.border }]}>
+          <View
+            style={[
+              styles.footer,
+              {
+                borderTopColor: colors.border,
+                paddingBottom: Math.max(insets.bottom, 16) + 8,
+              },
+            ]}
+          >
             <TouchableOpacity
               style={[
                 styles.cancelBtn,
@@ -1031,38 +1148,89 @@ const styles = StyleSheet.create({
   },
   miniMapWrapper: {
     marginTop: 8,
-    borderRadius: 14,
+    borderRadius: 16,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-    padding: 10,
-    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    padding: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+  },
+  miniMapHeaderRow: {
+    marginBottom: 8,
   },
   miniMapHelp: {
     fontSize: 11,
-    fontWeight: '600',
-    marginBottom: 8,
+    fontWeight: '700',
   },
   miniMapBox: {
-    height: 180,
-    borderRadius: 10,
+    height: 250,
+    borderRadius: 14,
     overflow: 'hidden',
+    borderWidth: 1.5,
+    position: 'relative',
   },
   miniMap: {
     width: '100%',
     height: '100%',
   },
-  resetGpsBtn: {
-    marginTop: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
+  zoomButtonsColumn: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    gap: 6,
+    zIndex: 10,
+  },
+  mapControlBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     borderWidth: 1,
     alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  },
+  mapControlBtnText: {
+    fontSize: 18,
+    fontWeight: '900',
+    lineHeight: 20,
+  },
+  miniMapActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+    alignItems: 'center',
+  },
+  resetGpsBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 42,
   },
   resetGpsText: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '800',
+  },
+  confirmPinBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 42,
+  },
+  confirmPinBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
   },
   input: {
     borderWidth: 1,

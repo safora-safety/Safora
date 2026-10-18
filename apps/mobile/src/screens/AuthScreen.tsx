@@ -11,6 +11,7 @@ import {
   ScrollView,
   StatusBar,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/authStore';
 import { GoogleLogo } from '../components/common/GoogleLogo';
 
@@ -23,6 +24,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   navigation,
   route,
 }) => {
+  const insets = useSafeAreaInsets();
+  const topInset = Math.max(
+    insets.top,
+    Platform.OS === 'android' ? StatusBar.currentHeight || 28 : 0,
+  );
   const initialTab =
     route?.params?.initialTab === 'register' ? 'register' : 'login';
   const prefillEmail = route?.params?.prefillEmail || '';
@@ -174,7 +180,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       <StatusBar barStyle="light-content" />
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: topInset + 12,
+            paddingBottom: Math.max(insets.bottom, 24),
+          },
+        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >

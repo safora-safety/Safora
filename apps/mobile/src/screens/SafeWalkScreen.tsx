@@ -786,36 +786,30 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
-      {/* Top Header */}
-      <View
-        style={[
-          styles.header,
-          {
-            backgroundColor: colors.backgroundCard,
-            borderBottomColor: colors.border,
-            paddingTop: topInset + 10,
-          },
-        ]}
-      >
-        <View>
-          <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
-            Safe Walk Escort
-          </Text>
-          <Text
-            style={[styles.headerSubtitle, { color: colors.textSecondary }]}
-          >
-            {isActive
-              ? '🛡️ Active street tracking & corridor monitor'
-              : 'Search or tap map to set road destination'}
-          </Text>
-        </View>
-        {isActive && (
-          <View style={styles.activePill}>
-            <View style={styles.activeDot} />
-            <Text style={styles.activeText}>ESCORT ON</Text>
+      {/* Top Header (only when not in active walk escort) */}
+      {!isActive && (
+        <View
+          style={[
+            styles.header,
+            {
+              backgroundColor: colors.backgroundCard,
+              borderBottomColor: colors.border,
+              paddingTop: topInset + 10,
+            },
+          ]}
+        >
+          <View>
+            <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
+              Safe Walk Escort
+            </Text>
+            <Text
+              style={[styles.headerSubtitle, { color: colors.textSecondary }]}
+            >
+              Search or tap map to set road destination
+            </Text>
           </View>
-        )}
-      </View>
+        </View>
+      )}
 
       {/* OEM Battery Optimization Reminder Banner (Unobstructed in vertical flow) */}
       {!isBatteryUnrestricted && !dismissedBatteryBanner && (
@@ -885,6 +879,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
           isDeviated={isDeviated}
           deviationCountdown={deviationCountdown}
           destinationName={destPos?.name || 'Destination'}
+          topInset={topInset}
         />
       )}
 
@@ -908,7 +903,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
           showCorridorHalo={isActive}
           corridorHaloColor={isDeviated ? '#EF4444' : '#10B981'}
           tilt3D={isActive}
-          layerSwitcherTop={isActive ? 116 : 74}
+          layerSwitcherTop={isActive ? topInset + 128 : 74}
           onMapPress={handleMapPress}
           style={styles.map}
         />
@@ -1139,8 +1134,9 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
           style={[
             styles.bottomPanel,
             {
-              backgroundColor: colors.backgroundCard,
+              backgroundColor: isDark ? colors.surfaceElevated : '#FFFFFF',
               borderColor: colors.border,
+              paddingBottom: Math.max(insets.bottom, 18),
             },
           ]}
         >
@@ -1149,7 +1145,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
             <View style={{ flex: 1 }}>
               <HoldToConfirmButton
                 onConfirmed={handleCompleteWalk}
-                label="Hold 1.5s to End Walk"
+                label="Hold 1.5s to Complete Walk"
                 confirmedLabel="Reached Safely! ✅"
               />
             </View>
@@ -1158,8 +1154,9 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
               style={styles.cancelWalkBtnSmall}
               onPress={handleCancelWalk}
               activeOpacity={0.85}
+              accessibilityLabel="Cancel safe walk escort"
             >
-              <Text style={styles.cancelWalkBtnSmallText}>🛑 Stop</Text>
+              <Text style={styles.cancelWalkBtnSmallText}>✕ Cancel</Text>
             </TouchableOpacity>
           </View>
 
@@ -1167,7 +1164,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
             <Text
               style={[styles.activeNoticeText, { color: colors.textMuted }]}
             >
-              🛡️ 150m Corridor Halo active. Continuous guardian GPS escort on.
+              🛡️ 150m Safety Buffer active. Live guardian GPS tracking is on.
             </Text>
           </View>
         </View>
@@ -1187,6 +1184,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
               {
                 backgroundColor: colors.backgroundCard,
                 borderColor: colors.border,
+                paddingBottom: Math.max(insets.bottom, 16) + 16,
               },
             ]}
           >
@@ -1530,9 +1528,22 @@ const styles = StyleSheet.create({
 
   // Bottom Panel
   bottomPanel: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     borderTopWidth: 1,
-    padding: 20,
-    gap: 14,
+    paddingTop: 18,
+    paddingHorizontal: 20,
+    gap: 12,
+    ...Platform.select({
+      ios: {
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 10,
+      },
+      android: {
+        elevation: 12,
+      },
+    }),
   },
   destCard: {
     flexDirection: 'row',

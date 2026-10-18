@@ -18,6 +18,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { SosService } from '../services/sosService';
 import { SosNotification } from '@safora/shared-types';
 import { Sound } from 'react-native-nitro-sound';
+import { onSosAlert, onSosAudio } from '../services/socketService';
 
 export const NotificationScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -39,6 +40,16 @@ export const NotificationScreen: React.FC = () => {
 
   useEffect(() => {
     loadNotifications();
+    const unsubAlert = onSosAlert(() => {
+      loadNotifications();
+    });
+    const unsubAudio = onSosAudio(() => {
+      loadNotifications();
+    });
+    return () => {
+      unsubAlert();
+      unsubAudio();
+    };
   }, []);
 
   // Animate audio waveform bars when playing

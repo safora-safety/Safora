@@ -12,6 +12,7 @@ import { RootNavigator } from './src/navigation/RootNavigator';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import { notificationService } from './src/services/notificationService';
 import { ensureSocketConnected } from './src/services/socketService';
+import { GuardianSosLiveModal } from './src/components/guardian/GuardianSosLiveModal';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -87,6 +88,7 @@ function AppContent(): React.JSX.Element {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
       <RootNavigator />
+      <GuardianSosLiveModal />
     </View>
   );
 }

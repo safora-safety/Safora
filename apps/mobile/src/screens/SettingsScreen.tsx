@@ -10,7 +10,9 @@ import {
   Alert,
   Linking,
   Modal,
+  Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuthStore } from '../store/authStore';
@@ -28,6 +30,11 @@ interface SettingsScreenProps {
 export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   navigation,
 }) => {
+  const insets = useSafeAreaInsets();
+  const topInset = Math.max(
+    insets.top,
+    Platform.OS === 'android' ? StatusBar.currentHeight || 28 : 0,
+  );
   const { colors, isDark, themeMode, setThemeMode } = useTheme();
   const { isGuest, logout } = useAuthStore();
 
@@ -160,6 +167,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
           {
             backgroundColor: colors.backgroundCard,
             borderBottomColor: colors.border,
+            paddingTop: topInset + 10,
           },
         ]}
       >
@@ -942,7 +950,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingTop: 48,
+    paddingTop: 14,
     paddingBottom: 14,
     borderBottomWidth: 1,
   },

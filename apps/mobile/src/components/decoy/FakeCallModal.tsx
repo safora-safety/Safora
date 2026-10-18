@@ -8,7 +8,9 @@ import {
   Vibration,
   SafeAreaView,
   StatusBar,
+  Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   FakeCallService,
   FakeCallLanguage,
@@ -28,6 +30,11 @@ export const FakeCallModal: React.FC<FakeCallModalProps> = ({
   callerName = 'Mom 🏠',
   callerNumber = '+91 98765 43210',
 }) => {
+  const insets = useSafeAreaInsets();
+  const topInset = Math.max(
+    insets.top,
+    Platform.OS === 'android' ? StatusBar.currentHeight || 28 : 0,
+  );
   const [callState, setCallState] = useState<'incoming' | 'connected'>(
     'incoming',
   );
@@ -121,7 +128,15 @@ export const FakeCallModal: React.FC<FakeCallModalProps> = ({
       statusBarTranslucent
     >
       <StatusBar barStyle="light-content" />
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView
+        style={[
+          styles.container,
+          {
+            paddingTop: topInset,
+            paddingBottom: Math.max(insets.bottom, 16),
+          },
+        ]}
+      >
         {callState === 'incoming' ? (
           <View style={styles.incomingView}>
             {/* Top caller info */}

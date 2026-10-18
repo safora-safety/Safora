@@ -57,6 +57,7 @@ export function broadcastSosAudio(data: {
   alertId: string | number;
   userId: string | number;
   audioUrl: string;
+  guardianUserIds?: (string | number)[];
 }): void {
   if (socketServerInstance) {
     const payload = {
@@ -69,8 +70,31 @@ export function broadcastSosAudio(data: {
     // 1. Emit audio update to operations staff command center without re-alerting
     socketServerInstance.to("staff").emit("sos:audio", payload);
 
-    // 2. Emit to user's own channel
+    // 2. Emit to alert room
+    socketServerInstance
+      .to(`sos:alert:${data.alertId}`)
+      .emit("sos:audio", payload);
+
+    // 3. Emit to user's own channel
     socketServerInstance.to(`user:${data.userId}`).emit("sos:audio", payload);
+
+    // 4. Emit to confirmed guardians
+    const gids = data.guardianUserIds;
+    if (!gids || gids.length === 0) {
+      SosRepository.findGuardianUserIds(data.userId)
+        .then((foundGids) => {
+          if (foundGids && foundGids.length > 0 && socketServerInstance) {
+            for (const gid of foundGids) {
+              socketServerInstance.to(`user:${gid}`).emit("sos:audio", payload);
+            }
+          }
+        })
+        .catch(() => {});
+    } else {
+      for (const gid of gids) {
+        socketServerInstance.to(`user:${gid}`).emit("sos:audio", payload);
+      }
+    }
 
     console.log(
       `[Socket.IO] Verified SOS audio attachment broadcast for alert ${data.alertId}`,

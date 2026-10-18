@@ -10,7 +10,9 @@ import {
   StatusBar,
   NativeSyntheticEvent,
   NativeScrollEvent,
+  Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
 import { useAuthStore } from '../store/authStore';
 import { AudioRecorderService } from '../services/audioRecorderService';
@@ -78,6 +80,11 @@ interface OnboardingScreenProps {
 export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   navigation,
 }) => {
+  const insets = useSafeAreaInsets();
+  const topInset = Math.max(
+    insets.top,
+    Platform.OS === 'android' ? StatusBar.currentHeight || 28 : 0,
+  );
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showConsentModal, setShowConsentModal] = useState(false);
   const scrollRef = useRef<any>(null);
@@ -123,7 +130,14 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   };
 
   return (
-    <View style={styles.container}>
+    <View
+      style={[
+        styles.container,
+        {
+          paddingBottom: Math.max(insets.bottom, 24),
+        },
+      ]}
+    >
       <StatusBar barStyle="light-content" />
       <MicrophoneConsentModal
         visible={showConsentModal}
@@ -132,7 +146,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       />
 
       {/* Top Header with Skip */}
-      <View style={styles.topBar}>
+      <View style={[styles.topBar, { paddingTop: topInset + 10 }]}>
         <View style={styles.brandGroup}>
           <Image
             source={require('../assets/icon.png')}

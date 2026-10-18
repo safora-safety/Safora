@@ -11,9 +11,11 @@ import {
   Linking,
   ActivityIndicator,
   RefreshControl,
+  Platform,
 } from 'react-native';
 import { useAuthStore } from '../store/authStore';
 import { useTheme } from '../theme/ThemeContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SirenService } from '../services/sirenService';
 import {
   getCurrentCoordinates,
@@ -46,6 +48,11 @@ interface HomeScreenProps {
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
+  const insets = useSafeAreaInsets();
+  const topInset = Math.max(
+    insets.top,
+    Platform.OS === 'android' ? StatusBar.currentHeight || 24 : 0,
+  );
   const { user, isGuest } = useAuthStore();
   const { colors, isDark } = useTheme();
   const [coords, setCoords] = useState<LocationCoordinates>(CAMPUS_COORDINATES);
@@ -516,6 +523,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
           {
             backgroundColor: colors.backgroundCard,
             borderBottomColor: colors.border,
+            paddingTop: topInset + 10,
           },
         ]}
       >
@@ -603,7 +611,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
       </TouchableOpacity>
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: Math.max(insets.bottom, 20) + 40 },
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -1091,7 +1102,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
                   item.tab,
                   item.title === 'Live Heatmap'
                     ? { showHeatmap: true }
-                    : undefined,
+                    : item.title === 'Report Hazard'
+                      ? { openReport: true }
+                      : undefined,
                 );
               }}
             >

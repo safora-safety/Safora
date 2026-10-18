@@ -218,6 +218,14 @@ export function onSosLiveAudioChunk(cb: (payload: any) => void): () => void {
   };
 }
 
+export function onSosAudio(cb: (payload: any) => void): () => void {
+  if (!socket) return () => {};
+  socket.on('sos:audio', cb);
+  return () => {
+    socket?.off('sos:audio', cb);
+  };
+}
+
 export function disconnectSocket(): void {
   activeRooms.clear();
   activeSosRooms.clear();

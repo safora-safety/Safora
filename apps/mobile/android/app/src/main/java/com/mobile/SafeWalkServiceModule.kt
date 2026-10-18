@@ -27,6 +27,8 @@ class SafeWalkServiceModule(private val reactContext: ReactApplicationContext) :
 
     private var sirenPlayer: android.media.MediaPlayer? = null
     private var fakeCallPlayer: android.media.MediaPlayer? = null
+    private var liveAudioPlayer: android.media.MediaPlayer? = null
+    private var currentPlayingSeq: Int = -1
     private var tts: TextToSpeech? = null
     private var isTtsInitialized = false
     private var isFakeCallActive = false
@@ -572,9 +574,117 @@ class SafeWalkServiceModule(private val reactContext: ReactApplicationContext) :
         }
     }
 
+    @ReactMethod
+    fun playLiveAudioChunk(base64Data: String, seq: Int, promise: Promise) {
+        try {
+            mainHandler.post {
+                try {
+                    liveAudioPlayer?.let {
+                        if (it.isPlaying) {
+                            it.stop()
+                        }
+                        it.release()
+                    }
+                    liveAudioPlayer = null
+
+                    val cleanBase64 = if (base64Data.contains(",")) {
+                        base64Data.substringAfter(",")
+                    } else {
+                        base64Data
+                    }
+                    val audioBytes = android.util.Base64.decode(cleanBase64, android.util.Base64.DEFAULT)
+                    val tempFile = java.io.File.createTempFile("sos_live_chunk_${seq}_", ".wav", reactContext.cacheDir)
+                    tempFile.deleteOnExit()
+                    java.io.FileOutputStream(tempFile).use { it.write(audioBytes) }
+
+                    currentPlayingSeq = seq
+                    liveAudioPlayer = android.media.MediaPlayer().apply {
+                        setDataSource(tempFile.absolutePath)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                            setAudioAttributes(
+                                android.media.AudioAttributes.Builder()
+                                    .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+                                    .build()
+                            )
+                        } else {
+                            @Suppress("DEPRECATION")
+                            setAudioStreamType(android.media.AudioManager.STREAM_MUSIC)
+                        }
+                        prepare()
+                        start()
+                        setOnCompletionListener {
+                            it.release()
+                            if (liveAudioPlayer === it) {
+                                liveAudioPlayer = null
+                            }
+                            try { tempFile.delete() } catch (_: Exception) {}
+
+                            val map = Arguments.createMap()
+                            map.putInt("seq", seq)
+                            emitEvent("onLiveAudioChunkFinished", map)
+                        }
+                        setOnErrorListener { mp, _, _ ->
+                            mp.release()
+                            if (liveAudioPlayer === mp) {
+                                liveAudioPlayer = null
+                            }
+                            try { tempFile.delete() } catch (_: Exception) {}
+                            true
+                        }
+                    }
+                    promise.resolve(true)
+                } catch (e: Exception) {
+                    android.util.Log.e("SafeWalkServiceModule", "Failed to play live chunk #$seq: ${e.message}")
+                    promise.reject("CHUNK_PLAY_ERROR", e.message, e)
+                }
+            }
+        } catch (e: Exception) {
+            promise.reject("CHUNK_PLAY_ERROR", e.message, e)
+        }
+    }
+
+    @ReactMethod
+    fun stopLiveAudio(promise: Promise) {
+        try {
+            mainHandler.post {
+                try {
+                    liveAudioPlayer?.let {
+                        if (it.isPlaying) {
+                            it.stop()
+                        }
+                        it.release()
+                    }
+                    liveAudioPlayer = null
+                    currentPlayingSeq = -1
+                    promise.resolve(true)
+                } catch (e: Exception) {
+                    promise.resolve(false)
+                }
+            }
+        } catch (e: Exception) {
+            promise.resolve(false)
+        }
+    }
+
+    @ReactMethod
+    fun isLiveAudioPlaying(promise: Promise) {
+        val playing = liveAudioPlayer?.isPlaying == true
+        promise.resolve(playing)
+    }
+
     override fun onCatalystInstanceDestroy() {
         super.onCatalystInstanceDestroy()
         stopFakeCallInternal()
+        try {
+            liveAudioPlayer?.let {
+                if (it.isPlaying) {
+                    it.stop()
+                }
+                it.release()
+            }
+            liveAudioPlayer = null
+        } catch (_: Exception) {}
         try {
             tts?.shutdown()
         } catch (_: Exception) {}

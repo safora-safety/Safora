@@ -110,7 +110,7 @@ describe('Phase 4 Emergency UI Components', () => {
       expect(tree.toJSON()).toBeTruthy();
 
       const disarmBtn = tree.root.findByProps({
-        accessibilityLabel: 'I Am Safe. Disarm route deviation',
+        accessibilityLabel: 'I Am Safe. Cancel emergency countdown',
       });
       expect(disarmBtn).toBeTruthy();
 
@@ -120,7 +120,7 @@ describe('Phase 4 Emergency UI Components', () => {
       expect(onDisarmMock).toHaveBeenCalledTimes(1);
 
       const escalateBtn = tree.root.findByProps({
-        accessibilityLabel: 'Need Help Now. Immediately dispatch Emergency SOS',
+        accessibilityLabel: 'Need Help Now. Immediately send Emergency SOS',
       });
       expect(escalateBtn).toBeTruthy();
 

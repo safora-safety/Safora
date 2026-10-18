@@ -9,7 +9,9 @@ import {
   Alert,
   Linking,
   RefreshControl,
+  Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { useAuthStore } from '../store/authStore';
@@ -49,6 +51,11 @@ const INITIAL_FAMILY_CONTACTS: Contact[] = [
 const CONTACTS_STORAGE_KEY = '@safora_custom_emergency_contacts';
 
 export const ProfileScreen: React.FC = () => {
+  const insets = useSafeAreaInsets();
+  const topInset = Math.max(
+    insets.top,
+    Platform.OS === 'android' ? StatusBar.currentHeight || 28 : 0,
+  );
   const navigation = useNavigation<any>();
   const { user, isGuest, logout } = useAuthStore();
   const { colors, isDark } = useTheme();
@@ -547,6 +554,7 @@ export const ProfileScreen: React.FC = () => {
           {
             backgroundColor: colors.backgroundCard,
             borderBottomColor: colors.border,
+            paddingTop: topInset + 10,
           },
         ]}
       >
@@ -605,7 +613,10 @@ export const ProfileScreen: React.FC = () => {
       </View>
 
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: Math.max(insets.bottom, 20) + 40 },
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -1030,7 +1041,7 @@ export const ProfileScreen: React.FC = () => {
               </View>
             )}
 
-            {/* Confirmed Wards */}
+            {/* Confirmed People You Protect */}
             {escortWards.length > 0 ? (
               <View style={{ gap: 10 }}>
                 {pendingRequests.length > 0 && (
@@ -1040,7 +1051,7 @@ export const ProfileScreen: React.FC = () => {
                       { color: colors.textPrimary, marginTop: 10 },
                     ]}
                   >
-                    Active Escort Network ({escortWards.length})
+                    People You Protect ({escortWards.length})
                   </Text>
                 )}
                 {escortWards.map(ward => (
@@ -1075,7 +1086,7 @@ export const ProfileScreen: React.FC = () => {
                       <Text
                         style={[styles.contactRel, { color: colors.textMuted }]}
                       >
-                        Relationship: {ward.relationship || 'Ward'}
+                        Relationship: {ward.relationship || 'Companion'}
                       </Text>
                       <Text
                         style={[styles.contactPhone, { color: colors.primary }]}
@@ -1085,7 +1096,7 @@ export const ProfileScreen: React.FC = () => {
                       <View style={styles.badgeRow}>
                         <View style={styles.badgeSaforaActive}>
                           <Text style={styles.badgeSaforaActiveText}>
-                            🟢 Active Ward (You Receive Live Escorts)
+                            🟢 Active (You Receive Their Live Escorts)
                           </Text>
                         </View>
                       </View>
@@ -1108,14 +1119,14 @@ export const ProfileScreen: React.FC = () => {
                   <Text
                     style={[styles.emptyTitle, { color: colors.textPrimary }]}
                   >
-                    No Active Wards
+                    No Companions Added Yet
                   </Text>
                   <Text
                     style={[styles.emptySub, { color: colors.textSecondary }]}
                   >
                     When family members or friends add you as their Safety
-                    Guardian on Safora, their requests will appear here for your
-                    approval.
+                    Guardian on Safora, their live Safe Walks and emergency
+                    alerts will appear here.
                   </Text>
                 </View>
               )
@@ -1222,7 +1233,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 48,
+    paddingTop: 14,
     paddingBottom: 14,
     borderBottomWidth: 1,
   },
