@@ -91,7 +91,8 @@ const generateHtml = (
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body, #map { width: 100%; height: 100%; background: ${bgColor}; overflow: hidden; }
+    html, body { width: 100%; height: 100%; margin: 0; padding: 0; background: ${bgColor}; overflow: hidden; }
+    #map { position: absolute; top: 0; bottom: 0; left: 0; right: 0; width: 100%; height: 100%; background: ${bgColor}; overflow: hidden; }
     .leaflet-control-attribution { display: none !important; }
     .leaflet-control-zoom { display: none !important; }
     
@@ -274,6 +275,27 @@ const generateHtml = (
         crossOrigin: true
       }).addTo(map);
 
+      // Force Leaflet to re-measure viewport dimensions after WebView container layout settles
+      function ensureMapSized() {
+        if (!map) return;
+        map.invalidateSize(false);
+      }
+      setTimeout(ensureMapSized, 50);
+      setTimeout(ensureMapSized, 150);
+      setTimeout(ensureMapSized, 350);
+      setTimeout(ensureMapSized, 700);
+      setTimeout(ensureMapSized, 1500);
+
+      if (window.ResizeObserver) {
+        try {
+          var ro = new ResizeObserver(function() {
+            ensureMapSized();
+          });
+          ro.observe(document.getElementById('map'));
+        } catch(e) {}
+      }
+      window.addEventListener('resize', ensureMapSized);
+
       map.on('click', function(e) {
         if (window.ReactNativeWebView) {
           window.ReactNativeWebView.postMessage(JSON.stringify({
@@ -427,9 +449,17 @@ const generateHtml = (
       }
     };
 
+    window.invalidateMapSize = function() {
+      if (map) {
+        map.invalidateSize(false);
+      }
+    };
+
     window.recenterMap = function(lat, lng, zoom) {
       if (map) {
-        map.flyTo([lat, lng], zoom || map.getZoom(), { duration: 0.8 });
+        map.invalidateSize(false);
+        var targetZoom = (typeof zoom === 'number' && zoom > 0) ? zoom : map.getZoom();
+        map.setView([lat, lng], targetZoom, { animate: false });
         if (window.cacheSurrounding10km) {
           window.cacheSurrounding10km(lat, lng);
         }
@@ -701,6 +731,9 @@ export const OpenMapView = forwardRef<OpenMapViewRef, OpenMapViewProps>(
     const initialHtmlRef = useRef<string>(
       generateHtml(center, zoom, isDark, activeLayer),
     );
+    const currentCenterRef = useRef(center);
+    currentCenterRef.current = center;
+
     const prevCenterRef = useRef<{ lat: number; lng: number }>({
       lat: center.latitude,
       lng: center.longitude,
@@ -723,7 +756,11 @@ export const OpenMapView = forwardRef<OpenMapViewRef, OpenMapViewProps>(
         const data = JSON.parse(event.nativeEvent.data);
         if (data.type === 'mapReady') {
           setIsMapLoaded(true);
+          const c = currentCenterRef.current;
+          prevCenterRef.current = { lat: c.latitude, lng: c.longitude };
           const initScript = `
+            if (window.invalidateMapSize) { window.invalidateMapSize(); }
+            if (window.recenterMap) { window.recenterMap(${c.latitude}, ${c.longitude}, ${zoom}); }
             if (window.renderMarkers) { window.renderMarkers(${JSON.stringify(markers)}); }
             if (window.renderClusters) { window.renderClusters(${JSON.stringify(clusters || [])}); }
             if (window.renderPolyline) { window.renderPolyline(${JSON.stringify(polyline || [])}, "${polylineColor}", ${polylineDash}, ${Boolean(showCorridorHalo)}, "${corridorHaloColor}"); }
@@ -746,8 +783,16 @@ export const OpenMapView = forwardRef<OpenMapViewRef, OpenMapViewProps>(
       }
     };
 
+    const handleLayout = () => {
+      if (isMapLoaded) {
+        webViewRef.current?.injectJavaScript(
+          'if (window.invalidateMapSize) { window.invalidateMapSize(); }; true;',
+        );
+      }
+    };
+
     return (
-      <View style={[styles.container, style]}>
+      <View style={[styles.container, style]} onLayout={handleLayout}>
         <WebView
           ref={webViewRef}
           originWhitelist={['*']}
@@ -767,6 +812,11 @@ export const OpenMapView = forwardRef<OpenMapViewRef, OpenMapViewProps>(
           overScrollMode="never"
           showsHorizontalScrollIndicator={false}
           showsVerticalScrollIndicator={false}
+          onLoadEnd={() => {
+            webViewRef.current?.injectJavaScript(
+              'if (window.invalidateMapSize) { window.invalidateMapSize(); }; true;',
+            );
+          }}
           onMessage={handleMessage}
         />
 

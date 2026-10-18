@@ -1242,7 +1242,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
             <View style={{ flex: 1 }}>
               <HoldToConfirmButton
                 onConfirmed={handleCompleteWalk}
-                label="Hold 1.5s to Complete"
+                label="Hold to Complete"
                 confirmedLabel="Reached Safely! ✅"
               />
             </View>
@@ -1687,16 +1687,16 @@ const styles = StyleSheet.create({
   activeCockpitBottomRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
     marginBottom: 8,
   },
   activeSosTriggerBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 5,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
+    gap: 4,
+    height: 50,
+    paddingHorizontal: 12,
     borderRadius: 16,
     backgroundColor: '#DC2626',
     borderWidth: 1,
@@ -1717,8 +1717,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   cancelWalkBtnSmall: {
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    height: 50,
+    paddingHorizontal: 12,
     borderRadius: 16,
     backgroundColor: 'rgba(239, 68, 68, 0.12)',
     borderWidth: 1,

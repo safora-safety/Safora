@@ -205,9 +205,19 @@ export const MapScreen: React.FC<MapScreenProps> = ({
         .then(scoreRes => setSafetyScore(scoreRes.safetyScore))
         .catch(() => setSafetyScore(78));
 
-      // Check offline reports pending sync
+      // Check offline reports pending sync & auto-sync when online (Item 5.10)
       ReportService.getPendingCount()
-        .then(setPendingSyncCount)
+        .then(async count => {
+          setPendingSyncCount(count);
+          if (count > 0) {
+            const syncResult = await ReportService.syncPendingReports();
+            setPendingSyncCount(syncResult.remaining);
+            if (syncResult.synced > 0) {
+              const refreshed = await ReportService.getAll(500);
+              setHazards(refreshed);
+            }
+          }
+        })
         .catch(() => {});
     } catch {
       // Fallback handled inside services

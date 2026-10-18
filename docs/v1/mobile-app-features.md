@@ -7,6 +7,7 @@ Screen-by-screen, marking what's existing vs new/changed for V1.
 |---|---|
 | 4-slide onboarding | Existing |
 | Register / Login (JWT) | Existing |
+| **Google Sign-In & OAuth** | **New (V1)** — native Google Play Services account picker sheet via `@react-native-google-signin/google-signin`, automatic account linking with existing email, backend JWT normalization |
 | Guest mode | Existing |
 | **Terms & age notice screen** | **New** — shown once after registration: a plain-language Terms/Privacy static page, an age field, and a note ("if you're under 18, please make sure a parent or guardian knows you're using this app") — no verification, just disclosure. Full parental-consent flow is V2 |
 | Profile edit, change password | Existing |
@@ -32,6 +33,7 @@ Screen-by-screen, marking what's existing vs new/changed for V1.
 | Feature | Status |
 |---|---|
 | Leaflet in WebView, 4 basemaps | Existing (OpenFreeMap swap is V2) |
+| **OpenMapView Rendering Engine** | **Upgraded (V1)** — staggered canvas invalidations (`map.invalidateSize(false)`), elimination of 3D tilt distortion (`tilt3D={false}`), and dynamic resize observer for immediate tile display without manual zoom |
 | Search (Photon → MapTiler) | Existing (tuning is V2) |
 | Route preview (Walk/2-Wheeler/Car tabs) | Existing — **known limitation, not fixed in V1:** all three currently show the same car-road geometry; say this plainly in your report rather than claiming per-mode routing works. Real per-mode routing is V2 |
 | **Heatmap layer** | **New** — see Home section above |
@@ -48,7 +50,9 @@ Screen-by-screen, marking what's existing vs new/changed for V1.
 | Lost-contact / overdue-arrival alerts, check-in timer | **Not in V1** — V2 |
 | **Background tracking with screen locked** | **New (added 22 Sep 2026)** — a native foreground service (`architecture.md` §8) keeps location updates flowing when the screen locks, so the deviation watchdog stays reliable instead of silently degrading once the app backgrounds |
 | **Lock-screen audio during SOS** | **New (Dual-Pipe Native Engine)** — runs via `SafeWalkService.kt` foreground service with `FOREGROUND_SERVICE_TYPE_MICROPHONE`. Concurrently slices 5s progressive WAV chunks over Socket.IO and saves local master WAV. Survives screen-off and Doze mode |
-| **Distance/ETA notification** | **New** — a persistent notification shows straight-line distance and a rough ETA during Safe Walk, refreshed per location update. **Not turn-by-turn navigation** — no per-step instructions or voice; that needs real per-mode routing, which is V2 (`MAP-4`/`MAP-5`) |
+| **Synchronized Distance/ETA Notification** | **New (V1)** — persistent foreground notification displaying real route distance (e.g. 4.1 km) and walking ETA matching the on-screen cockpit via native `updateRouteProgress` |
+| **In-Cockpit Emergency SOS Trigger** | **New (V1)** — red emergency `🚨 SOS` button integrated directly into the active walk cockpit alongside End Walk, firing instant emergency broadcast with GPS accuracy and journey ID |
+| **Hold-To-Confirm Auto-Fit Button** | **Upgraded (V1)** — dynamic font scaling (`numberOfLines={1}`, `adjustsFontSizeToFit={true}`, `minimumFontScale={0.7}`) ensuring "Hold to Complete" never truncates across device densities |
 
 ## SOS & Emergency Deterrent
 | Feature | Status |
