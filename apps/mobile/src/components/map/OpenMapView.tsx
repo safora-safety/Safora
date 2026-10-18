@@ -533,14 +533,9 @@ const generateHtml = (
     window.set3DTilt = function(enabled) {
       var mapEl = document.getElementById('map');
       if (!mapEl) return;
-      if (enabled) {
-        document.body.style.perspective = '1000px';
-        mapEl.style.transform = 'rotateX(35deg) scale(1.15)';
-        mapEl.style.transformOrigin = 'center bottom';
-        mapEl.style.transition = 'transform 0.6s cubic-bezier(0.16, 1, 0.3, 1)';
-      } else {
-        mapEl.style.transform = 'none';
-      }
+      // Keep map flat and edge-to-edge without 3D trapezoid distortion
+      mapEl.style.transform = 'none';
+      document.body.style.perspective = 'none';
     };
 
     var clustersLayer = null;
@@ -703,6 +698,26 @@ export const OpenMapView = forwardRef<OpenMapViewRef, OpenMapViewProps>(
       webViewRef.current?.injectJavaScript(script);
     }, [isDark, isMapLoaded]);
 
+    const initialHtmlRef = useRef<string>(
+      generateHtml(center, zoom, isDark, activeLayer),
+    );
+    const prevCenterRef = useRef<{ lat: number; lng: number }>({
+      lat: center.latitude,
+      lng: center.longitude,
+    });
+
+    // Smoothly pan map on center GPS coordinate updates without reloading the WebView
+    useEffect(() => {
+      if (!isMapLoaded) return;
+      const latDiff = Math.abs(prevCenterRef.current.lat - center.latitude);
+      const lngDiff = Math.abs(prevCenterRef.current.lng - center.longitude);
+      if (latDiff > 0.00003 || lngDiff > 0.00003) {
+        prevCenterRef.current = { lat: center.latitude, lng: center.longitude };
+        const script = `if (window.recenterMap) { window.recenterMap(${center.latitude}, ${center.longitude}, ${zoom}); }; true;`;
+        webViewRef.current?.injectJavaScript(script);
+      }
+    }, [center.latitude, center.longitude, zoom, isMapLoaded]);
+
     const handleMessage = (event: { nativeEvent: { data: string } }) => {
       try {
         const data = JSON.parse(event.nativeEvent.data);
@@ -737,7 +752,7 @@ export const OpenMapView = forwardRef<OpenMapViewRef, OpenMapViewProps>(
           ref={webViewRef}
           originWhitelist={['*']}
           source={{
-            html: generateHtml(center, zoom, isDark, activeLayer),
+            html: initialHtmlRef.current,
           }}
           style={styles.webView}
           javaScriptEnabled={true}

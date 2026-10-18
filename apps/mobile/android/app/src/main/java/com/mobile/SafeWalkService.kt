@@ -65,6 +65,7 @@ class SafeWalkService : Service(), LocationListener {
         const val ACTION_STOP_AUDIO = "com.mobile.action.STOP_AUDIO"
         const val ACTION_TRIGGER_SOS = "com.mobile.action.TRIGGER_SOS"
         const val ACTION_UPDATE_ALERT_ID = "com.mobile.action.UPDATE_ALERT_ID"
+        const val ACTION_UPDATE_PROGRESS = "com.mobile.action.UPDATE_PROGRESS"
 
         const val EXTRA_JOURNEY_ID = "journey_id"
         const val EXTRA_DEST_LAT = "dest_lat"
@@ -73,6 +74,8 @@ class SafeWalkService : Service(), LocationListener {
         const val EXTRA_TOTAL_DISTANCE = "total_distance"
         const val EXTRA_AUTH_TOKEN = "auth_token"
         const val EXTRA_ALERT_ID = "alert_id"
+        const val EXTRA_REMAINING_DISTANCE = "remaining_distance"
+        const val EXTRA_REMAINING_SECONDS = "remaining_seconds"
 
         var isServiceRunning = false
             private set
@@ -87,6 +90,9 @@ class SafeWalkService : Service(), LocationListener {
 
     private var lastLat: Double = 0.0
     private var lastLng: Double = 0.0
+    private var lastRoadRouteDistanceMeters: Double = -1.0
+    private var lastRoadRouteEtaSecs: Double = -1.0
+    private var lastRoadRouteTimestamp: Long = 0L
 
     private var wakeLock: PowerManager.WakeLock? = null
     private var locationManager: LocationManager? = null
@@ -173,6 +179,13 @@ class SafeWalkService : Service(), LocationListener {
             }
             ACTION_TRIGGER_SOS -> {
                 triggerEmergencySosNatively()
+            }
+            ACTION_UPDATE_PROGRESS -> {
+                val remDist = intent.getDoubleExtra(EXTRA_REMAINING_DISTANCE, -1.0)
+                val remSecs = intent.getDoubleExtra(EXTRA_REMAINING_SECONDS, -1.0)
+                if (remDist >= 0.0) {
+                    updateRouteProgressNatively(remDist, remSecs)
+                }
             }
         }
 
@@ -357,6 +370,40 @@ class SafeWalkService : Service(), LocationListener {
             .build()
     }
 
+    // Called by JS to sync exact road network distance and walking ETA to foreground notification
+    fun updateRouteProgressNatively(distMeters: Double, etaSecs: Double) {
+        lastRoadRouteDistanceMeters = distMeters
+        lastRoadRouteEtaSecs = etaSecs
+        lastRoadRouteTimestamp = System.currentTimeMillis()
+
+        if (totalDistanceMeters <= 0.0 || distMeters > totalDistanceMeters) {
+            totalDistanceMeters = distMeters
+        }
+
+        val progressPercent = if (totalDistanceMeters > 0.0) {
+            Math.round(((totalDistanceMeters - distMeters) / totalDistanceMeters) * 100).toInt()
+        } else {
+            0
+        }
+
+        val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
+        val etaMillis = if (etaSecs > 0) {
+            System.currentTimeMillis() + (etaSecs * 1000).toLong()
+        } else {
+            System.currentTimeMillis() + ((distMeters / 1.4) * 1000).toLong()
+        }
+        val etaTimeStr = "Arrive ${timeFormat.format(Date(etaMillis))}"
+
+        val distText = if (distMeters >= 1000) {
+            String.format(Locale.getDefault(), "%.1f km", distMeters / 1000.0)
+        } else {
+            "${distMeters.toInt()}m"
+        }
+
+        val notification = buildNotification(distText, etaTimeStr, progressPercent)
+        notificationManager?.notify(NOTIFICATION_ID, notification)
+    }
+
     // Called on location update to recalculate straight-line distance, ETA, and progress bar
     fun updateProgress(currentLat: Double, currentLng: Double) {
         lastLat = currentLat
@@ -365,6 +412,11 @@ class SafeWalkService : Service(), LocationListener {
         if (destLat == 0.0 && destLng == 0.0) {
             val notification = buildNotification("Monitoring active corridor", "Escort Active", 0)
             notificationManager?.notify(NOTIFICATION_ID, notification)
+            return
+        }
+
+        // If road route distance was received from UI within last 60s, preserve road distance
+        if (lastRoadRouteDistanceMeters >= 0.0 && (System.currentTimeMillis() - lastRoadRouteTimestamp) < 60000) {
             return
         }
 
@@ -382,8 +434,8 @@ class SafeWalkService : Service(), LocationListener {
             0
         }
 
-        // Calibrated walking speed = 1.60 m/s
-        val walkSpeed = 1.60
+        // Calibrated walking speed = 1.40 m/s
+        val walkSpeed = 1.40
         val etaSecs = distMeters / walkSpeed
         val etaMillis = System.currentTimeMillis() + (etaSecs * 1000).toLong()
         val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault())

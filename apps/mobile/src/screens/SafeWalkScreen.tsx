@@ -397,7 +397,9 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
       SosService.triggerSOS({
         latitude: userPos.latitude,
         longitude: userPos.longitude,
+        accuracy: userPos.accuracy || 5,
         journey_id: journeyId,
+        journeyId: journeyId,
       })
         .then(res => {
           Alert.alert(
@@ -685,7 +687,9 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
       const res = await SosService.triggerSOS({
         latitude: userPos.latitude,
         longitude: userPos.longitude,
+        accuracy: userPos.accuracy || 5,
         journey_id: journeyId,
+        journeyId: journeyId,
       });
       Alert.alert(
         '🚨 Emergency SOS Dispatched',
@@ -726,6 +730,89 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
     // 3-pulse urgent haptic vibration alert so user feels it immediately even in deep pocket/purse
     Vibration.vibrate([0, 600, 200, 600, 200, 600]);
   };
+
+  const handleManualSosTrigger = () => {
+    Alert.alert(
+      '🚨 Dispatch Emergency SOS?',
+      `Broadcast immediate emergency distress signal with live GPS location (${userPos.latitude.toFixed(4)}, ${userPos.longitude.toFixed(4)}) and stream live ambient audio to all guardians and emergency CAD dashboard?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'DISPATCH SOS',
+          style: 'destructive',
+          onPress: async () => {
+            Vibration.vibrate([0, 1000, 400, 1000]);
+
+            AsyncStorage.getItem('@safora_pref_loud_siren').then(pref => {
+              if (pref === 'true') {
+                SirenService.startSiren().catch(() => {});
+              }
+            });
+
+            // Start dual-pipeline audio recording (native + web)
+            AudioRecorderService.startRecording().catch(() => {});
+
+            try {
+              const res = await SosService.triggerSOS({
+                latitude: userPos.latitude,
+                longitude: userPos.longitude,
+                accuracy: userPos.accuracy || 5,
+                journey_id: journeyId,
+                journeyId: journeyId,
+              });
+
+              Alert.alert(
+                '🚨 Emergency SOS Dispatched',
+                `Distress beacon dispatched to ${res.contactsNotified} emergency contacts with live GPS coordinates (${userPos.latitude.toFixed(4)}, ${userPos.longitude.toFixed(4)}).\n\nJourney ID #${journeyId || 'Active'}\n🎙️ 30s live ambient audio is streaming.`,
+              );
+
+              if (res?.alert?.id) {
+                AudioRecorderService.setAlertId(res.alert.id);
+              }
+            } catch {
+              Alert.alert(
+                '🚨 Emergency Dispatch Offline',
+                `Network unavailable to transmit online alert.\n\nCoordinates: ${userPos.latitude.toFixed(4)}, ${userPos.longitude.toFixed(4)}\n\nLaunch emergency dialer or carrier SMS now?`,
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: '📞 Call 112',
+                    style: 'destructive',
+                    onPress: () => Linking.openURL('tel:112'),
+                  },
+                  {
+                    text: '📱 Send SMS',
+                    onPress: () => {
+                      const mapsLink = `https://maps.google.com/?q=${userPos.latitude.toFixed(5)},${userPos.longitude.toFixed(5)}`;
+                      const body = encodeURIComponent(
+                        `🚨 EMERGENCY SOS! I need immediate help. My live GPS coordinates: ${mapsLink} - Sent via SAFORA Safe Walk (Journey #${journeyId || 'Active'})`,
+                      );
+                      Linking.openURL(`sms:?body=${body}`).catch(() => {});
+                    },
+                  },
+                ],
+              );
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  // Synchronize exact road route distance and ETA with native Android foreground notification
+  useEffect(() => {
+    if (isActive && routeDistanceMeters > 0) {
+      if (
+        Platform.OS === 'android' &&
+        NativeModules.SafeWalkService?.updateRouteProgress
+      ) {
+        NativeModules.SafeWalkService.updateRouteProgress(
+          routeDistanceMeters,
+          secondsRemaining,
+        ).catch(() => {});
+      }
+    }
+  }, [isActive, routeDistanceMeters, Math.floor(secondsRemaining / 10)]);
 
   const handleMapPress = (coords: { latitude: number; longitude: number }) => {
     if (isActive) return;
@@ -902,7 +989,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
           polylineDash={!isActive}
           showCorridorHalo={isActive}
           corridorHaloColor={isDeviated ? '#EF4444' : '#10B981'}
-          tilt3D={isActive}
+          tilt3D={false}
           layerSwitcherTop={isActive ? topInset + 128 : 74}
           onMapPress={handleMapPress}
           style={styles.map}
@@ -1140,12 +1227,22 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
             },
           ]}
         >
-          {/* Active Cockpit Controls with Hold-To-Confirm */}
+          {/* Active Cockpit Controls: Emergency SOS + Hold-To-Confirm + Cancel */}
           <View style={styles.activeCockpitBottomRow}>
+            <TouchableOpacity
+              style={styles.activeSosTriggerBtn}
+              onPress={handleManualSosTrigger}
+              activeOpacity={0.8}
+              accessibilityLabel="Trigger Emergency SOS"
+            >
+              <Text style={styles.activeSosTriggerBtnIcon}>🚨</Text>
+              <Text style={styles.activeSosTriggerBtnText}>SOS</Text>
+            </TouchableOpacity>
+
             <View style={{ flex: 1 }}>
               <HoldToConfirmButton
                 onConfirmed={handleCompleteWalk}
-                label="Hold 1.5s to Complete Walk"
+                label="Hold 1.5s to Complete"
                 confirmedLabel="Reached Safely! ✅"
               />
             </View>
@@ -1590,8 +1687,34 @@ const styles = StyleSheet.create({
   activeCockpitBottomRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
     marginBottom: 8,
+  },
+  activeSosTriggerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    backgroundColor: '#DC2626',
+    borderWidth: 1,
+    borderColor: '#EF4444',
+    elevation: 4,
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 4,
+  },
+  activeSosTriggerBtnIcon: {
+    fontSize: 14,
+  },
+  activeSosTriggerBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 0.5,
   },
   cancelWalkBtnSmall: {
     paddingVertical: 14,

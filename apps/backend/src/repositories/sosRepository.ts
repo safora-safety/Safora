@@ -432,15 +432,55 @@ export class SosRepository {
     userId: string | number,
   ): Promise<(string | number)[]> {
     const contacts = await this.findContactsByUserId(userId);
+    if (!contacts || contacts.length === 0) return [];
+
+    const explicitGuardianUserIds = contacts
+      .map((c) => c.guardian_user_id)
+      .filter((id): id is number => Boolean(id && !isNaN(Number(id))))
+      .map(Number);
+
+    const emails = contacts
+      .map((c) => c.email?.trim().toLowerCase())
+      .filter((e): e is string => Boolean(e && e.includes("@")));
+
     const normalizedPhones = contacts
       .map((c) => c.phone?.replace(/[^0-9]/g, "").slice(-10))
       .filter((p): p is string => Boolean(p && p.length === 10));
 
-    if (normalizedPhones.length === 0) return [];
+    const rawPhones = contacts
+      .map((c) => c.phone?.trim())
+      .filter((p): p is string => Boolean(p && p.length >= 7));
+
+    const conditions: string[] = [];
+    const params: any[] = [];
+
+    if (explicitGuardianUserIds.length > 0) {
+      params.push(explicitGuardianUserIds);
+      conditions.push(`id = ANY($${params.length})`);
+    }
+
+    if (emails.length > 0) {
+      params.push(emails);
+      conditions.push(`LOWER(email) = ANY($${params.length})`);
+    }
+
+    if (normalizedPhones.length > 0) {
+      params.push(normalizedPhones);
+      conditions.push(
+        `RIGHT(REGEXP_REPLACE(phone, '[^0-9]', '', 'g'), 10) = ANY($${params.length})`,
+      );
+    }
+
+    if (rawPhones.length > 0) {
+      params.push(rawPhones);
+      conditions.push(`phone = ANY($${params.length})`);
+    }
+
+    if (conditions.length === 0) return [];
 
     const result = await db.query(
-      `SELECT id FROM users WHERE RIGHT(REGEXP_REPLACE(phone, '[^0-9]', '', 'g'), 10) = ANY($1);`,
-      [normalizedPhones],
+      `SELECT DISTINCT id FROM users WHERE ${conditions.join(" OR ")};`,
+      params,
     );
     return result.rows.map((r: any) => r.id);
   }
