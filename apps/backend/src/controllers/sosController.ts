@@ -22,7 +22,7 @@ export async function triggerSOS(
       longitude: req.body.longitude,
       accuracy: req.body.accuracy,
       batteryPercentage: req.body.battery_percentage,
-      journeyId: req.body.journey_id,
+      journeyId: req.body.journey_id ?? req.body.journeyId,
       audioUrl: req.body.audio_url || req.body.audioUrl,
       isTest,
     });

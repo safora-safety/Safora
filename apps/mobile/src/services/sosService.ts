@@ -14,6 +14,7 @@ export interface TriggerSosPayload {
   accuracy?: number;
   battery_percentage?: number;
   journey_id?: string | number | null;
+  journeyId?: string | number | null;
   audio_url?: string | null;
 }
 
@@ -38,6 +39,8 @@ export class SosService {
       }
     }
 
+    const jId = payload.journey_id ?? payload.journeyId;
+
     const res = await apiClient.post<
       ApiResponse<{ alert: SosAlert; contactsNotified: number }> & {
         alert: SosAlert;
@@ -45,6 +48,8 @@ export class SosService {
       }
     >('/sos', {
       ...payload,
+      journey_id: jId,
+      journeyId: jId,
       battery_percentage: batteryPercentage,
     });
 

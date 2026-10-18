@@ -673,6 +673,21 @@ class SafeWalkServiceModule(private val reactContext: ReactApplicationContext) :
         promise.resolve(playing)
     }
 
+    @ReactMethod
+    fun updateRouteProgress(distanceMeters: Double, secondsRemaining: Double, promise: Promise) {
+        try {
+            val intent = Intent(reactContext, SafeWalkService::class.java).apply {
+                action = SafeWalkService.ACTION_UPDATE_PROGRESS
+                putExtra(SafeWalkService.EXTRA_REMAINING_DISTANCE, distanceMeters)
+                putExtra(SafeWalkService.EXTRA_REMAINING_SECONDS, secondsRemaining)
+            }
+            reactContext.startService(intent)
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("UPDATE_PROGRESS_FAILED", e.message)
+        }
+    }
+
     override fun onCatalystInstanceDestroy() {
         super.onCatalystInstanceDestroy()
         stopFakeCallInternal()
