@@ -14,6 +14,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useAuthStore } from '../store/authStore';
 import { GoogleLogo } from '../components/common/GoogleLogo';
+import Feather from 'react-native-vector-icons/Feather';
 
 interface LoginScreenProps {
   navigation: any;
@@ -210,7 +211,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
                   showPassword ? 'Hide password' : 'Show password'
                 }
               >
-                <Text style={styles.eyeIcon}>{showPassword ? '🙈' : '👁️'}</Text>
+                <Feather
+                  name={showPassword ? 'eye' : 'eye-off'}
+                  size={19}
+                  color={colors.textSecondary}
+                />
               </TouchableOpacity>
             </View>
           </View>
@@ -308,7 +313,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
           <Text style={[styles.footerText, { color: colors.textSecondary }]}>
             New to SAFORA?{' '}
           </Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Register')}>
+          <TouchableOpacity
+            onPress={() =>
+              navigation.navigate('Auth', { initialTab: 'register' })
+            }
+          >
             <Text style={[styles.footerLink, { color: colors.primary }]}>
               Create an Account
             </Text>

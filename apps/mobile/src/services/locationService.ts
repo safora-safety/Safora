@@ -247,13 +247,13 @@ export async function getCurrentCoordinates(): Promise<LocationCoordinates> {
                   getFallbackCoordinates().then(resolve);
                 }
               },
-              { enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 },
+              { enableHighAccuracy: false, timeout: 5000, maximumAge: 30000 },
             );
           },
-          { enableHighAccuracy: true, timeout: 6000, maximumAge: 60000 },
+          { enableHighAccuracy: true, timeout: 8000, maximumAge: 10000 },
         );
       },
-      { enableHighAccuracy: false, timeout: 2000, maximumAge: 3600000 },
+      { enableHighAccuracy: false, timeout: 2000, maximumAge: 30000 },
     );
   });
 }

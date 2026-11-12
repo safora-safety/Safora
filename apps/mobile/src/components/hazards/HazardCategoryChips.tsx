@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { HazardCategory } from '@safora/shared-types';
 import { useTheme } from '../../theme/ThemeContext';
+import Feather from 'react-native-vector-icons/Feather';
 
 export interface CategoryOption {
   id: HazardCategory;
@@ -16,12 +17,12 @@ export interface CategoryOption {
 }
 
 export const HAZARD_CATEGORIES: CategoryOption[] = [
-  { id: 'lighting', label: 'Poor Lighting', icon: '💡' },
-  { id: 'road_hazard', label: 'Road Trench / Hazard', icon: '🚧' },
-  { id: 'waterlogging', label: 'Waterlogging', icon: '🌊' },
-  { id: 'isolated_area', label: 'Isolated Trail', icon: '🌲' },
-  { id: 'traffic', label: 'Traffic Danger', icon: '🚗' },
-  { id: 'other', label: 'Other Hazard', icon: '⚠️' },
+  { id: 'lighting', label: 'Poor Lighting', icon: 'sun' },
+  { id: 'road_hazard', label: 'Road Trench / Hazard', icon: 'alert-triangle' },
+  { id: 'waterlogging', label: 'Waterlogging', icon: 'droplet' },
+  { id: 'isolated_area', label: 'Isolated Trail', icon: 'map-pin' },
+  { id: 'traffic', label: 'Traffic Danger', icon: 'truck' },
+  { id: 'other', label: 'Other Hazard', icon: 'alert-circle' },
 ];
 
 interface HazardCategoryChipsProps {
@@ -62,7 +63,13 @@ export const HazardCategoryChips: React.FC<HazardCategoryChipsProps> = ({
               onPress={() => onSelectCategory(cat.id)}
               activeOpacity={0.8}
             >
-              <Text style={styles.categoryIcon}>{cat.icon}</Text>
+              <View style={{ marginBottom: 4 }}>
+                <Feather
+                  name={cat.icon}
+                  size={20}
+                  color={category === cat.id ? '#38BDF8' : colors.textSecondary}
+                />
+              </View>
               <Text
                 style={[
                   styles.categoryLabel,

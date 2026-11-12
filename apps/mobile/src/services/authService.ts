@@ -76,7 +76,16 @@ export class AuthService {
     email?: string;
     phone?: string;
     bloodGroup?: string;
+    blood_group?: string;
     emergencyNotes?: string;
+    emergency_notes?: string;
+    allergies?: string;
+    showMedicalOnLockScreen?: boolean;
+    show_medical_on_lock_screen?: boolean;
+    hasCompletedTestDrill?: boolean;
+    has_completed_test_drill?: boolean;
+    avatarUrl?: string;
+    avatar_url?: string;
     age?: number;
     ageNoticeAck?: boolean;
     termsAcceptedAt?: string;
@@ -88,8 +97,14 @@ export class AuthService {
         name: data.name,
         email: data.email,
         phone: data.phone,
-        blood_group: data.bloodGroup,
-        emergency_notes: data.emergencyNotes,
+        blood_group: data.blood_group ?? data.bloodGroup,
+        emergency_notes: data.emergency_notes ?? data.emergencyNotes,
+        allergies: data.allergies,
+        show_medical_on_lock_screen:
+          data.show_medical_on_lock_screen ?? data.showMedicalOnLockScreen,
+        has_completed_test_drill:
+          data.has_completed_test_drill ?? data.hasCompletedTestDrill,
+        avatar_url: data.avatar_url ?? data.avatarUrl,
         age: data.age,
         age_notice_ack: data.ageNoticeAck,
         terms_accepted_at: data.termsAcceptedAt,
@@ -102,6 +117,48 @@ export class AuthService {
         err?.response?.data?.message ||
         err?.message ||
         'Profile update failed. Please check your connection and try again.';
+      throw new Error(message);
+    }
+  }
+
+  static async uploadProfilePhoto(
+    uri: string,
+    name: string = 'avatar.jpg',
+    type: string = 'image/jpeg',
+  ): Promise<{ user: User; avatarUrl: string }> {
+    try {
+      const formData = new FormData();
+      formData.append('photo', {
+        uri,
+        name,
+        type,
+      } as any);
+
+      const response = await apiClient.post<
+        ApiResponse<{ user: User; avatarUrl: string }> & {
+          user?: User;
+          avatarUrl?: string;
+        }
+      >('/auth/profile-photo', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      const user = response.data.user || (response.data as any).data?.user;
+      const avatarUrl =
+        response.data.avatarUrl ||
+        (response.data as any).data?.avatarUrl ||
+        user?.avatarUrl ||
+        user?.avatar_url ||
+        '';
+
+      return { user, avatarUrl };
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.message ||
+        err?.message ||
+        'Failed to upload profile photo.';
       throw new Error(message);
     }
   }

@@ -80,3 +80,7 @@ Desktop.ini
 **/.eslintcache
 vite.config.js
 vite.config.d.ts
+
+# Design Reference Artifacts
+Complete mobile flow*-html/
+liquid glass*.png

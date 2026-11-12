@@ -3,6 +3,7 @@ import { triggerSOS } from "../controllers/sosController";
 import { SosService } from "../services/sosService";
 import { SosRepository } from "../repositories/sosRepository";
 import { UserRepository } from "../repositories/userRepository";
+import { FirebaseService } from "../services/firebaseService";
 import { AppError } from "../errors/AppError";
 import { sosAlertSchema } from "../validation/schemas";
 
@@ -331,6 +332,13 @@ describe("SOS Guards & Authorization Security", () => {
         id: 42,
         name: "Test Caller",
       } as any);
+      jest.spyOn(UserRepository, "updateUser").mockResolvedValueOnce({
+        id: 42,
+        has_completed_test_drill: true,
+      } as any);
+      jest
+        .spyOn(FirebaseService, "sendSosNotification")
+        .mockResolvedValueOnce({ successCount: 1, failureCount: 0 });
       jest.spyOn(SosRepository, "findContactsByUserId").mockResolvedValueOnce([
         {
           id: 55,

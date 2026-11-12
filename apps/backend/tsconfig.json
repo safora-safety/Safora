@@ -11,7 +11,11 @@
     "forceConsistentCasingInFileNames": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-    "types": ["node", "jest"]
+    "types": ["node", "jest"],
+    "baseUrl": ".",
+    "paths": {
+      "@safora/shared-types": ["../../packages/shared-types/dist"]
+    }
   },
   "include": ["src/**/*"],
   "exclude": ["src/__tests__/**/*", "dist", "node_modules"]

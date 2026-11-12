@@ -44,6 +44,11 @@ interface AuthState {
   ) => Promise<boolean>;
   logout: () => Promise<void>;
   updateProfile: (data: Partial<User>) => Promise<boolean>;
+  uploadProfilePhoto: (
+    uri: string,
+    fileName?: string,
+    mimeType?: string,
+  ) => Promise<boolean>;
   removeSavedProfile: (id: string | number) => Promise<void>;
   clearError: () => void;
 }
@@ -69,12 +74,43 @@ function normalizeUser(u: User): User {
         ? Boolean(u.age_notice_ack)
         : undefined;
 
+  const allergies = u.allergies ?? (u as any).allergies ?? '';
+  const showMedicalOnLock =
+    u.showMedicalOnLockScreen !== undefined
+      ? Boolean(u.showMedicalOnLockScreen)
+      : u.show_medical_on_lock_screen !== undefined
+        ? Boolean(u.show_medical_on_lock_screen)
+        : false;
+  const hasDrill =
+    u.hasCompletedTestDrill !== undefined
+      ? Boolean(u.hasCompletedTestDrill)
+      : u.has_completed_test_drill !== undefined
+        ? Boolean(u.has_completed_test_drill)
+        : false;
+  const isVerified =
+    u.isVerified !== undefined
+      ? Boolean(u.isVerified)
+      : u.is_verified !== undefined
+        ? Boolean(u.is_verified)
+        : false;
+  const avatarUrl =
+    u.avatarUrl || u.avatar_url || (u as any).avatar_url || null;
+
   return {
     ...u,
     termsAcceptedAt: termsAt,
     terms_accepted_at: termsAt,
     ageNoticeAck: ageAck,
     age_notice_ack: ageAck,
+    allergies,
+    showMedicalOnLockScreen: showMedicalOnLock,
+    show_medical_on_lock_screen: showMedicalOnLock,
+    hasCompletedTestDrill: hasDrill,
+    has_completed_test_drill: hasDrill,
+    isVerified,
+    is_verified: isVerified,
+    avatarUrl,
+    avatar_url: avatarUrl,
   };
 }
 
@@ -426,17 +462,25 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
 
       let updatedUser: User;
       if (_get().isGuest) {
-        updatedUser = {
+        updatedUser = normalizeUser({
           ...currentUser,
           ...data,
-        };
+        });
       } else {
         const res = await AuthService.updateProfile({
           name: data.name,
           email: data.email,
           phone: data.phone,
-          bloodGroup: data.bloodGroup,
-          emergencyNotes: data.emergencyNotes,
+          bloodGroup: data.bloodGroup ?? (data as any).blood_group,
+          emergencyNotes: data.emergencyNotes ?? (data as any).emergency_notes,
+          allergies: data.allergies,
+          showMedicalOnLockScreen:
+            data.showMedicalOnLockScreen ??
+            (data as any).show_medical_on_lock_screen,
+          hasCompletedTestDrill:
+            data.hasCompletedTestDrill ??
+            (data as any).has_completed_test_drill,
+          avatarUrl: data.avatarUrl ?? (data as any).avatar_url,
           age: (data as any).age,
           ageNoticeAck: (data as any).ageNoticeAck,
           termsAcceptedAt: (data as any).termsAcceptedAt,
@@ -477,6 +521,56 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
     } catch (err: unknown) {
       const msg =
         err instanceof Error ? err.message : 'Failed to update profile';
+      set({ error: msg, isLoading: false });
+      return false;
+    }
+  },
+
+  uploadProfilePhoto: async (
+    uri: string,
+    fileName?: string,
+    mimeType?: string,
+  ) => {
+    set({ isLoading: true, error: null });
+    try {
+      const currentUser = _get().user;
+      if (!currentUser) throw new Error('No user logged in');
+
+      if (_get().isGuest) {
+        const updatedUser = normalizeUser({
+          ...currentUser,
+          avatarUrl: uri,
+          avatar_url: uri,
+        });
+        await AsyncStorage.setItem(
+          STORAGE_KEYS.USER,
+          JSON.stringify(updatedUser),
+        );
+        set({ user: updatedUser, isLoading: false });
+        return true;
+      }
+
+      const res = await AuthService.uploadProfilePhoto(
+        uri,
+        fileName || 'avatar.jpg',
+        mimeType || 'image/jpeg',
+      );
+
+      const updatedUser = normalizeUser({
+        ...currentUser,
+        ...(res.user || {}),
+        avatarUrl: res.avatarUrl || res.user?.avatarUrl || uri,
+        avatar_url: res.avatarUrl || res.user?.avatarUrl || uri,
+      });
+
+      await AsyncStorage.setItem(
+        STORAGE_KEYS.USER,
+        JSON.stringify(updatedUser),
+      );
+      set({ user: updatedUser, isLoading: false });
+      return true;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to upload photo';
       set({ error: msg, isLoading: false });
       return false;
     }

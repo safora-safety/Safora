@@ -15,6 +15,7 @@ import {
 import { useTheme } from '../../theme/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SosService } from '../../services/sosService';
+import Feather from 'react-native-vector-icons/Feather';
 
 export interface EditableContact {
   id?: string;
@@ -189,9 +190,7 @@ export const ContactModal: React.FC<ContactModalProps> = ({
               </Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Text style={[styles.closeText, { color: colors.textMuted }]}>
-                ✕
-              </Text>
+              <Feather name="x" size={18} color={colors.textMuted} />
             </TouchableOpacity>
           </View>
 
@@ -201,7 +200,17 @@ export const ContactModal: React.FC<ContactModalProps> = ({
           >
             {formError && (
               <View style={styles.errorBox}>
-                <Text style={styles.errorText}>⚠️ {formError}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Feather
+                    name="alert-triangle"
+                    size={13}
+                    color="#EF4444"
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text style={[styles.errorText, { flex: 1 }]}>
+                    {formError}
+                  </Text>
+                </View>
               </View>
             )}
 
@@ -290,10 +299,21 @@ export const ContactModal: React.FC<ContactModalProps> = ({
                 </View>
               )}
               {hasAccount === false && (
-                <View style={styles.badgeWarning}>
-                  <Text style={styles.badgeWarningText}>
-                    📱 Direct SMS Only • Guardian is not registered on Safora
-                    yet. They will receive cellular SMS text alerts.
+                <View
+                  style={[
+                    styles.badgeWarning,
+                    { flexDirection: 'row', alignItems: 'flex-start' },
+                  ]}
+                >
+                  <Feather
+                    name="message-square"
+                    size={13}
+                    color="#94A3B8"
+                    style={{ marginRight: 6, marginTop: 2 }}
+                  />
+                  <Text style={[styles.badgeWarningText, { flex: 1 }]}>
+                    Direct SMS Only • Guardian is not registered on Safora yet.
+                    They will receive cellular SMS text alerts.
                   </Text>
                 </View>
               )}

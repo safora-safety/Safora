@@ -6,16 +6,24 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  SafeAreaView,
   StatusBar,
-  ActivityIndicator,
-  Alert,
   BackHandler,
   Platform,
+  PermissionsAndroid,
+  Linking,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Feather from 'react-native-vector-icons/Feather';
 import { useAuthStore } from '../store/authStore';
-import { colors } from '../theme/colors';
+import { useTheme } from '../theme/ThemeContext';
+import { GlassCard } from '../components/common/GlassCard';
+import { GlassButton } from '../components/common/GlassButton';
+import { MicrophoneConsentModal } from '../components/emergency/MicrophoneConsentModal';
+import { LocationConsentModal } from '../components/emergency/LocationConsentModal';
+import { NotificationConsentModal } from '../components/emergency/NotificationConsentModal';
+import { AudioRecorderService } from '../services/audioRecorderService';
+import { notificationService } from '../services/notificationService';
 
 interface TermsScreenProps {
   navigation: any;
@@ -31,12 +39,37 @@ export const TermsScreen: React.FC<TermsScreenProps> = ({
     insets.top,
     Platform.OS === 'android' ? StatusBar.currentHeight || 28 : 0,
   );
+  const { colors, isDark } = useTheme();
   const { user, updateProfile, isLoading } = useAuthStore();
 
-  // Determine if we're in a mandatory flow (no back stack) vs opened from Settings
   const canGoBack = navigation.canGoBack();
+  const isExistingUser = Boolean(
+    canGoBack ||
+    _route?.params?.mode === 'privacy_hub' ||
+    user?.terms_accepted_at ||
+    user?.termsAcceptedAt,
+  );
+  const [viewingFullTerms, setViewingFullTerms] = useState(false);
 
-  const [ageText, setAgeText] = useState(user?.age ? String(user.age) : '');
+  const formatConsentDate = (dateStr?: string) => {
+    if (!dateStr) return '24 Sep 2026';
+    try {
+      const d = new Date(dateStr);
+      return d.toLocaleDateString('en-GB', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      });
+    } catch {
+      return '24 Sep 2026';
+    }
+  };
+
+  // Multi-step flow: 1 = Terms Overview (Screen 10), 2 = Age & Accept (Screen 11)
+  const [currentStep, setCurrentStep] = useState<1 | 2>(1);
+
+  // Form inputs for Step 2
+  const [ageText, setAgeText] = useState(user?.age ? String(user.age) : '21');
   const [guardianAck, setGuardianAck] = useState(
     Boolean(user?.age_notice_ack || user?.ageNoticeAck),
   );
@@ -45,36 +78,45 @@ export const TermsScreen: React.FC<TermsScreenProps> = ({
   );
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Pre-permission modals state (Screens 12, 13, 14)
+  const [showMicModal, setShowMicModal] = useState(false);
+  const [showLocationModal, setShowLocationModal] = useState(false);
+  const [showNotificationModal, setShowNotificationModal] = useState(false);
+
   const numAge = parseInt(ageText, 10);
-  const isUnder18 = !isNaN(numAge) && numAge < 18 && numAge > 0;
 
-  // Block hardware back button when Terms is mandatory (no back stack)
-  // so the user cannot bypass the consent screen
+  // Block hardware back button when Terms is mandatory
   useEffect(() => {
-    if (canGoBack) return; // Allow back when opened from Settings
-
-    const handler = BackHandler.addEventListener('hardwareBackPress', () => {
-      // Return true to prevent default back behavior
-      return true;
-    });
+    if (canGoBack) return;
+    const handler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      () => true,
+    );
     return () => handler.remove();
   }, [canGoBack]);
 
-  const handleSubmit = async () => {
+  const handleStep1Continue = () => {
+    setErrorMsg(null);
+    setCurrentStep(2);
+  };
+
+  const handleStep2Submit = async () => {
     setErrorMsg(null);
 
     if (!ageText.trim() || isNaN(numAge) || numAge < 5 || numAge > 120) {
-      setErrorMsg('Please enter a valid age (e.g., 20).');
-      return;
-    }
-
-    if (!termsAccepted) {
-      setErrorMsg('You must agree to the Terms & Privacy terms to proceed.');
+      setErrorMsg('Please enter a valid age (e.g., 21).');
       return;
     }
 
     if (!guardianAck) {
-      setErrorMsg('Please acknowledge the guardian notice and safety terms.');
+      setErrorMsg('Please confirm your age and guardian acknowledgment.');
+      return;
+    }
+
+    if (!termsAccepted) {
+      setErrorMsg(
+        'You must agree to the Safety Terms & Privacy Policy to proceed.',
+      );
       return;
     }
 
@@ -82,213 +124,976 @@ export const TermsScreen: React.FC<TermsScreenProps> = ({
       const success = await updateProfile({
         age: numAge,
         ageNoticeAck: true,
+        age_notice_ack: true,
         termsAcceptedAt: new Date().toISOString(),
+        terms_accepted_at: new Date().toISOString(),
       } as any);
 
       if (success) {
-        // After successful submission, navigate away.
-        // RootNavigator's needsTerms will now be false (termsAcceptedAt is set),
-        // so navigating to MainTabs is safe and permanent.
-        if (canGoBack) {
-          navigation.goBack();
-        } else {
-          navigation.reset({
-            index: 0,
-            routes: [{ name: 'MainTabs' }],
-          });
-        }
+        // Launch pre-permission sequence starting with Screen 12 (Emergency Audio)
+        setShowMicModal(true);
       } else {
-        setErrorMsg('Unable to save settings. Please check your connection.');
+        setErrorMsg(
+          'Failed to save terms acceptance. Please check your internet connection.',
+        );
       }
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to save terms acceptance.');
+    }
+  };
+
+  // Permission Flow handlers
+  const handleMicConsent = async () => {
+    setShowMicModal(false);
+    await AudioRecorderService.requestPermission();
+    setShowLocationModal(true);
+  };
+
+  const handleMicDecline = () => {
+    setShowMicModal(false);
+    setShowLocationModal(true);
+  };
+
+  const handleLocationAllow = async (accuracy: 'precise' | 'approximate') => {
+    setShowLocationModal(false);
+    if (Platform.OS === 'android') {
+      try {
+        await PermissionsAndroid.request(
+          accuracy === 'precise'
+            ? PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+            : PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION,
+        );
+      } catch {
+        // ignore
+      }
+    }
+    setShowNotificationModal(true);
+  };
+
+  const handleLocationDeny = () => {
+    setShowLocationModal(false);
+    setShowNotificationModal(true);
+  };
+
+  const handleNotificationAllow = async () => {
+    setShowNotificationModal(false);
+    try {
+      await notificationService.registerTokenWithBackend();
     } catch {
-      setErrorMsg('Network error. Please try again.');
+      // ignore
+    }
+    finishOnboardingAndNavigate();
+  };
+
+  const handleNotificationDeny = () => {
+    setShowNotificationModal(false);
+    finishOnboardingAndNavigate();
+  };
+
+  const finishOnboardingAndNavigate = () => {
+    if (canGoBack) {
+      navigation.goBack();
+    } else {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'MainTabs' }],
+      });
     }
   };
 
   return (
-    <View
-      style={[
-        styles.container,
-        {
-          paddingTop: topInset + (canGoBack ? 4 : 12),
-          paddingBottom: Math.max(insets.bottom, 16),
-        },
-      ]}
-    >
-      <StatusBar barStyle="light-content" />
+    <View style={[styles.container, { backgroundColor: colors.canvas }]}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
-      {/* Top Action Bar — only show Back when navigated from Settings */}
-      {canGoBack && (
-        <View style={styles.topBar}>
+      {/* Top Header */}
+      <View style={[styles.topBar, { paddingTop: topInset + 10 }]}>
+        {viewingFullTerms ? (
           <TouchableOpacity
-            style={styles.backBtn}
+            style={styles.stepBackButton}
+            onPress={() => setViewingFullTerms(false)}
+            activeOpacity={0.7}
+          >
+            <Feather
+              name="arrow-left"
+              size={16}
+              color={isDark ? '#C3C1FF' : colors.primaryDark}
+            />
+            <Text
+              style={[
+                styles.stepBackText,
+                { color: isDark ? '#C3C1FF' : colors.primaryDark },
+              ]}
+            >
+              Back
+            </Text>
+          </TouchableOpacity>
+        ) : currentStep === 2 ? (
+          <TouchableOpacity
+            style={styles.stepBackButton}
+            onPress={() => setCurrentStep(1)}
+            activeOpacity={0.7}
+          >
+            <Feather
+              name="arrow-left"
+              size={16}
+              color={isDark ? '#C3C1FF' : colors.primaryDark}
+            />
+            <Text
+              style={[
+                styles.stepBackText,
+                { color: isDark ? '#C3C1FF' : colors.primaryDark },
+              ]}
+            >
+              Back
+            </Text>
+          </TouchableOpacity>
+        ) : canGoBack ? (
+          <TouchableOpacity
+            style={styles.stepBackButton}
             onPress={() => navigation.goBack()}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          >
-            <Text style={styles.backBtnText}>← Back</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.shieldEmoji}>🛡️</Text>
-          <Text style={styles.title}>Safety Terms & Privacy</Text>
-          <Text style={styles.subtitle}>
-            Please review how SAFORA protects you and handles data.
-          </Text>
-        </View>
-
-        {/* Plain-Language Terms Content */}
-        <View style={styles.card}>
-          <Text style={styles.sectionHeader}>📍 What We Collect</Text>
-          <Text style={styles.bodyText}>
-            • <Text style={styles.bold}>Live Location:</Text> Collected only
-            during active Safe Walk sessions or when you press SOS, used to
-            monitor corridor safety and alert guardians.
-          </Text>
-          <Text style={styles.bodyText}>
-            • <Text style={styles.bold}>Community Reports:</Text> Hazard
-            reports, categories, and photos you choose to submit to the
-            community safety radar. Public reports never expose your identity.
-          </Text>
-          <Text style={styles.bodyText}>
-            • <Text style={styles.bold}>Emergency Audio:</Text> Optional
-            30-second ambient audio captured only upon emergency SOS trigger to
-            document distress.
-          </Text>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.sectionHeader}>🎯 Why We Collect It</Text>
-          <Text style={styles.bodyText}>
-            To calculate route deviation warnings, dispatch alerts to your
-            designated trusted contacts, and power the real-time community
-            safety index.
-          </Text>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.sectionHeader}>
-            🚨 Emergency SOS & Guardian Protocol
-          </Text>
-          <Text style={styles.bodyText}>
-            • <Text style={styles.bold}>Designated Guardians:</Text> When you
-            trigger SOS, emergency SMS notifications with your live GPS location
-            are instantly dispatched to your trusted contacts.
-          </Text>
-          <Text style={[styles.bodyText, { marginTop: 6 }]}>
-            • <Text style={styles.bold}>If No Contacts Configured:</Text> If no
-            personal guardians are added to your profile, SOS panic alerts are
-            routed exclusively to Central Emergency Dispatch and National
-            Services (112). We recommend adding at least 1 guardian for personal
-            protection.
-          </Text>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.sectionHeader}>
-            🎓 Project & Emergency Notice
-          </Text>
-          <Text style={styles.bodyText}>
-            SAFORA is an academic / beta college project. It provides companion
-            and escort assistance but is{' '}
-            <Text style={styles.bold}>not a replacement for calling 112</Text>.
-            In an immediate life-threatening emergency, always dial 112
-            directly.
-          </Text>
-          <Text style={[styles.bodyText, { marginTop: 8 }]}>
-            Contact / Inquiries:{' '}
-            <Text style={{ color: colors.accent }}>support@safora.app</Text>
-          </Text>
-        </View>
-
-        {/* Age & Guardian Section (AGE-lite) */}
-        <View style={styles.card}>
-          <Text style={styles.sectionHeader}>
-            👤 Your Age & Guardian Notice
-          </Text>
-          <Text style={styles.label}>Please confirm your age:</Text>
-          <TextInput
-            style={styles.input}
-            value={ageText}
-            onChangeText={setAgeText}
-            placeholder="e.g. 20"
-            placeholderTextColor="#64748B"
-            keyboardType="numeric"
-            maxLength={3}
-          />
-
-          {isUnder18 && (
-            <View style={styles.under18Banner}>
-              <Text style={styles.under18Text}>
-                ⚠️ If you're under 18, please make sure a parent or guardian
-                knows you're using SAFORA.
-              </Text>
-            </View>
-          )}
-
-          {/* Guardian / Age Acknowledgment Checkbox */}
-          <TouchableOpacity
-            style={styles.checkboxRow}
             activeOpacity={0.7}
-            onPress={() => setGuardianAck(!guardianAck)}
           >
-            <View
-              style={[styles.checkbox, guardianAck && styles.checkboxActive]}
+            <Feather
+              name="arrow-left"
+              size={16}
+              color={isDark ? '#C3C1FF' : colors.primaryDark}
+            />
+            <Text
+              style={[
+                styles.stepBackText,
+                { color: isDark ? '#C3C1FF' : colors.primaryDark },
+              ]}
             >
-              {guardianAck && <Text style={styles.checkmark}>✓</Text>}
-            </View>
-            <Text style={styles.checkboxLabel}>
-              I confirm my age and that a guardian is informed of my use of
-              SAFORA (if under 18).
+              Back
             </Text>
           </TouchableOpacity>
-
-          {/* Terms Agreement Checkbox */}
-          <TouchableOpacity
-            style={styles.checkboxRow}
-            activeOpacity={0.7}
-            onPress={() => setTermsAccepted(!termsAccepted)}
-          >
-            <View
-              style={[styles.checkbox, termsAccepted && styles.checkboxActive]}
-            >
-              {termsAccepted && <Text style={styles.checkmark}>✓</Text>}
-            </View>
-            <Text style={styles.checkboxLabel}>
-              I have read and agree to the Safety Terms & Privacy Policy.
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {errorMsg && (
-          <View style={styles.errorBox}>
-            <Text style={styles.errorText}>⚠️ {errorMsg}</Text>
-          </View>
+        ) : (
+          <View style={styles.topEmptySlot} />
         )}
 
-        {/* Submit Button */}
-        <TouchableOpacity
-          style={[
-            styles.submitButton,
-            isLoading && styles.submitButtonDisabled,
-          ]}
-          onPress={handleSubmit}
-          disabled={isLoading}
-          activeOpacity={0.8}
-        >
-          {isLoading ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={styles.submitButtonText}>Accept & Continue →</Text>
-          )}
-        </TouchableOpacity>
+        {(!isExistingUser || viewingFullTerms) && (
+          <View
+            style={[
+              styles.stepBadge,
+              {
+                backgroundColor: isDark
+                  ? 'rgba(139, 137, 255, 0.18)'
+                  : '#ECE9FA',
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.stepBadgeText,
+                { color: isDark ? '#C3C1FF' : colors.primaryDark },
+              ]}
+            >
+              {viewingFullTerms ? 'Policy detail' : `Step ${currentStep} of 2`}
+            </Text>
+          </View>
+        )}
+      </View>
+
+      <ScrollView
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: Math.max(insets.bottom, 24) + 24 },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        {isExistingUser && !viewingFullTerms ? (
+          /* ============================================================== */
+          /* SCREEN 64: Privacy and terms Hub                              */
+          /* ============================================================== */
+          <View style={styles.hubContainer}>
+            {/* Header Titles */}
+            <View style={styles.hubHeader}>
+              <Text
+                style={[styles.hubScreenTitle, { color: colors.textPrimary }]}
+              >
+                Privacy and terms
+              </Text>
+              <Text
+                style={[
+                  styles.hubScreenSubtitle,
+                  { color: isDark ? '#A3A7C8' : colors.textSecondary },
+                ]}
+              >
+                How SAFORA protects you
+              </Text>
+            </View>
+
+            {/* Hub Cards Group */}
+            <View style={styles.hubGroup}>
+              {/* Item 1: Safety terms and privacy policy */}
+              <GlassCard
+                variant="card"
+                style={styles.hubCard}
+                onPress={() => setViewingFullTerms(true)}
+              >
+                <View style={styles.hubRow}>
+                  <View
+                    style={[
+                      styles.hubIconSlot,
+                      {
+                        backgroundColor: isDark
+                          ? 'rgba(139, 137, 255, 0.16)'
+                          : '#ECE9FA',
+                      },
+                    ]}
+                  >
+                    <Feather
+                      name="file-text"
+                      size={18}
+                      color={isDark ? '#C3C1FF' : colors.primaryDark}
+                    />
+                  </View>
+                  <View style={styles.hubTextSlot}>
+                    <Text
+                      style={[
+                        styles.hubItemTitle,
+                        { color: colors.textPrimary },
+                      ]}
+                    >
+                      Safety terms and privacy policy
+                    </Text>
+                    <Text
+                      style={[
+                        styles.hubItemSub,
+                        { color: isDark ? '#A3A7C8' : colors.textSecondary },
+                      ]}
+                    >
+                      Signed{' '}
+                      {formatConsentDate(
+                        user?.terms_accepted_at || user?.termsAcceptedAt,
+                      )}
+                    </Text>
+                  </View>
+                  <Feather
+                    name="chevron-right"
+                    size={18}
+                    color={isDark ? '#8F94BA' : colors.textMuted}
+                  />
+                </View>
+              </GlassCard>
+
+              {/* Item 2: Sharing and evidence */}
+              <GlassCard
+                variant="card"
+                style={styles.hubCard}
+                onPress={() => {
+                  Alert.alert(
+                    '🎙️ Sharing and Evidence Policy',
+                    '30-second ambient audio is captured ONLY when you trigger an emergency SOS. It is encrypted and shared exclusively with your designated guardians and authorized first responders. SAFORA never listens or records in the background.',
+                  );
+                }}
+              >
+                <View style={styles.hubRow}>
+                  <View
+                    style={[
+                      styles.hubIconSlot,
+                      {
+                        backgroundColor: isDark
+                          ? 'rgba(139, 137, 255, 0.16)'
+                          : '#ECE9FA',
+                      },
+                    ]}
+                  >
+                    <Feather
+                      name="mic"
+                      size={18}
+                      color={isDark ? '#C3C1FF' : colors.primaryDark}
+                    />
+                  </View>
+                  <View style={styles.hubTextSlot}>
+                    <Text
+                      style={[
+                        styles.hubItemTitle,
+                        { color: colors.textPrimary },
+                      ]}
+                    >
+                      Sharing and evidence
+                    </Text>
+                    <Text
+                      style={[
+                        styles.hubItemSub,
+                        { color: isDark ? '#A3A7C8' : colors.textSecondary },
+                      ]}
+                    >
+                      Who can hear your SOS audio
+                    </Text>
+                  </View>
+                  <Feather
+                    name="chevron-right"
+                    size={18}
+                    color={isDark ? '#8F94BA' : colors.textMuted}
+                  />
+                </View>
+              </GlassCard>
+
+              {/* Item 3: Who sees your location */}
+              <GlassCard
+                variant="card"
+                style={styles.hubCard}
+                onPress={() => {
+                  Alert.alert(
+                    '📍 Live Location Privacy',
+                    'Your live location is shared ONLY during an active Safe Walk session or when an SOS is dispatched. When your walk ends or SOS disarms, live location transmission ceases immediately. We never sell or share your location history.',
+                  );
+                }}
+              >
+                <View style={styles.hubRow}>
+                  <View
+                    style={[
+                      styles.hubIconSlot,
+                      {
+                        backgroundColor: isDark
+                          ? 'rgba(139, 137, 255, 0.16)'
+                          : '#ECE9FA',
+                      },
+                    ]}
+                  >
+                    <Feather
+                      name="users"
+                      size={18}
+                      color={isDark ? '#C3C1FF' : colors.primaryDark}
+                    />
+                  </View>
+                  <View style={styles.hubTextSlot}>
+                    <Text
+                      style={[
+                        styles.hubItemTitle,
+                        { color: colors.textPrimary },
+                      ]}
+                    >
+                      Who sees your location
+                    </Text>
+                    <Text
+                      style={[
+                        styles.hubItemSub,
+                        { color: isDark ? '#A3A7C8' : colors.textSecondary },
+                      ]}
+                    >
+                      Guardians during a shared walk or SOS only
+                    </Text>
+                  </View>
+                  <Feather
+                    name="chevron-right"
+                    size={18}
+                    color={isDark ? '#8F94BA' : colors.textMuted}
+                  />
+                </View>
+              </GlassCard>
+
+              {/* Item 4: Export my data */}
+              <GlassCard
+                variant="card"
+                style={styles.hubCard}
+                onPress={() => {
+                  Alert.alert(
+                    '📥 Export Data Archive',
+                    `We will prepare a copy of your personal data, guardian list, and safety history and send it to ${user?.email || 'your registered email'}.`,
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      {
+                        text: 'Request Archive',
+                        onPress: () =>
+                          Alert.alert(
+                            'Request Received',
+                            'Your data archive will be emailed within 24 hours.',
+                          ),
+                      },
+                    ],
+                  );
+                }}
+              >
+                <View style={styles.hubRow}>
+                  <View
+                    style={[
+                      styles.hubIconSlot,
+                      {
+                        backgroundColor: isDark
+                          ? 'rgba(139, 137, 255, 0.16)'
+                          : '#ECE9FA',
+                      },
+                    ]}
+                  >
+                    <Feather
+                      name="download"
+                      size={18}
+                      color={isDark ? '#C3C1FF' : colors.primaryDark}
+                    />
+                  </View>
+                  <View style={styles.hubTextSlot}>
+                    <Text
+                      style={[
+                        styles.hubItemTitle,
+                        { color: colors.textPrimary },
+                      ]}
+                    >
+                      Export my data
+                    </Text>
+                    <Text
+                      style={[
+                        styles.hubItemSub,
+                        { color: isDark ? '#A3A7C8' : colors.textSecondary },
+                      ]}
+                    >
+                      Get a copy of your information
+                    </Text>
+                  </View>
+                  <Feather
+                    name="chevron-right"
+                    size={18}
+                    color={isDark ? '#8F94BA' : colors.textMuted}
+                  />
+                </View>
+              </GlassCard>
+
+              {/* Item 5: Delete my account */}
+              <GlassCard
+                variant="card"
+                style={styles.hubCard}
+                onPress={() => {
+                  Alert.alert(
+                    '⚠️ Delete Account',
+                    'Permanently remove your Safora account, trusted guardians, and all history? This action is immediate and cannot be undone.',
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      {
+                        text: 'Delete Permanently',
+                        style: 'destructive',
+                        onPress: () =>
+                          Alert.alert(
+                            'Notice',
+                            'Please contact support@safora.app to finalize complete data removal under GDPR/DPDP.',
+                          ),
+                      },
+                    ],
+                  );
+                }}
+              >
+                <View style={styles.hubRow}>
+                  <View
+                    style={[
+                      styles.hubIconSlot,
+                      { backgroundColor: 'rgba(239, 68, 68, 0.12)' },
+                    ]}
+                  >
+                    <Feather name="trash-2" size={18} color="#EF4444" />
+                  </View>
+                  <View style={styles.hubTextSlot}>
+                    <Text style={[styles.hubItemTitle, { color: '#EF4444' }]}>
+                      Delete my account
+                    </Text>
+                    <Text
+                      style={[
+                        styles.hubItemSub,
+                        { color: isDark ? '#A3A7C8' : colors.textSecondary },
+                      ]}
+                    >
+                      Remove your account and data
+                    </Text>
+                  </View>
+                  <Feather
+                    name="chevron-right"
+                    size={18}
+                    color={isDark ? '#8F94BA' : colors.textMuted}
+                  />
+                </View>
+              </GlassCard>
+            </View>
+
+            {/* Audio Policy Banner */}
+            <View
+              style={[
+                styles.audioNoticeBox,
+                {
+                  backgroundColor: isDark
+                    ? 'rgba(255, 255, 255, 0.04)'
+                    : '#F1F5F9',
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.audioNoticeText,
+                  { color: isDark ? '#A3A7C8' : colors.textSecondary },
+                ]}
+              >
+                Audio is captured only during an SOS and is shared only with
+                your emergency contacts and authorized response staff.
+              </Text>
+            </View>
+
+            {/* Your Consent Card */}
+            <GlassCard variant="card" style={styles.consentCard}>
+              <Text
+                style={[styles.consentCardTitle, { color: colors.textPrimary }]}
+              >
+                Your consent
+              </Text>
+              <View style={styles.consentRow}>
+                <View style={styles.emeraldCheckSlot}>
+                  <Feather name="check" size={14} color="#10B981" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={[
+                      styles.consentItemTitle,
+                      { color: colors.textPrimary },
+                    ]}
+                  >
+                    Terms accepted
+                  </Text>
+                  <Text
+                    style={[
+                      styles.consentItemSub,
+                      { color: isDark ? '#A3A7C8' : colors.textSecondary },
+                    ]}
+                  >
+                    {formatConsentDate(
+                      user?.terms_accepted_at || user?.termsAcceptedAt,
+                    )}
+                  </Text>
+                </View>
+              </View>
+
+              <View
+                style={[
+                  styles.consentDivider,
+                  {
+                    backgroundColor: isDark
+                      ? 'rgba(255, 255, 255, 0.08)'
+                      : 'rgba(0, 0, 0, 0.06)',
+                  },
+                ]}
+              />
+
+              <View style={styles.consentRow}>
+                <View style={styles.emeraldCheckSlot}>
+                  <Feather name="check" size={14} color="#10B981" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={[
+                      styles.consentItemTitle,
+                      { color: colors.textPrimary },
+                    ]}
+                  >
+                    Age confirmed
+                  </Text>
+                  <Text
+                    style={[
+                      styles.consentItemSub,
+                      { color: isDark ? '#A3A7C8' : colors.textSecondary },
+                    ]}
+                  >
+                    {user?.age ? `${user.age} years` : '21 years'}
+                  </Text>
+                </View>
+              </View>
+            </GlassCard>
+
+            {/* Questions Support Card */}
+            <GlassCard
+              variant="card"
+              style={styles.supportCard}
+              onPress={() =>
+                Linking.openURL('mailto:support@safora.app').catch(() => {})
+              }
+            >
+              <View style={styles.supportRow}>
+                <View
+                  style={[
+                    styles.hubIconSlot,
+                    {
+                      backgroundColor: isDark
+                        ? 'rgba(139, 137, 255, 0.16)'
+                        : '#ECE9FA',
+                    },
+                  ]}
+                >
+                  <Feather
+                    name="message-square"
+                    size={18}
+                    color={isDark ? '#C3C1FF' : colors.primaryDark}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={[styles.supportTitle, { color: colors.textPrimary }]}
+                  >
+                    Questions about your data?
+                  </Text>
+                  <Text
+                    style={[
+                      styles.supportSub,
+                      { color: isDark ? '#B4B2FF' : colors.primary },
+                    ]}
+                  >
+                    support@safora.app
+                  </Text>
+                </View>
+              </View>
+            </GlassCard>
+
+            {/* Footer */}
+            <Text
+              style={[
+                styles.footerText,
+                { color: isDark ? '#6B7280' : colors.textMuted },
+              ]}
+            >
+              SAFORA · Version 2.0
+            </Text>
+          </View>
+        ) : currentStep === 1 || viewingFullTerms ? (
+          /* ============================================================== */
+          /* SCREEN 10: Safety terms (1/2) · first sign-up only             */
+          /* ============================================================== */
+          <View>
+            {/* Center Shield Icon */}
+            <View style={styles.centerIconWrapper}>
+              <View
+                style={[
+                  styles.centerIconBox,
+                  { backgroundColor: colors.primaryDark },
+                ]}
+              >
+                <Feather name="shield" size={28} color="#FFFFFF" />
+              </View>
+              <Text style={[styles.screenTitle, { color: colors.textPrimary }]}>
+                Safety terms and privacy
+              </Text>
+              <Text
+                style={[
+                  styles.screenSubtitle,
+                  { color: isDark ? '#A3A7C8' : colors.textSecondary },
+                ]}
+              >
+                Review how SAFORA protects you and handles data.
+              </Text>
+            </View>
+
+            {/* Card 1: What we collect */}
+            <GlassCard variant="card" style={styles.sectionCard}>
+              <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
+                What we collect
+              </Text>
+              <View style={styles.termsBodyTextWrap}>
+                <Text
+                  style={[styles.bulletTitle, { color: colors.textPrimary }]}
+                >
+                  Live location:{' '}
+                  <Text
+                    style={[
+                      styles.bulletBody,
+                      { color: isDark ? '#C9CDE4' : colors.textSecondary },
+                    ]}
+                  >
+                    collected only during an active Safe Walk or when you press
+                    SOS, to watch route safety and alert guardians. Never
+                    passively.
+                  </Text>
+                </Text>
+
+                <Text
+                  style={[
+                    styles.bulletTitle,
+                    { color: colors.textPrimary, marginTop: 8 },
+                  ]}
+                >
+                  Community reports:{' '}
+                  <Text
+                    style={[
+                      styles.bulletBody,
+                      { color: isDark ? '#C9CDE4' : colors.textSecondary },
+                    ]}
+                  >
+                    hazard reports, categories and photos you choose to submit.
+                    Public reports never show your identity.
+                  </Text>
+                </Text>
+
+                <Text
+                  style={[
+                    styles.bulletTitle,
+                    { color: colors.textPrimary, marginTop: 8 },
+                  ]}
+                >
+                  Emergency audio:{' '}
+                  <Text
+                    style={[
+                      styles.bulletBody,
+                      { color: isDark ? '#C9CDE4' : colors.textSecondary },
+                    ]}
+                  >
+                    optional 30-second audio captured only when SOS is
+                    triggered.
+                  </Text>
+                </Text>
+              </View>
+            </GlassCard>
+
+            {/* Card 2: Why we collect it */}
+            <GlassCard variant="card" style={styles.sectionCard}>
+              <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
+                Why we collect it
+              </Text>
+              <Text
+                style={[
+                  styles.bulletBody,
+                  {
+                    color: isDark ? '#C9CDE4' : colors.textSecondary,
+                    marginTop: 4,
+                  },
+                ]}
+              >
+                To calculate route deviation warnings, send alerts to your
+                trusted contacts and power the community safety index.
+              </Text>
+            </GlassCard>
+
+            {/* Card 3: Emergency SOS and guardian protocol */}
+            <GlassCard variant="card" style={styles.sectionCard}>
+              <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
+                Emergency SOS and guardian protocol
+              </Text>
+              <View style={styles.termsBodyTextWrap}>
+                <Text
+                  style={[styles.bulletTitle, { color: colors.textPrimary }]}
+                >
+                  Designated guardians:{' '}
+                  <Text
+                    style={[
+                      styles.bulletBody,
+                      { color: isDark ? '#C9CDE4' : colors.textSecondary },
+                    ]}
+                  >
+                    when you trigger SOS, emergency SMS with your live location
+                    goes straight to your trusted contacts.
+                  </Text>
+                </Text>
+
+                <Text
+                  style={[
+                    styles.bulletTitle,
+                    { color: colors.textPrimary, marginTop: 8 },
+                  ]}
+                >
+                  If no contacts are set:{' '}
+                  <Text
+                    style={[
+                      styles.bulletBody,
+                      { color: isDark ? '#C9CDE4' : colors.textSecondary },
+                    ]}
+                  >
+                    SOS alerts go to central emergency dispatch and 112. We
+                    recommend adding at least one guardian.
+                  </Text>
+                </Text>
+              </View>
+            </GlassCard>
+
+            {/* Next or Back Button */}
+            {viewingFullTerms ? (
+              <GlassButton
+                title="← Back to Privacy & Terms"
+                variant="secondary"
+                size="lg"
+                onPress={() => setViewingFullTerms(false)}
+                style={styles.stepButton}
+              />
+            ) : (
+              <GlassButton
+                title="Continue to age & guardian notice →"
+                variant="primary"
+                size="lg"
+                onPress={handleStep1Continue}
+                style={styles.stepButton}
+              />
+            )}
+          </View>
+        ) : (
+          /* ============================================================== */
+          /* SCREEN 11: Safety terms (2/2) · age and accept                 */
+          /* ============================================================== */
+          <View>
+            {/* Card 1: Project and emergency notice */}
+            <GlassCard variant="card" style={styles.sectionCard}>
+              <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
+                Project and emergency notice
+              </Text>
+              <Text
+                style={[
+                  styles.bulletBody,
+                  {
+                    color: isDark ? '#C9CDE4' : colors.textSecondary,
+                    marginTop: 4,
+                    lineHeight: 18,
+                  },
+                ]}
+              >
+                SAFORA is an academic / beta college project. It gives companion
+                and escort help but{' '}
+                <Text style={{ fontWeight: '800', color: colors.textPrimary }}>
+                  is not a replacement for calling 112
+                </Text>
+                . In a life-threatening emergency, dial 112 directly.{'\n'}
+                Contact: support@safora.app
+              </Text>
+            </GlassCard>
+
+            {/* Card 2: Your age and guardian notice */}
+            <GlassCard variant="card" style={styles.sectionCard}>
+              <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
+                Your age and guardian notice
+              </Text>
+              <Text
+                style={[
+                  styles.fieldLabel,
+                  { color: isDark ? '#C9CDE4' : colors.textSecondary },
+                ]}
+              >
+                Please confirm your age
+              </Text>
+
+              {/* Age Numeric Field */}
+              <View
+                style={[
+                  styles.ageInputBox,
+                  {
+                    backgroundColor: isDark
+                      ? 'rgba(20, 24, 44, 0.72)'
+                      : '#ECE9FA',
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <TextInput
+                  value={ageText}
+                  onChangeText={setAgeText}
+                  keyboardType="number-pad"
+                  maxLength={3}
+                  placeholder="e.g. 21"
+                  placeholderTextColor={isDark ? '#8387AB' : '#94A3B8'}
+                  style={[styles.ageTextInput, { color: colors.textPrimary }]}
+                />
+              </View>
+
+              {/* Checkbox 1: Age & Guardian */}
+              <TouchableOpacity
+                style={styles.checkboxRow}
+                onPress={() => setGuardianAck(!guardianAck)}
+                activeOpacity={0.8}
+              >
+                <View
+                  style={[
+                    styles.checkboxSquare,
+                    guardianAck
+                      ? {
+                          backgroundColor: colors.primaryDark,
+                          borderColor: colors.primaryDark,
+                        }
+                      : {
+                          borderColor: colors.border,
+                          backgroundColor: 'transparent',
+                        },
+                  ]}
+                >
+                  {guardianAck && (
+                    <Feather name="check" size={14} color="#FFFFFF" />
+                  )}
+                </View>
+                <Text
+                  style={[
+                    styles.checkboxLabel,
+                    { color: isDark ? '#D5D9EC' : colors.textPrimary },
+                  ]}
+                >
+                  I confirm my age and that a guardian is informed of my use of
+                  SAFORA (if under 18).
+                </Text>
+              </TouchableOpacity>
+
+              {/* Checkbox 2: Safety Terms Agreement */}
+              <TouchableOpacity
+                style={styles.checkboxRow}
+                onPress={() => setTermsAccepted(!termsAccepted)}
+                activeOpacity={0.8}
+              >
+                <View
+                  style={[
+                    styles.checkboxSquare,
+                    termsAccepted
+                      ? {
+                          backgroundColor: colors.primaryDark,
+                          borderColor: colors.primaryDark,
+                        }
+                      : {
+                          borderColor: colors.border,
+                          backgroundColor: 'transparent',
+                        },
+                  ]}
+                >
+                  {termsAccepted && (
+                    <Feather name="check" size={14} color="#FFFFFF" />
+                  )}
+                </View>
+                <Text
+                  style={[
+                    styles.checkboxLabel,
+                    { color: isDark ? '#D5D9EC' : colors.textPrimary },
+                  ]}
+                >
+                  I have read and agree to the Safety Terms and Privacy Policy.
+                </Text>
+              </TouchableOpacity>
+            </GlassCard>
+
+            {/* Error Message */}
+            {errorMsg && (
+              <View style={styles.errorBanner}>
+                <Feather name="alert-circle" size={16} color="#FF8FA0" />
+                <Text style={styles.errorText}>{errorMsg}</Text>
+              </View>
+            )}
+
+            {/* Accept Button */}
+            <GlassButton
+              title="Accept and continue →"
+              variant="primary"
+              size="lg"
+              loading={isLoading}
+              onPress={handleStep2Submit}
+              style={styles.stepButton}
+            />
+          </View>
+        )}
       </ScrollView>
+
+      {/* Screen 12: Emergency Audio Consent Modal */}
+      <MicrophoneConsentModal
+        visible={showMicModal}
+        onConsent={handleMicConsent}
+        onDecline={handleMicDecline}
+      />
+
+      {/* Screen 13: Location Permission Modal */}
+      <LocationConsentModal
+        visible={showLocationModal}
+        onAllowWhileUsing={handleLocationAllow}
+        onAllowOnce={handleLocationAllow}
+        onDeny={handleLocationDeny}
+      />
+
+      {/* Screen 14: Notification Permission Modal */}
+      <NotificationConsentModal
+        visible={showNotificationModal}
+        onAllow={handleNotificationAllow}
+        onDeny={handleNotificationDeny}
+      />
     </View>
   );
 };
@@ -296,193 +1101,260 @@ export const TermsScreen: React.FC<TermsScreenProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#070A11',
   },
   topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 4,
+    paddingBottom: 10,
   },
-  backBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    backgroundColor: '#1E293B',
-  },
-  backBtnText: {
-    color: '#94A3B8',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  skipTopBtn: {
+  stepBackButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     paddingVertical: 6,
     paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-  },
-  skipTopBtnText: {
-    color: '#94A3B8',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  firstTimeBadge: {
-    backgroundColor: 'rgba(56, 189, 248, 0.12)',
-    borderColor: '#38BDF8',
+    borderRadius: 14,
     borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
   },
-  firstTimeBadgeText: {
-    color: '#BAE6FD',
+  stepBackText: {
     fontSize: 13,
-    fontWeight: '600',
-    textAlign: 'center',
+    fontWeight: '700',
+  },
+  topEmptySlot: {
+    width: 60,
+  },
+  stepBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 10,
+  },
+  stepBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.6,
   },
   scrollContent: {
-    padding: 20,
-    paddingBottom: 40,
+    paddingHorizontal: 20,
+    paddingTop: 8,
   },
-  header: {
+  centerIconWrapper: {
     alignItems: 'center',
-    marginBottom: 20,
-    marginTop: 10,
+    marginTop: 4,
+    marginBottom: 16,
   },
-  shieldEmoji: {
-    fontSize: 40,
+  centerIconBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 10,
   },
-  title: {
-    fontSize: 22,
+  screenTitle: {
+    fontSize: 24,
     fontWeight: '800',
-    color: '#F8FAFC',
     textAlign: 'center',
-    marginBottom: 6,
+    letterSpacing: -0.4,
+    marginBottom: 4,
   },
-  subtitle: {
+  screenSubtitle: {
     fontSize: 13,
-    color: '#94A3B8',
+    fontWeight: '500',
     textAlign: 'center',
-    lineHeight: 18,
   },
-  card: {
-    backgroundColor: '#0D111D',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#1E293B',
+  sectionCard: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 12,
   },
-  sectionHeader: {
+  cardTitle: {
     fontSize: 15,
-    fontWeight: '700',
-    color: '#F8FAFC',
-    marginBottom: 8,
-  },
-  bodyText: {
-    fontSize: 12.5,
-    color: '#CBD5E1',
-    lineHeight: 18,
+    fontWeight: '800',
+    letterSpacing: -0.2,
     marginBottom: 6,
   },
-  bold: {
+  termsBodyTextWrap: {
+    marginTop: 2,
+  },
+  bulletTitle: {
+    fontSize: 12.5,
     fontWeight: '700',
-    color: '#F8FAFC',
+    lineHeight: 18,
   },
-  label: {
-    fontSize: 13,
+  bulletBody: {
+    fontWeight: '400',
+    lineHeight: 18,
+  },
+  fieldLabel: {
+    fontSize: 12.5,
     fontWeight: '600',
-    color: '#E2E8F0',
-    marginBottom: 8,
-    marginTop: 4,
+    marginTop: 6,
+    marginBottom: 6,
   },
-  input: {
-    backgroundColor: '#131A2A',
+  ageInputBox: {
+    height: 46,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#334155',
-    color: '#F8FAFC',
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  ageTextInput: {
     fontSize: 16,
-    marginBottom: 12,
-  },
-  under18Banner: {
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-    borderWidth: 1,
-    borderColor: '#F59E0B',
-    borderRadius: 10,
-    padding: 10,
-    marginBottom: 12,
-  },
-  under18Text: {
-    color: '#FDE68A',
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '600',
+    fontWeight: '700',
+    paddingVertical: 0,
   },
   checkboxRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+    gap: 12,
     marginTop: 10,
   },
-  checkbox: {
+  checkboxSquare: {
     width: 22,
     height: 22,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: '#475569',
+    borderRadius: 7,
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
     marginTop: 2,
-  },
-  checkboxActive: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
-  },
-  checkmark: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '800',
   },
   checkboxLabel: {
     flex: 1,
-    color: '#CBD5E1',
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: 12.5,
+    lineHeight: 18,
+    fontWeight: '500',
   },
-  errorBox: {
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(240, 90, 110, 0.16)',
     borderWidth: 1,
-    borderColor: '#EF4444',
+    borderColor: 'rgba(240, 90, 110, 0.4)',
     borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginVertical: 12,
   },
   errorText: {
-    color: '#FCA5A5',
-    fontSize: 13,
+    color: '#FF8FA0',
+    fontSize: 12.5,
     fontWeight: '600',
-    textAlign: 'center',
+    flex: 1,
   },
-  submitButton: {
-    backgroundColor: colors.accent,
+  stepButton: {
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  hubContainer: {
+    gap: 16,
+  },
+  hubHeader: {
+    marginBottom: 4,
+  },
+  hubScreenTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+  hubScreenSubtitle: {
+    fontSize: 13,
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  hubGroup: {
+    gap: 10,
+  },
+  hubCard: {
+    padding: 14,
+  },
+  hubRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  hubIconSlot: {
+    width: 40,
+    height: 40,
     borderRadius: 14,
-    paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 8,
   },
-  submitButtonDisabled: {
-    opacity: 0.6,
+  hubTextSlot: {
+    flex: 1,
   },
-  submitButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
+  hubItemTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  hubItemSub: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  audioNoticeBox: {
+    padding: 14,
+    borderRadius: 14,
+  },
+  audioNoticeText: {
+    fontSize: 11.5,
+    lineHeight: 16,
+  },
+  consentCard: {
+    padding: 16,
+    gap: 12,
+  },
+  consentCardTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  consentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  emeraldCheckSlot: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  consentItemTitle: {
+    fontSize: 13,
     fontWeight: '700',
+  },
+  consentItemSub: {
+    fontSize: 11,
+    marginTop: 1,
+  },
+  consentDivider: {
+    height: 1,
+  },
+  supportCard: {
+    padding: 14,
+  },
+  supportRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  supportTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  supportSub: {
+    fontSize: 12,
+    fontWeight: '800',
+    marginTop: 2,
+  },
+  footerText: {
+    textAlign: 'center',
+    fontSize: 11,
+    marginTop: 8,
   },
 });

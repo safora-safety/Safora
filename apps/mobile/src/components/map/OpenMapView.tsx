@@ -14,6 +14,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import WebView from 'react-native-webview';
+import Feather from 'react-native-vector-icons/Feather';
 
 export type MapLayerType = 'default' | 'tactical' | 'satellite' | 'street';
 
@@ -856,15 +857,7 @@ export const OpenMapView = forwardRef<OpenMapViewRef, OpenMapViewProps>(
                     onPress={() => setIsLayerMenuOpen(false)}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
-                    <Text
-                      style={{
-                        color: '#94A3B8',
-                        fontSize: 13,
-                        fontWeight: '700',
-                      }}
-                    >
-                      ✕
-                    </Text>
+                    <Feather name="x" size={13} color="#94A3B8" />
                   </TouchableOpacity>
                 </View>
 
@@ -879,7 +872,12 @@ export const OpenMapView = forwardRef<OpenMapViewRef, OpenMapViewProps>(
                   }}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.layerOptionIcon}>⚡</Text>
+                  <Feather
+                    name="moon"
+                    size={13}
+                    color={activeLayer === 'default' ? '#38BDF8' : '#94A3B8'}
+                    style={{ marginRight: 6 }}
+                  />
                   <Text
                     style={[
                       styles.layerOptionText,
@@ -901,7 +899,12 @@ export const OpenMapView = forwardRef<OpenMapViewRef, OpenMapViewProps>(
                   }}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.layerOptionIcon}>🛡️</Text>
+                  <Feather
+                    name="shield"
+                    size={13}
+                    color={activeLayer === 'tactical' ? '#38BDF8' : '#94A3B8'}
+                    style={{ marginRight: 6 }}
+                  />
                   <Text
                     style={[
                       styles.layerOptionText,
@@ -924,7 +927,12 @@ export const OpenMapView = forwardRef<OpenMapViewRef, OpenMapViewProps>(
                   }}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.layerOptionIcon}>🛰️</Text>
+                  <Feather
+                    name="globe"
+                    size={13}
+                    color={activeLayer === 'satellite' ? '#38BDF8' : '#94A3B8'}
+                    style={{ marginRight: 6 }}
+                  />
                   <Text
                     style={[
                       styles.layerOptionText,
@@ -947,7 +955,12 @@ export const OpenMapView = forwardRef<OpenMapViewRef, OpenMapViewProps>(
                   }}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.layerOptionIcon}>🛣️</Text>
+                  <Feather
+                    name="map"
+                    size={13}
+                    color={activeLayer === 'street' ? '#38BDF8' : '#94A3B8'}
+                    style={{ marginRight: 6 }}
+                  />
                   <Text
                     style={[
                       styles.layerOptionText,
@@ -964,15 +977,12 @@ export const OpenMapView = forwardRef<OpenMapViewRef, OpenMapViewProps>(
                 onPress={() => setIsLayerMenuOpen(true)}
                 activeOpacity={0.85}
               >
-                <Text style={styles.layerFabIcon}>
-                  {activeLayer === 'satellite'
-                    ? '🛰️'
-                    : activeLayer === 'street'
-                      ? '🛣️'
-                      : activeLayer === 'tactical'
-                        ? '🛡️'
-                        : '⚡'}
-                </Text>
+                <Feather
+                  name="layers"
+                  size={14}
+                  color="#38BDF8"
+                  style={{ marginRight: 5 }}
+                />
                 <Text style={styles.layerFabLabel}>
                   {activeLayer === 'satellite'
                     ? 'Satellite'

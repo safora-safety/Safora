@@ -9,21 +9,27 @@ import {
   Vibration,
   StatusBar,
   Platform,
+  Linking,
 } from 'react-native';
 import { typography } from '../../theme/typography';
+import Feather from 'react-native-vector-icons/Feather';
 
 export interface SosGracePeriodOverlayProps {
   visible: boolean;
   countdown: number;
+  guardianNames?: string;
   onCancel: () => void;
   onTriggerImmediately?: () => void;
+  onCall112?: () => void;
 }
 
 export const SosGracePeriodOverlay: React.FC<SosGracePeriodOverlayProps> = ({
   visible,
   countdown,
+  guardianNames,
   onCancel,
   onTriggerImmediately,
+  onCall112,
 }) => {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const rippleAnim = useRef(new Animated.Value(0)).current;
@@ -79,18 +85,19 @@ export const SosGracePeriodOverlay: React.FC<SosGracePeriodOverlayProps> = ({
         <View style={styles.vignetteOverlay} />
 
         <View style={styles.contentContainer}>
-          {/* Header Badge */}
+          {/* Header Badge (Screen 36) */}
           <View style={styles.alertHeaderBadge}>
             <View style={styles.beaconDot} />
             <Text style={styles.alertHeaderBadgeText}>
-              EMERGENCY SOS INITIATED
+              Emergency SOS · SOS triggered · Ready to send
             </Text>
           </View>
 
-          <Text style={styles.titleText}>Grace Period Active</Text>
+          <Text style={styles.titleText}>
+            Sending an SOS in {countdown} seconds.
+          </Text>
           <Text style={styles.subtitleText}>
-            Broadcasting live GPS coordinates, ambient microphone audio stream,
-            and alerting your emergency contacts in...
+            Your emergency contacts will be alerted when this countdown ends.
           </Text>
 
           {/* Central Pulsating Radar Ring with Tabular Countdown */}
@@ -119,48 +126,74 @@ export const SosGracePeriodOverlay: React.FC<SosGracePeriodOverlayProps> = ({
               <Text style={[styles.countdownNumber, typography.tabularNums]}>
                 {countdown}
               </Text>
-              <Text style={styles.secondsLabel}>SECONDS</Text>
+              <Text style={styles.secondsLabel}>Cancel to abort</Text>
             </Animated.View>
           </View>
 
-          <Text style={styles.cancelHintText}>
-            Accidental trigger? Tap the massive button below immediately to
-            safely abort.
-          </Text>
+          {/* Screen 36 Information Badges */}
+          <View style={styles.infoCapsulesBox}>
+            <View style={styles.infoCapsuleRow}>
+              <Feather
+                name="map-pin"
+                size={14}
+                color="#10B981"
+                style={{ marginRight: 8 }}
+              />
+              <Text style={styles.infoCapsuleText}>
+                Location to {guardianNames || 'your trusted guardians'}
+              </Text>
+            </View>
 
-          {/* Massive 80dp Gross-Motor Cancel Button (Adrenaline/Tremor Proof) */}
+            <View style={styles.infoCapsuleRow}>
+              <Feather
+                name="mic"
+                size={14}
+                color="#38BDF8"
+                style={{ marginRight: 8 }}
+              />
+              <Text style={styles.infoCapsuleText}>
+                30-second emergency audio recording
+              </Text>
+            </View>
+          </View>
+
+          {/* Bottom Action Section (Screen 36) */}
           <View style={styles.actionSection}>
             <TouchableOpacity
-              style={styles.grossMotorCancelButton}
-              activeOpacity={0.85}
+              style={styles.cancelButton}
+              activeOpacity={0.8}
               onPress={onCancel}
               accessibilityRole="button"
               accessibilityLabel="Cancel SOS, I am safe"
-              accessibilityHint="Immediately aborts the emergency broadcast"
             >
-              <Text style={styles.cancelButtonIcon}>🛡️</Text>
-              <View style={styles.cancelButtonTextCol}>
-                <Text style={styles.cancelButtonMainText}>
-                  CANCEL SOS (I AM SAFE)
-                </Text>
-                <Text style={styles.cancelButtonSubText}>
-                  Tap anywhere here to safely abort
-                </Text>
-              </View>
+              <Text style={styles.cancelButtonText}>
+                Cancel SOS · I do not need help
+              </Text>
             </TouchableOpacity>
 
-            {/* Instant Trigger Bypass Option */}
-            {onTriggerImmediately && (
-              <TouchableOpacity
-                style={styles.instantTriggerButton}
-                activeOpacity={0.7}
-                onPress={onTriggerImmediately}
+            <TouchableOpacity
+              style={styles.call112Btn}
+              activeOpacity={0.85}
+              onPress={onCall112 || (() => Linking.openURL('tel:112'))}
+              accessibilityRole="button"
+              accessibilityLabel="Call 112 now"
+            >
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
               >
-                <Text style={styles.instantTriggerText}>
-                  Need Help Now? Send Alert Immediately ⚡
-                </Text>
-              </TouchableOpacity>
-            )}
+                <Feather
+                  name="phone-call"
+                  size={16}
+                  color="#FFFFFF"
+                  style={{ marginRight: 8 }}
+                />
+                <Text style={styles.call112BtnText}>Call 112 now</Text>
+              </View>
+            </TouchableOpacity>
           </View>
         </View>
       </View>
@@ -287,56 +320,63 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     paddingHorizontal: 20,
   },
+  infoCapsulesBox: {
+    width: '100%',
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    gap: 8,
+    marginBottom: 20,
+  },
+  infoCapsuleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  infoCapsuleText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
   actionSection: {
     width: '100%',
     alignItems: 'center',
     gap: 12,
   },
-  // Massive 80dp Gross-Motor Cancel Button
-  grossMotorCancelButton: {
+  cancelButton: {
     width: '100%',
-    height: 80,
-    borderRadius: 22,
-    backgroundColor: '#FFFFFF',
-    flexDirection: 'row',
+    paddingVertical: 14,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 20,
-    elevation: 12,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    borderWidth: 2,
-    borderColor: '#FEE2E2',
   },
-  cancelButtonIcon: {
-    fontSize: 28,
-    marginRight: 14,
-  },
-  cancelButtonTextCol: {
-    justifyContent: 'center',
-  },
-  cancelButtonMainText: {
-    color: '#991B1B',
-    fontSize: 17,
-    fontWeight: '900',
-    letterSpacing: 0.8,
-  },
-  cancelButtonSubText: {
-    color: '#6B7280',
-    fontSize: 11,
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  instantTriggerButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-  },
-  instantTriggerText: {
-    color: '#FCA5A5',
-    fontSize: 12,
+  cancelButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
     fontWeight: '700',
-    textDecorationLine: 'underline',
+  },
+  call112Btn: {
+    width: '100%',
+    paddingVertical: 15,
+    borderRadius: 16,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 8,
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+  },
+  call112BtnText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: 0.5,
   },
 });

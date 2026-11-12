@@ -10,6 +10,7 @@ import {
   Linking,
   RefreshControl,
   Platform,
+  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -24,6 +25,7 @@ import { MedicalNotesCard } from '../components/profile/MedicalNotesCard';
 import { HelplinesSection } from '../components/profile/HelplinesSection';
 import { useTheme } from '../theme/ThemeContext';
 import { SosService } from '../services/sosService';
+import Feather from 'react-native-vector-icons/Feather';
 
 interface Contact {
   id: string;
@@ -50,7 +52,13 @@ const INITIAL_FAMILY_CONTACTS: Contact[] = [
 
 const CONTACTS_STORAGE_KEY = '@safora_custom_emergency_contacts';
 
-export const ProfileScreen: React.FC = () => {
+interface ProfileScreenProps {
+  route?: {
+    params?: any;
+  };
+}
+
+export const ProfileScreen: React.FC<ProfileScreenProps> = ({ route }) => {
   const insets = useSafeAreaInsets();
   const topInset = Math.max(
     insets.top,
@@ -76,6 +84,8 @@ export const ProfileScreen: React.FC = () => {
   const [isRespondingRequest, setIsRespondingRequest] = useState<
     string | number | null
   >(null);
+  const [contactToRemove, setContactToRemove] = useState<Contact | null>(null);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const fetchHandshakeData = async () => {
     if (isGuest || !user) return;
@@ -278,41 +288,31 @@ export const ProfileScreen: React.FC = () => {
   };
 
   const handleDeleteContact = (contact: Contact) => {
-    Alert.alert(
-      'Delete Emergency Contact',
-      `Are you sure you want to permanently delete ${contact.name}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            // Update local state and AsyncStorage immediately
-            const updated = customContacts.filter(c => c.id !== contact.id);
-            await saveCustomContacts(updated);
+    setContactToRemove(contact);
+  };
 
-            // If real contact exists in DB, delete from PostgreSQL database
-            if (
-              !isGuest &&
-              user &&
-              !contact.id.startsWith('family-') &&
-              !contact.id.startsWith('custom-')
-            ) {
-              try {
-                await SosService.deleteContact(contact.id);
-              } catch {
-                // Handled gracefully
-              }
-            }
+  const confirmDeleteContact = async () => {
+    if (!contactToRemove) return;
+    const contact = contactToRemove;
+    setContactToRemove(null);
 
-            Alert.alert(
-              'Contact Removed',
-              `${contact.name} was permanently removed.`,
-            );
-          },
-        },
-      ],
-    );
+    // Update local state and AsyncStorage immediately
+    const updated = customContacts.filter(c => c.id !== contact.id);
+    await saveCustomContacts(updated);
+
+    // If real contact exists in DB, delete from PostgreSQL database
+    if (
+      !isGuest &&
+      user &&
+      !contact.id.startsWith('family-') &&
+      !contact.id.startsWith('custom-')
+    ) {
+      try {
+        await SosService.deleteContact(contact.id);
+      } catch {
+        // Handled gracefully
+      }
+    }
   };
 
   const handleSaveContact = async (savedData: {
@@ -530,17 +530,13 @@ export const ProfileScreen: React.FC = () => {
   };
 
   const handleLogout = () => {
-    Alert.alert('Sign Out', 'Are you sure you want to sign out of SAFORA?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign Out',
-        style: 'destructive',
-        onPress: async () => {
-          await logout();
-          navigation.navigate('AccountSelect');
-        },
-      },
-    ]);
+    setShowLogoutConfirm(true);
+  };
+
+  const confirmLogout = async () => {
+    setShowLogoutConfirm(false);
+    await logout();
+    navigation.navigate('AccountSelect');
   };
 
   return (
@@ -585,7 +581,7 @@ export const ProfileScreen: React.FC = () => {
             onPress={() => navigation.navigate('Notifications')}
             activeOpacity={0.8}
           >
-            <Text style={styles.settingsIconEmoji}>🔔</Text>
+            <Feather name="bell" size={18} color={colors.textPrimary} />
             {unreadNotifications > 0 && (
               <View style={styles.bellBadge}>
                 <Text style={styles.bellBadgeText}>
@@ -607,7 +603,7 @@ export const ProfileScreen: React.FC = () => {
             onPress={() => navigation.navigate('Settings')}
             activeOpacity={0.8}
           >
-            <Text style={styles.settingsIconEmoji}>⚙️</Text>
+            <Feather name="settings" size={18} color={colors.textPrimary} />
           </TouchableOpacity>
         </View>
       </View>
@@ -682,11 +678,118 @@ export const ProfileScreen: React.FC = () => {
             ]}
             onPress={() => setShowEditModal(true)}
           >
-            <Text style={[styles.editBtnText, { color: colors.textPrimary }]}>
-              ✏️ Edit
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Feather
+                name="edit-2"
+                size={12}
+                color={colors.textPrimary}
+                style={{ marginRight: 4 }}
+              />
+              <Text style={[styles.editBtnText, { color: colors.textPrimary }]}>
+                Edit
+              </Text>
+            </View>
           </TouchableOpacity>
         </View>
+
+        {/* Screen 51: Safety Setup Progress Card */}
+        <TouchableOpacity
+          style={[
+            styles.safetySetupCard,
+            {
+              backgroundColor: colors.backgroundCard,
+              borderColor: colors.border,
+            },
+          ]}
+          onPress={() => {
+            if (customContacts.length > 0) {
+              testAlert(customContacts[0]);
+            } else {
+              handleOpenAddModal();
+            }
+          }}
+          activeOpacity={0.8}
+        >
+          <View style={styles.safetySetupRow}>
+            <View style={{ flex: 1 }}>
+              <Text
+                style={[styles.safetySetupTitle, { color: colors.textPrimary }]}
+              >
+                Safety setup ·{' '}
+                {(() => {
+                  let score = 0;
+                  if (!isGuest && user) score += 1;
+                  if (user?.terms_accepted_at || (user as any)?.termsAcceptedAt)
+                    score += 1;
+                  if (customContacts.length > 0) score += 1;
+                  if (
+                    (user as any)?.hasEmergencyAudio ||
+                    (user as any)?.has_emergency_audio
+                  )
+                    score += 1;
+                  if (
+                    user?.hasCompletedTestDrill ||
+                    (user as any)?.has_completed_test_drill
+                  )
+                    score += 1;
+                  return Math.min(5, Math.max(1, score));
+                })()}{' '}
+                of 5
+              </Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text
+                style={[styles.safetySetupDrillText, { color: colors.primary }]}
+              >
+                Run test drill
+              </Text>
+              <Feather
+                name="chevron-right"
+                size={14}
+                color={colors.primary}
+                style={{ marginLeft: 2 }}
+              />
+            </View>
+          </View>
+          <View style={styles.safetySetupSegments}>
+            {[1, 2, 3, 4, 5].map(step => {
+              const currentScore = (() => {
+                let score = 0;
+                if (!isGuest && user) score += 1;
+                if (user?.terms_accepted_at || (user as any)?.termsAcceptedAt)
+                  score += 1;
+                if (customContacts.length > 0) score += 1;
+                if (
+                  (user as any)?.hasEmergencyAudio ||
+                  (user as any)?.has_emergency_audio
+                )
+                  score += 1;
+                if (
+                  user?.hasCompletedTestDrill ||
+                  (user as any)?.has_completed_test_drill
+                )
+                  score += 1;
+                return Math.min(5, Math.max(1, score));
+              })();
+              return (
+                <View
+                  key={step}
+                  style={[
+                    styles.safetySetupSegment,
+                    {
+                      backgroundColor:
+                        step <= currentScore
+                          ? colors.primary
+                          : isDark
+                            ? 'rgba(255, 255, 255, 0.12)'
+                            : 'rgba(0, 0, 0, 0.08)',
+                    },
+                  ]}
+                />
+              );
+            })}
+          </View>
+        </TouchableOpacity>
 
         {/* Emergency Medical Credentials Card */}
         <MedicalNotesCard
@@ -805,7 +908,12 @@ export const ProfileScreen: React.FC = () => {
                   },
                 ]}
               >
-                <Text style={styles.emptyEmoji}>👥</Text>
+                <Feather
+                  name="users"
+                  size={36}
+                  color={colors.textMuted}
+                  style={{ marginBottom: 10 }}
+                />
                 <Text
                   style={[styles.emptyTitle, { color: colors.textPrimary }]}
                 >
@@ -848,7 +956,7 @@ export const ProfileScreen: React.FC = () => {
                         { backgroundColor: 'rgba(56, 189, 248, 0.12)' },
                       ]}
                     >
-                      <Text style={styles.contactIcon}>👥</Text>
+                      <Feather name="users" size={18} color="#38BDF8" />
                     </View>
 
                     <View style={styles.contactDetails}>
@@ -871,14 +979,24 @@ export const ProfileScreen: React.FC = () => {
                         {contact.phone}
                       </Text>
                       {contact.email ? (
-                        <Text
-                          style={[
-                            styles.contactEmail,
-                            { color: colors.textSecondary },
-                          ]}
+                        <View
+                          style={{ flexDirection: 'row', alignItems: 'center' }}
                         >
-                          ✉️ {contact.email}
-                        </Text>
+                          <Feather
+                            name="mail"
+                            size={10}
+                            color={colors.textSecondary}
+                            style={{ marginRight: 4 }}
+                          />
+                          <Text
+                            style={[
+                              styles.contactEmail,
+                              { color: colors.textSecondary },
+                            ]}
+                          >
+                            {contact.email}
+                          </Text>
+                        </View>
                       ) : null}
 
                       {/* Safora App Registration & Acceptance Status Badge */}
@@ -911,18 +1029,41 @@ export const ProfileScreen: React.FC = () => {
                         style={styles.actionPill}
                         onPress={() => handleOpenEditModal(contact)}
                       >
-                        <Text style={styles.actionPillText}>✏️ Edit</Text>
+                        <View
+                          style={{ flexDirection: 'row', alignItems: 'center' }}
+                        >
+                          <Feather
+                            name="edit-2"
+                            size={10}
+                            color="#94A3B8"
+                            style={{ marginRight: 3 }}
+                          />
+                          <Text style={styles.actionPillText}>Edit</Text>
+                        </View>
                       </TouchableOpacity>
 
                       <TouchableOpacity
                         style={[styles.actionPill, styles.deletePill]}
                         onPress={() => handleDeleteContact(contact)}
                       >
-                        <Text
-                          style={[styles.actionPillText, { color: '#EF4444' }]}
+                        <View
+                          style={{ flexDirection: 'row', alignItems: 'center' }}
                         >
-                          🗑️ Delete
-                        </Text>
+                          <Feather
+                            name="trash-2"
+                            size={10}
+                            color="#EF4444"
+                            style={{ marginRight: 3 }}
+                          />
+                          <Text
+                            style={[
+                              styles.actionPillText,
+                              { color: '#EF4444' },
+                            ]}
+                          >
+                            Delete
+                          </Text>
+                        </View>
                       </TouchableOpacity>
 
                       <TouchableOpacity
@@ -932,17 +1073,29 @@ export const ProfileScreen: React.FC = () => {
                         ]}
                         onPress={() => testAlert(contact)}
                       >
-                        <Text
-                          style={[
-                            styles.testBtnText,
-                            contact.hasSaforaAccount &&
-                              styles.testBtnSaforaText,
-                          ]}
+                        <View
+                          style={{ flexDirection: 'row', alignItems: 'center' }}
                         >
-                          {contact.hasSaforaAccount
-                            ? '🔔 Test Drill'
-                            : 'Test SOS'}
-                        </Text>
+                          <Feather
+                            name="bell"
+                            size={10}
+                            color={
+                              contact.hasSaforaAccount ? '#10B981' : '#38BDF8'
+                            }
+                            style={{ marginRight: 3 }}
+                          />
+                          <Text
+                            style={[
+                              styles.testBtnText,
+                              contact.hasSaforaAccount &&
+                                styles.testBtnSaforaText,
+                            ]}
+                          >
+                            {contact.hasSaforaAccount
+                              ? 'Test Drill'
+                              : 'Test SOS'}
+                          </Text>
+                        </View>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -1071,7 +1224,7 @@ export const ProfileScreen: React.FC = () => {
                         { backgroundColor: 'rgba(16, 185, 129, 0.12)' },
                       ]}
                     >
-                      <Text style={styles.contactIcon}>🛡️</Text>
+                      <Feather name="shield" size={18} color="#10B981" />
                     </View>
 
                     <View style={styles.contactDetails}>
@@ -1115,7 +1268,12 @@ export const ProfileScreen: React.FC = () => {
                     },
                   ]}
                 >
-                  <Text style={styles.emptyEmoji}>🛡️</Text>
+                  <Feather
+                    name="shield"
+                    size={36}
+                    color={colors.textMuted}
+                    style={{ marginBottom: 10 }}
+                  />
                   <Text
                     style={[styles.emptyTitle, { color: colors.textPrimary }]}
                   >
@@ -1135,7 +1293,7 @@ export const ProfileScreen: React.FC = () => {
         )}
 
         {/* Pinned Universal National Helplines */}
-        <HelplinesSection onCall={testAlert} />
+        <HelplinesSection />
 
         {/* Quick Settings Shortcut */}
         <TouchableOpacity
@@ -1149,7 +1307,19 @@ export const ProfileScreen: React.FC = () => {
           onPress={() => navigation.navigate('Settings')}
           activeOpacity={0.8}
         >
-          <Text style={styles.settingsShortcutEmoji}>⚙️</Text>
+          <View
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 18,
+              backgroundColor: colors.surfaceHover,
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginRight: 12,
+            }}
+          >
+            <Feather name="settings" size={18} color={colors.primary} />
+          </View>
           <View style={{ flex: 1 }}>
             <Text
               style={[
@@ -1183,13 +1353,22 @@ export const ProfileScreen: React.FC = () => {
               {
                 borderColor: colors.primary,
                 backgroundColor: colors.backgroundCard,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
               },
             ]}
             onPress={() => (navigation as any).navigate('AccountSelect')}
             activeOpacity={0.8}
           >
+            <Feather
+              name="user-check"
+              size={16}
+              color={colors.primary}
+              style={{ marginRight: 8 }}
+            />
             <Text style={[styles.logoutBtnText, { color: colors.primary }]}>
-              🚀 Sign In / Switch Account
+              Sign In / Switch Account
             </Text>
           </TouchableOpacity>
         ) : (
@@ -1199,12 +1378,21 @@ export const ProfileScreen: React.FC = () => {
               {
                 borderColor: colors.border,
                 backgroundColor: colors.backgroundCard,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
               },
             ]}
             onPress={handleLogout}
             activeOpacity={0.8}
           >
-            <Text style={styles.logoutBtnText}>🚪 Sign Out</Text>
+            <Feather
+              name="log-out"
+              size={16}
+              color="#EF4444"
+              style={{ marginRight: 8 }}
+            />
+            <Text style={styles.logoutBtnText}>Sign Out</Text>
           </TouchableOpacity>
         )}
       </ScrollView>
@@ -1222,6 +1410,143 @@ export const ProfileScreen: React.FC = () => {
         onSave={handleSaveContact}
         initialData={editingContact}
       />
+
+      {/* Screen 53: Remove Guardian Confirmation Modal */}
+      <Modal
+        visible={!!contactToRemove}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setContactToRemove(null)}
+      >
+        <View style={styles.confirmModalOverlay}>
+          <View
+            style={[
+              styles.confirmModalCard,
+              {
+                backgroundColor: isDark
+                  ? 'rgba(30, 41, 59, 0.95)'
+                  : 'rgba(255, 255, 255, 0.98)',
+                borderColor: isDark
+                  ? 'rgba(255, 255, 255, 0.12)'
+                  : 'rgba(0, 0, 0, 0.08)',
+              },
+            ]}
+          >
+            <View style={styles.confirmIconCircle}>
+              <Feather name="trash-2" size={24} color="#EF4444" />
+            </View>
+            <Text
+              style={[styles.confirmModalTitle, { color: colors.textPrimary }]}
+            >
+              Remove {contactToRemove?.name || 'guardian'}?
+            </Text>
+            <Text
+              style={[
+                styles.confirmModalSubtitle,
+                { color: colors.textSecondary },
+              ]}
+            >
+              {contactToRemove?.name || 'They'} will stop receiving your SOS and
+              walk alerts.
+            </Text>
+            <TouchableOpacity
+              style={styles.confirmDestructiveBtn}
+              onPress={confirmDeleteContact}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.confirmDestructiveText}>Remove</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.confirmCancelBtn,
+                {
+                  backgroundColor: colors.backgroundInput,
+                  borderColor: colors.border,
+                },
+              ]}
+              onPress={() => setContactToRemove(null)}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.confirmCancelText,
+                  { color: colors.textPrimary },
+                ]}
+              >
+                Cancel
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Screen 61: Sign Out Confirmation Modal */}
+      <Modal
+        visible={showLogoutConfirm}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowLogoutConfirm(false)}
+      >
+        <View style={styles.confirmModalOverlay}>
+          <View
+            style={[
+              styles.confirmModalCard,
+              {
+                backgroundColor: isDark
+                  ? 'rgba(30, 41, 59, 0.95)'
+                  : 'rgba(255, 255, 255, 0.98)',
+                borderColor: isDark
+                  ? 'rgba(255, 255, 255, 0.12)'
+                  : 'rgba(0, 0, 0, 0.08)',
+              },
+            ]}
+          >
+            <View style={styles.confirmIconCircle}>
+              <Feather name="user" size={24} color="#EF4444" />
+            </View>
+            <Text
+              style={[styles.confirmModalTitle, { color: colors.textPrimary }]}
+            >
+              Sign out of SAFORA?
+            </Text>
+            <Text
+              style={[
+                styles.confirmModalSubtitle,
+                { color: colors.textSecondary },
+              ]}
+            >
+              Your guardians and saved places stay on your account.
+            </Text>
+            <TouchableOpacity
+              style={styles.confirmDestructiveBtn}
+              onPress={confirmLogout}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.confirmDestructiveText}>Sign out</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.confirmCancelBtn,
+                {
+                  backgroundColor: colors.backgroundInput,
+                  borderColor: colors.border,
+                },
+              ]}
+              onPress={() => setShowLogoutConfirm(false)}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.confirmCancelText,
+                  { color: colors.textPrimary },
+                ]}
+              >
+                Cancel
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -1256,6 +1581,34 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     gap: 14,
+  },
+  safetySetupCard: {
+    padding: 16,
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 12,
+  },
+  safetySetupRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  safetySetupTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  safetySetupDrillText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  safetySetupSegments: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  safetySetupSegment: {
+    flex: 1,
+    height: 6,
+    borderRadius: 3,
   },
   avatarCircle: {
     width: 56,
@@ -1574,6 +1927,72 @@ const styles = StyleSheet.create({
   declineBtnText: {
     color: '#EF4444',
     fontSize: 12,
+    fontWeight: '700',
+  },
+  confirmModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  confirmModalCard: {
+    width: '100%',
+    maxWidth: 340,
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 24,
+    alignItems: 'center',
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
+    elevation: 10,
+  },
+  confirmIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  confirmModalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  confirmModalSubtitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  confirmDestructiveBtn: {
+    width: '100%',
+    height: 48,
+    backgroundColor: '#DC2626',
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmDestructiveText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  confirmCancelBtn: {
+    width: '100%',
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmCancelText: {
+    fontSize: 14,
     fontWeight: '700',
   },
 });

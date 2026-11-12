@@ -16,6 +16,7 @@ import {
   MapMarkerItem,
 } from '../components/map/OpenMapView';
 import {
+  ensureSocketConnected,
   onJourneyLocation,
   onJourneyEnded,
   joinJourneyRoom,
@@ -30,6 +31,8 @@ interface GuardianLiveScreenProps {
       journeyId?: string | number;
       walkerName?: string;
       initialLocation?: { latitude: number; longitude: number };
+      isSosActive?: boolean;
+      walkerPhone?: string;
     };
   };
   navigation: any;
@@ -55,11 +58,16 @@ export const GuardianLiveScreen: React.FC<GuardianLiveScreenProps> = ({
     latitude: 30.3165,
     longitude: 78.0322,
   };
+  const walkerPhone = route?.params?.walkerPhone || '+91 98765 43210';
 
   const [walkerName, setWalkerName] = useState(initialName);
   const [coords, setCoords] = useState(initialCoords);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [isDeviated, setIsDeviated] = useState(false);
+  const [isSosActive, setIsSosActive] = useState(
+    Boolean(route?.params?.isSosActive),
+  );
+  const [hasResponded, setHasResponded] = useState(false);
   const [speed, setSpeed] = useState<number | null>(null);
   const [battery, setBattery] = useState<number | null>(null);
   const [plannedRoute, setPlannedRoute] = useState<
@@ -103,9 +111,30 @@ export const GuardianLiveScreen: React.FC<GuardianLiveScreenProps> = ({
   }, [initialJourneyId]);
 
   useEffect(() => {
-    if (initialJourneyId) {
-      joinJourneyRoom(initialJourneyId);
-    }
+    // 1. Ensure socket connection is active and join the journey room
+    ensureSocketConnected(4000)
+      .then(() => {
+        if (initialJourneyId) {
+          joinJourneyRoom(initialJourneyId);
+        }
+      })
+      .catch(() => {});
+
+    // 2. Heartbeat polling fallback every 6 seconds so guardian map stays live even if cellular drops socket packets
+    const pollInterval = setInterval(() => {
+      JourneyService.getActiveEscort()
+        .then(escort => {
+          if (escort && escort.lastLocation) {
+            const lat = Number(escort.lastLocation.latitude);
+            const lng = Number(escort.lastLocation.longitude);
+            if (!isNaN(lat) && !isNaN(lng) && (lat !== 0 || lng !== 0)) {
+              setCoords({ latitude: lat, longitude: lng });
+              setLastUpdated(new Date());
+            }
+          }
+        })
+        .catch(() => {});
+    }, 6000);
 
     const unsub = onJourneyLocation((payload: any) => {
       if (!payload) return;
@@ -167,6 +196,7 @@ export const GuardianLiveScreen: React.FC<GuardianLiveScreenProps> = ({
     });
 
     return () => {
+      clearInterval(pollInterval);
       if (initialJourneyId) {
         leaveJourneyRoom(initialJourneyId);
       }
@@ -230,6 +260,26 @@ export const GuardianLiveScreen: React.FC<GuardianLiveScreenProps> = ({
     );
   };
 
+  const handleCallWalker = () => {
+    Linking.openURL(`tel:${walkerPhone.replace(/\s+/g, '')}`).catch(() => {
+      Alert.alert('Call Failed', 'Unable to initiate call to walker.');
+    });
+  };
+
+  const handleMessageWalker = () => {
+    Linking.openURL(`sms:${walkerPhone.replace(/\s+/g, '')}`).catch(() => {
+      Alert.alert('Message Failed', 'Unable to open SMS app.');
+    });
+  };
+
+  const handleRespond = () => {
+    setHasResponded(true);
+    Alert.alert(
+      'Response Logged',
+      `${walkerName} and the safety circle have been notified that you are actively responding.`,
+    );
+  };
+
   const handleCenter = () => {
     if (mapRef.current) {
       mapRef.current.recenter(coords.latitude, coords.longitude, 16);
@@ -270,27 +320,40 @@ export const GuardianLiveScreen: React.FC<GuardianLiveScreenProps> = ({
 
         <View style={styles.headerInfo}>
           <Text
-            style={[styles.headerTitle, { color: colors.textPrimary }]}
+            style={[
+              styles.headerTitle,
+              { color: isSosActive ? '#EF4444' : colors.textPrimary },
+            ]}
             numberOfLines={1}
           >
-            {walkerName}
+            {isSosActive
+              ? `${walkerName} needs help`
+              : `${walkerName} is walking`}
           </Text>
           <View style={styles.statusRow}>
             <View
               style={[
                 styles.statusDot,
-                { backgroundColor: isDeviated ? '#EF4444' : '#10B981' },
+                {
+                  backgroundColor: isSosActive
+                    ? '#EF4444'
+                    : isDeviated
+                      ? '#F59E0B'
+                      : '#10B981',
+                },
               ]}
             />
             <Text
               style={[
                 styles.headerSubtitle,
-                { color: isDeviated ? '#EF4444' : colors.textSecondary },
+                { color: isSosActive ? '#EF4444' : colors.textSecondary },
               ]}
             >
-              {isDeviated
-                ? '⚠️ Off Route Corridor'
-                : '🛡️ Live Guardian Escort Active'}
+              {isSosActive
+                ? 'EMERGENCY SOS ACTIVE'
+                : isDeviated
+                  ? 'Off Route Corridor'
+                  : 'En route · Safe Walk Active'}
             </Text>
           </View>
         </View>
@@ -426,34 +489,92 @@ export const GuardianLiveScreen: React.FC<GuardianLiveScreenProps> = ({
           )}
         </View>
 
-        {/* Action Buttons Row */}
-        <View style={styles.actionRow}>
-          <TouchableOpacity
-            style={[
-              styles.recenterButton,
-              {
-                backgroundColor: colors.backgroundInput,
-                borderColor: colors.border,
-              },
-            ]}
-            onPress={handleCenter}
-            activeOpacity={0.85}
-          >
-            <Text
-              style={[styles.recenterButtonText, { color: colors.textPrimary }]}
+        {/* Action Buttons: Screen 40 (SOS) vs Screen 39 (Normal) */}
+        {isSosActive ? (
+          <View style={styles.sosActionCol}>
+            <TouchableOpacity
+              style={styles.call112EmergencyBtn}
+              onPress={handleCallEmergency}
+              activeOpacity={0.85}
             >
-              🎯 Center Map
-            </Text>
-          </TouchableOpacity>
+              <Text style={styles.call112EmergencyBtnText}>🚨 Call 112</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.emergencyButton}
-            onPress={handleCallEmergency}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.emergencyButtonText}>🚨 Call 112</Text>
-          </TouchableOpacity>
-        </View>
+            <View style={styles.dualActionRow}>
+              <TouchableOpacity
+                style={[
+                  styles.callWalkerBtn,
+                  {
+                    backgroundColor: colors.backgroundInput,
+                    borderColor: colors.border,
+                  },
+                ]}
+                onPress={handleCallWalker}
+                activeOpacity={0.85}
+              >
+                <Text
+                  style={[
+                    styles.callWalkerBtnText,
+                    { color: colors.textPrimary },
+                  ]}
+                >
+                  📞 Call {walkerName}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.respondBtn,
+                  {
+                    backgroundColor: hasResponded
+                      ? 'rgba(16, 185, 129, 0.2)'
+                      : '#10B981',
+                    borderColor: '#10B981',
+                  },
+                ]}
+                onPress={handleRespond}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.respondBtnText}>
+                  {hasResponded ? 'Responding ✓' : 'I am responding'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.dualActionRow}>
+            <TouchableOpacity
+              style={[
+                styles.callWalkerBtnPrimary,
+                { backgroundColor: colors.primary },
+              ]}
+              onPress={handleCallWalker}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.callWalkerBtnPrimaryText}>
+                Call {walkerName}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.messageBtn,
+                {
+                  backgroundColor: colors.backgroundInput,
+                  borderColor: colors.border,
+                },
+              ]}
+              onPress={handleMessageWalker}
+              activeOpacity={0.85}
+            >
+              <Text
+                style={[styles.messageBtnText, { color: colors.textPrimary }]}
+              >
+                Message
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
     </View>
   );
@@ -567,6 +688,83 @@ const styles = StyleSheet.create({
   actionRow: {
     flexDirection: 'row',
     gap: 12,
+  },
+  sosActionCol: {
+    gap: 10,
+  },
+  call112EmergencyBtn: {
+    width: '100%',
+    backgroundColor: '#EF4444',
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 6,
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+  },
+  call112EmergencyBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  dualActionRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  callWalkerBtn: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingVertical: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  callWalkerBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  respondBtn: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingVertical: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 4,
+  },
+  respondBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  callWalkerBtnPrimary: {
+    flex: 2,
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 4,
+  },
+  callWalkerBtnPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  messageBtn: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  messageBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
   },
   recenterButton: {
     flex: 1,

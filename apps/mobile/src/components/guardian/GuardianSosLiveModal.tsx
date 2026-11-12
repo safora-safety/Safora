@@ -15,6 +15,7 @@ import {
   guardianSosService,
   GuardianSosState,
 } from '../../services/guardianSosService';
+import Feather from 'react-native-vector-icons/Feather';
 
 export const GuardianSosLiveModal: React.FC = () => {
   const insets = useSafeAreaInsets();
@@ -180,7 +181,11 @@ export const GuardianSosLiveModal: React.FC = () => {
           onPress={() => guardianSosService.toggleMute()}
           style={styles.miniMuteBtn}
         >
-          <Text style={styles.miniMuteText}>{isMuted ? '🔇' : '🔊'}</Text>
+          <Feather
+            name={isMuted ? 'volume-x' : 'volume-2'}
+            size={16}
+            color="#FFFFFF"
+          />
         </TouchableOpacity>
       </TouchableOpacity>
     );
@@ -221,7 +226,12 @@ export const GuardianSosLiveModal: React.FC = () => {
 
           {/* Ward Name & Status */}
           <View style={styles.wardCard}>
-            <Text style={styles.wardEmoji}>🛡️</Text>
+            <Feather
+              name="shield"
+              size={24}
+              color="#10B981"
+              style={{ marginRight: 12 }}
+            />
             <View style={styles.wardInfoCol}>
               <Text style={styles.wardName} numberOfLines={1}>
                 {activeEmergency.userName || 'Person You Protect'}
@@ -260,9 +270,12 @@ export const GuardianSosLiveModal: React.FC = () => {
                 ]}
                 onPress={() => guardianSosService.toggleMute()}
               >
-                <Text style={styles.muteToggleIcon}>
-                  {isMuted ? '🔇' : '🔊'}
-                </Text>
+                <Feather
+                  name={isMuted ? 'volume-x' : 'volume-2'}
+                  size={15}
+                  color="#FFFFFF"
+                  style={{ marginRight: 6 }}
+                />
                 <Text style={styles.muteToggleText}>
                   {isMuted ? 'Unmute' : 'Mute'}
                 </Text>
@@ -352,9 +365,12 @@ export const GuardianSosLiveModal: React.FC = () => {
                   }
                 }}
               >
-                <Text style={styles.masterPlayIcon}>
-                  {isMasterPlaying ? '⏸️' : '▶️'}
-                </Text>
+                <Feather
+                  name={isMasterPlaying ? 'pause' : 'play'}
+                  size={16}
+                  color="#FFFFFF"
+                  style={{ marginRight: 8 }}
+                />
                 <Text style={styles.masterPlayText}>
                   {isMasterPlaying
                     ? `Pause Master Audio (${masterPlaybackSeconds}s / 30s)`
@@ -371,7 +387,12 @@ export const GuardianSosLiveModal: React.FC = () => {
               onPress={openNavigation}
               activeOpacity={0.85}
             >
-              <Text style={styles.actionBtnIcon}>📍</Text>
+              <Feather
+                name="map-pin"
+                size={20}
+                color="#FFFFFF"
+                style={{ marginRight: 12 }}
+              />
               <View style={styles.actionBtnTextCol}>
                 <Text style={styles.primaryActionText}>
                   Navigate to Live Location
@@ -391,7 +412,12 @@ export const GuardianSosLiveModal: React.FC = () => {
                   onPress={callCompanion}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.secondaryBtnIcon}>📞</Text>
+                  <Feather
+                    name="phone-call"
+                    size={16}
+                    color="#FFFFFF"
+                    style={{ marginRight: 6 }}
+                  />
                   <Text style={styles.secondaryBtnText}>Call Companion</Text>
                 </TouchableOpacity>
               )}
@@ -401,7 +427,12 @@ export const GuardianSosLiveModal: React.FC = () => {
                 onPress={callPolice}
                 activeOpacity={0.8}
               >
-                <Text style={styles.secondaryBtnIcon}>🚓</Text>
+                <Feather
+                  name="shield"
+                  size={16}
+                  color="#FFFFFF"
+                  style={{ marginRight: 6 }}
+                />
                 <Text style={styles.secondaryBtnText}>Call 112</Text>
               </TouchableOpacity>
             </View>

@@ -11,7 +11,10 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  Image,
 } from 'react-native';
+import Feather from 'react-native-vector-icons/Feather';
+import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { useTheme } from '../../theme/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../store/authStore';
@@ -29,14 +32,24 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
 }) => {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
-  const { user, isGuest, updateProfile, isLoading, error, clearError } =
-    useAuthStore();
+  const {
+    user,
+    isGuest,
+    updateProfile,
+    uploadProfilePhoto,
+    isLoading,
+    error,
+    clearError,
+  } = useAuthStore();
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [age, setAge] = useState('');
+  const [allergies, setAllergies] = useState('');
   const [bloodGroup, setBloodGroup] = useState<string | null>(null);
   const [emergencyNotes, setEmergencyNotes] = useState('');
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   // Sync state whenever modal opens or user changes
@@ -45,12 +58,63 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
       setName(user.name || '');
       setEmail(user.email || '');
       setPhone(user.phone || '');
+      setAge(user.age ? String(user.age) : '');
+      setAllergies((user as any).allergies || '');
       setBloodGroup(user.bloodGroup || null);
       setEmergencyNotes(user.emergencyNotes || '');
       setFormError(null);
       clearError();
     }
   }, [visible, user]);
+
+  const handlePickPhoto = () => {
+    Alert.alert('Profile Photo', 'Choose an option to update your photo:', [
+      {
+        text: 'Take Photo',
+        onPress: () => {
+          launchCamera({ mediaType: 'photo', quality: 0.8 }, async response => {
+            if (response.assets && response.assets[0]?.uri) {
+              const asset = response.assets[0];
+              setIsUploadingPhoto(true);
+              try {
+                await uploadProfilePhoto(asset.uri, asset.fileName, asset.type);
+              } catch {
+                Alert.alert('Upload Error', 'Failed to upload photo.');
+              } finally {
+                setIsUploadingPhoto(false);
+              }
+            }
+          });
+        },
+      },
+      {
+        text: 'Choose from Gallery',
+        onPress: () => {
+          launchImageLibrary(
+            { mediaType: 'photo', quality: 0.8 },
+            async response => {
+              if (response.assets && response.assets[0]?.uri) {
+                const asset = response.assets[0];
+                setIsUploadingPhoto(true);
+                try {
+                  await uploadProfilePhoto(
+                    asset.uri,
+                    asset.fileName,
+                    asset.type,
+                  );
+                } catch {
+                  Alert.alert('Upload Error', 'Failed to upload photo.');
+                } finally {
+                  setIsUploadingPhoto(false);
+                }
+              }
+            },
+          );
+        },
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
 
   const validateEmail = (val: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -79,13 +143,17 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
       return;
     }
 
+    const parsedAge = age.trim() ? parseInt(age.trim(), 10) : undefined;
+
     const success = await updateProfile({
       name: trimmedName,
       email: trimmedEmail,
       phone: trimmedPhone || undefined,
+      age: parsedAge,
+      allergies: allergies.trim() || undefined,
       bloodGroup: bloodGroup || undefined,
       emergencyNotes: emergencyNotes.trim() || undefined,
-    });
+    } as any);
 
     if (success) {
       Alert.alert(
@@ -174,6 +242,59 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.scrollContent}
           >
+            {/* Screen 55: Avatar with Change Photo */}
+            <View style={styles.avatarSection}>
+              <View
+                style={[
+                  styles.avatarCircle,
+                  { backgroundColor: colors.primary },
+                ]}
+              >
+                {(user as any)?.avatar ? (
+                  <Image
+                    source={{ uri: (user as any).avatar }}
+                    style={styles.avatarImage}
+                  />
+                ) : (
+                  <Text style={styles.avatarInitials}>
+                    {user?.name
+                      ? user.name
+                          .split(' ')
+                          .map((n: string) => n[0])
+                          .join('')
+                          .toUpperCase()
+                          .substring(0, 2)
+                      : 'AS'}
+                  </Text>
+                )}
+                <TouchableOpacity
+                  style={[
+                    styles.cameraBadge,
+                    { backgroundColor: colors.primary },
+                  ]}
+                  onPress={handlePickPhoto}
+                  activeOpacity={0.8}
+                >
+                  <Feather name="camera" size={14} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity
+                onPress={handlePickPhoto}
+                style={styles.changePhotoBtn}
+                activeOpacity={0.7}
+              >
+                {isUploadingPhoto ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <Text
+                    style={[styles.changePhotoText, { color: colors.primary }]}
+                  >
+                    Change photo
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+
             {/* Full Name */}
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>
@@ -190,39 +311,16 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                 ]}
                 value={name}
                 onChangeText={setName}
-                placeholder="e.g. Aditi Verma"
+                placeholder="e.g. Aditi Sharma"
                 placeholderTextColor={colors.textMuted}
                 autoCapitalize="words"
-              />
-            </View>
-
-            {/* Email Address */}
-            <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>
-                Email Address <Text style={styles.required}>*</Text>
-              </Text>
-              <TextInput
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: colors.backgroundInput,
-                    borderColor: colors.border,
-                    color: colors.textPrimary,
-                  },
-                ]}
-                value={email}
-                onChangeText={setEmail}
-                placeholder="e.g. aditi@example.com"
-                placeholderTextColor={colors.textMuted}
-                keyboardType="email-address"
-                autoCapitalize="none"
               />
             </View>
 
             {/* Phone Number */}
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>
-                Emergency Phone Number
+                Phone
               </Text>
               <TextInput
                 style={[
@@ -241,11 +339,40 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
               />
             </View>
 
+            {/* Email Address */}
+            <View style={styles.inputGroup}>
+              <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>
+                Email <Text style={styles.required}>*</Text>
+              </Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: colors.backgroundInput,
+                    borderColor: colors.border,
+                    color: colors.textPrimary,
+                  },
+                ]}
+                value={email}
+                onChangeText={setEmail}
+                placeholder="e.g. aditi@safora.app"
+                placeholderTextColor={colors.textMuted}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            </View>
+
+            {/* Section Header: EMERGENCY MEDICAL INFO */}
+            <Text
+              style={[styles.sectionHeading, { color: colors.textSecondary }]}
+            >
+              EMERGENCY MEDICAL INFO
+            </Text>
+
             {/* Blood Group Chips */}
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>
-                Blood Group{' '}
-                <Text style={styles.optional}>(For First Responders)</Text>
+                Blood group
               </Text>
               <View style={styles.chipsContainer}>
                 {BLOOD_GROUPS.map(bg => {
@@ -285,11 +412,53 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
               </View>
             </View>
 
+            {/* Age */}
+            <View style={styles.inputGroup}>
+              <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>
+                Age
+              </Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: colors.backgroundInput,
+                    borderColor: colors.border,
+                    color: colors.textPrimary,
+                  },
+                ]}
+                value={age}
+                onChangeText={setAge}
+                placeholder="e.g. 21"
+                placeholderTextColor={colors.textMuted}
+                keyboardType="numeric"
+              />
+            </View>
+
+            {/* Allergies */}
+            <View style={styles.inputGroup}>
+              <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>
+                Allergies
+              </Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: colors.backgroundInput,
+                    borderColor: colors.border,
+                    color: colors.textPrimary,
+                  },
+                ]}
+                value={allergies}
+                onChangeText={setAllergies}
+                placeholder="e.g. None or Penicillin"
+                placeholderTextColor={colors.textMuted}
+              />
+            </View>
+
             {/* Emergency Notes */}
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>
-                Medical / Emergency Notes{' '}
-                <Text style={styles.optional}>(Allergies, Guardian notes)</Text>
+                Emergency note
               </Text>
               <TextInput
                 style={[
@@ -303,7 +472,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                 ]}
                 value={emergencyNotes}
                 onChangeText={setEmergencyNotes}
-                placeholder="e.g. Penicillin allergy; carry asthma inhaler; Contact Warden hostel block B"
+                placeholder="e.g. Anything responders should know"
                 placeholderTextColor={colors.textMuted}
                 multiline
                 numberOfLines={3}
@@ -403,6 +572,53 @@ const styles = StyleSheet.create({
   },
   errorText: { color: '#EF4444', fontSize: 12, fontWeight: '600' },
   scrollContent: { padding: 20, gap: 16 },
+  avatarSection: {
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  avatarCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  avatarImage: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+  },
+  avatarInitials: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  cameraBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  changePhotoBtn: {
+    marginTop: 8,
+  },
+  changePhotoText: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  sectionHeading: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    marginTop: 8,
+  },
   inputGroup: { gap: 6 },
   inputLabel: { fontSize: 13, fontWeight: '700' },
   required: { color: '#EF4444' },

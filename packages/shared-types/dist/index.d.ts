@@ -5,12 +5,22 @@ export interface User {
     email: string;
     phone?: string;
     bloodGroup?: string;
+    blood_group?: string;
     emergencyNotes?: string;
+    emergency_notes?: string;
+    allergies?: string;
+    showMedicalOnLockScreen?: boolean;
+    show_medical_on_lock_screen?: boolean;
+    isVerified?: boolean;
+    is_verified?: boolean;
+    hasCompletedTestDrill?: boolean;
+    has_completed_test_drill?: boolean;
     role?: UserRole;
     isActive?: boolean;
     authProvider?: string;
     googleId?: string;
     avatarUrl?: string;
+    avatar_url?: string;
     age?: number | null;
     ageNoticeAck?: boolean;
     age_notice_ack?: boolean;
@@ -32,6 +42,9 @@ export interface HazardReport {
     latitude: number;
     longitude: number;
     photoUrl?: string | null;
+    photo_url?: string | null;
+    photoUrls?: string[];
+    photo_urls?: string[];
     source?: HazardSource | string;
     resolutionNotes?: string;
     confirmationsCount?: number;
@@ -49,6 +62,12 @@ export interface TrustedContact {
     status?: 'pending' | 'accepted' | 'declined';
     guardianUserId?: string | number | null;
     relationship?: string;
+    notificationChannel?: 'app_and_sms' | 'sms_only';
+    notification_channel?: 'app_and_sms' | 'sms_only';
+    canViewLiveWalk?: boolean;
+    can_view_live_walk?: boolean;
+    notifyOnDeviation?: boolean;
+    notify_on_deviation?: boolean;
     createdAt?: string;
 }
 export type JourneyStatus = 'active' | 'completed' | 'cancelled' | 'deviated';

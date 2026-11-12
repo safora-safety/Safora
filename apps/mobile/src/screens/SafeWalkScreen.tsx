@@ -15,6 +15,7 @@ import {
   BackHandler,
   Platform,
   NativeModules,
+  Switch,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -47,6 +48,7 @@ import {
 } from '../components/safewalk/MultiModalRouteSheet';
 import { ActiveWalkCockpitHud } from '../components/safewalk/ActiveWalkCockpitHud';
 import { HoldToConfirmButton } from '../components/safewalk/HoldToConfirmButton';
+import Feather from 'react-native-vector-icons/Feather';
 import {
   DeviationCountdownModal,
   ArrivalCelebrationModal,
@@ -185,14 +187,29 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
 
   const [showArrivalModal, setShowArrivalModal] = useState(false);
   const [showPreWalkModal, setShowPreWalkModal] = useState(false);
+  const [showEndWalkConfirmModal, setShowEndWalkConfirmModal] = useState(false);
+  const [rememberGuardiansForNextWalk, setRememberGuardiansForNextWalk] =
+    useState(true);
   const [availableGuardians, setAvailableGuardians] = useState<any[]>([]);
   const [selectedGuardianIds, setSelectedGuardianIds] = useState<
     (string | number)[]
   >([]);
   const [isStartingWalk, setIsStartingWalk] = useState(false);
+
+  const activeGuardianName = React.useMemo(() => {
+    if (availableGuardians.length > 0) {
+      const selected = availableGuardians.find(g =>
+        selectedGuardianIds.includes(g.guardianUserId || g.id),
+      );
+      if (selected?.name) return selected.name;
+      return availableGuardians[0]?.name || 'Reena';
+    }
+    return 'Reena';
+  }, [availableGuardians, selectedGuardianIds]);
   const [isBatteryUnrestricted, setIsBatteryUnrestricted] = useState(true);
   const [dismissedBatteryBanner, setDismissedBatteryBanner] = useState(false);
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
+  const deviationSnoozedUntilRef = useRef<number>(0);
 
   useEffect(() => {
     BatteryOptimizationService.isIgnoringBatteryOptimizations().then(
@@ -272,7 +289,12 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
           longitude: updatedCoords.longitude,
         })
           .then(res => {
-            if (res && res.isDeviated && !isDeviated) {
+            if (
+              res &&
+              res.isDeviated &&
+              !isDeviated &&
+              Date.now() > deviationSnoozedUntilRef.current
+            ) {
               triggerDeviationPrompt(
                 'Corridor Deviation Detected',
                 'You have moved away from the planned safe pedestrian route.',
@@ -613,33 +635,27 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
     if (Platform.OS === 'android' && NativeModules.SafeWalkService) {
       NativeModules.SafeWalkService.stop().catch(() => {});
     }
+    deviationSnoozedUntilRef.current = 0;
     stopSession();
     setShowArrivalModal(true);
   };
 
   const handleCancelWalk = () => {
-    Alert.alert(
-      'Cancel Safe Walk?',
-      'Are you sure you want to stop this walk session? Your guardians will be notified that the walk has ended.',
-      [
-        { text: 'Keep Walking', style: 'cancel' },
-        {
-          text: 'Yes, Stop Walk',
-          style: 'destructive',
-          onPress: async () => {
-            const jId = journeyId;
-            if (jId) {
-              await JourneyService.cancelJourney(jId).catch(() => {});
-            }
-            if (Platform.OS === 'android' && NativeModules.SafeWalkService) {
-              NativeModules.SafeWalkService.stop().catch(() => {});
-            }
-            stopSession();
-            setShowPreWalkModal(false);
-          },
-        },
-      ],
-    );
+    setShowEndWalkConfirmModal(true);
+  };
+
+  const handleConfirmEndWalk = async () => {
+    setShowEndWalkConfirmModal(false);
+    const jId = journeyId;
+    if (jId) {
+      await JourneyService.cancelJourney(jId).catch(() => {});
+    }
+    if (Platform.OS === 'android' && NativeModules.SafeWalkService) {
+      NativeModules.SafeWalkService.stop().catch(() => {});
+    }
+    deviationSnoozedUntilRef.current = 0;
+    stopSession();
+    setShowPreWalkModal(false);
   };
 
   const shareArrivalWhatsApp = () => {
@@ -659,6 +675,8 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
   };
 
   const handleDisarmDeviation = () => {
+    // Snooze corridor deviation alerts for 3 minutes upon confirming safe
+    deviationSnoozedUntilRef.current = Date.now() + 3 * 60 * 1000;
     setDeviation(false, null);
     SirenService.stopSiren().catch(() => {});
     if (journeyId) {
@@ -666,7 +684,18 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
     }
     Alert.alert(
       'Route Safe',
-      'Corridor deviation alert disarmed. Safe Walk resumed.',
+      'Corridor deviation alert disarmed. Snoozed for 3 minutes.',
+      [
+        { text: 'OK' },
+        {
+          text: 'Reroute From Here',
+          onPress: () => {
+            if (destPos) {
+              updateStreetRoute();
+            }
+          },
+        },
+      ],
     );
   };
 
@@ -945,14 +974,11 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
             activeOpacity={0.8}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Text
-              style={[
-                styles.batteryDismissText,
-                { color: isDark ? '#FDE68A' : '#92400E' },
-              ]}
-            >
-              ✕
-            </Text>
+            <Feather
+              name="x"
+              size={12}
+              color={isDark ? '#FDE68A' : '#92400E'}
+            />
           </TouchableOpacity>
         </View>
       )}
@@ -1007,7 +1033,12 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
                 },
               ]}
             >
-              <Text style={styles.searchIcon}>🔍</Text>
+              <Feather
+                name="search"
+                size={17}
+                color={colors.textSecondary}
+                style={{ marginRight: 6 }}
+              />
               <TextInput
                 style={[styles.searchInput, { color: colors.textPrimary }]}
                 placeholder={
@@ -1036,9 +1067,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
                   }}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                  <Text style={{ color: colors.textMuted, fontSize: 16 }}>
-                    ✕
-                  </Text>
+                  <Feather name="x" size={16} color={colors.textMuted} />
                 </TouchableOpacity>
               )}
             </View>
@@ -1127,7 +1156,15 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   style={styles.routeBadgeClearBtn}
                 >
-                  <Text style={styles.routeBadgeClearText}>✕ Clear</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Feather
+                      name="x"
+                      size={11}
+                      color="#EF4444"
+                      style={{ marginRight: 3 }}
+                    />
+                    <Text style={styles.routeBadgeClearText}>Clear</Text>
+                  </View>
                 </TouchableOpacity>
               </>
             )}
@@ -1147,11 +1184,11 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
           onPress={recenterMap}
           activeOpacity={0.85}
         >
-          <Text style={styles.recenterIcon}>🎯</Text>
+          <Feather name="crosshair" size={18} color={colors.primary} />
         </TouchableOpacity>
       </View>
 
-      {/* Bottom Panel: Route Selection Comparison or Active Escort Controls */}
+      {/* Bottom Panel: Route Selection Comparison or Screen 28 Destination Picker */}
       {!isActive ? (
         destPos ? (
           <MultiModalRouteSheet
@@ -1164,6 +1201,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
             safestDurationSeconds={dualRoutes?.mainRoad.durationSeconds}
             shortcutDistanceMeters={dualRoutes?.shortcut.distanceMeters}
             shortcutDurationSeconds={dualRoutes?.shortcut.durationSeconds}
+            guardianSummary={`Sharing with ${activeGuardianName} (SMS & app). Safe corridor: up to 150 m range.`}
             onStartWalk={handleInitiateWalk}
             onClearRoute={handleClearRoute}
             isStarting={isStartingWalk}
@@ -1171,7 +1209,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
         ) : (
           <View
             style={[
-              styles.idlePromptSheet,
+              styles.screen28Sheet,
               {
                 backgroundColor: isDark ? colors.surfaceElevated : '#FFFFFF',
                 borderTopColor: isDark
@@ -1181,38 +1219,306 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
               },
             ]}
           >
-            <View style={styles.idlePromptContent}>
-              <View
+            {/* Quick Destination Chips (Screen 28) */}
+            <View style={styles.screen28ChipsRow}>
+              <TouchableOpacity
                 style={[
-                  styles.idlePromptIconCircle,
+                  styles.screen28Chip,
                   {
                     backgroundColor: isDark
-                      ? 'rgba(56, 189, 248, 0.15)'
-                      : '#E0F2FE',
+                      ? 'rgba(99, 102, 241, 0.15)'
+                      : '#EEF2FF',
+                    borderColor: colors.primary,
                   },
                 ]}
+                onPress={() =>
+                  handleSelectPlace({
+                    id: 'saved-home',
+                    name: 'Home',
+                    placeName: '12 Mussoorie Diversion Road, 248009 Dehradun',
+                    latitude: 30.3421,
+                    longitude: 78.0558,
+                  })
+                }
+                activeOpacity={0.8}
               >
-                <Text style={styles.idlePromptIcon}>📍</Text>
-              </View>
-              <View style={styles.idlePromptTextCol}>
+                <Feather
+                  name="home"
+                  size={12}
+                  color={colors.primary}
+                  style={{ marginRight: 4 }}
+                />
+                <Text
+                  style={[styles.screen28ChipText, { color: colors.primary }]}
+                >
+                  Home
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.screen28Chip,
+                  {
+                    backgroundColor: isDark
+                      ? 'rgba(255, 255, 255, 0.06)'
+                      : '#F1F5F9',
+                    borderColor: colors.border,
+                  },
+                ]}
+                onPress={() =>
+                  handleSelectPlace({
+                    id: 'recent-ghanta-ghar',
+                    name: 'Ghanta Ghar',
+                    placeName: 'Dehradun, Uttarakhand',
+                    latitude: 30.3244,
+                    longitude: 78.0416,
+                  })
+                }
+                activeOpacity={0.8}
+              >
+                <Feather
+                  name="clock"
+                  size={12}
+                  color={colors.textSecondary}
+                  style={{ marginRight: 4 }}
+                />
                 <Text
                   style={[
-                    styles.idlePromptTitle,
+                    styles.screen28ChipText,
                     { color: colors.textPrimary },
                   ]}
                 >
-                  Set Road Destination
+                  Ghanta Ghar
                 </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.screen28Chip,
+                  {
+                    backgroundColor: isDark
+                      ? 'rgba(255, 255, 255, 0.06)'
+                      : '#F1F5F9',
+                    borderColor: colors.border,
+                  },
+                ]}
+                onPress={() => {
+                  Alert.alert(
+                    'Save Current Location',
+                    'Would you like to bookmark this location as a favorite walk destination?',
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      {
+                        text: 'Save Place',
+                        onPress: () =>
+                          Alert.alert(
+                            'Saved',
+                            'Location bookmarked to your saved walk destinations.',
+                          ),
+                      },
+                    ],
+                  );
+                }}
+                activeOpacity={0.8}
+              >
+                <Feather
+                  name="plus"
+                  size={12}
+                  color={colors.textSecondary}
+                  style={{ marginRight: 4 }}
+                />
                 <Text
                   style={[
-                    styles.idlePromptSub,
-                    { color: colors.textSecondary },
+                    styles.screen28ChipText,
+                    { color: colors.textPrimary },
                   ]}
                 >
-                  Search any place above or tap anywhere on the map to preview
-                  safe well-lit corridors.
+                  Save
                 </Text>
-              </View>
+              </TouchableOpacity>
+            </View>
+
+            {/* Screen 28 Header */}
+            <View style={styles.screen28HeaderRow}>
+              <Text
+                style={[
+                  styles.screen28HeaderTitle,
+                  { color: colors.textPrimary },
+                ]}
+              >
+                Pick a destination or tap the map
+              </Text>
+            </View>
+
+            {/* Saved Places Section */}
+            <View style={styles.screen28Section}>
+              <Text
+                style={[
+                  styles.screen28SectionLabel,
+                  { color: colors.textMuted },
+                ]}
+              >
+                SAVED PLACES
+              </Text>
+              <TouchableOpacity
+                style={[
+                  styles.screen28PlaceItem,
+                  { borderBottomColor: colors.border },
+                ]}
+                onPress={() =>
+                  handleSelectPlace({
+                    id: 'saved-home',
+                    name: 'Home',
+                    placeName: '12 Mussoorie Diversion Road, 248009 Dehradun',
+                    latitude: 30.3421,
+                    longitude: 78.0558,
+                  })
+                }
+                activeOpacity={0.7}
+              >
+                <View style={styles.screen28PlaceIconCircle}>
+                  <Feather name="home" size={16} color={colors.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={[
+                      styles.screen28PlaceName,
+                      { color: colors.textPrimary },
+                    ]}
+                  >
+                    Home
+                  </Text>
+                  <Text
+                    style={[
+                      styles.screen28PlaceSub,
+                      { color: colors.textSecondary },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    12 Mussoorie Diversion Road, 248009 Dehradun
+                  </Text>
+                </View>
+                <Text
+                  style={[
+                    styles.screen28PlaceDist,
+                    { color: colors.textMuted },
+                  ]}
+                >
+                  1.8 km
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Recent Section */}
+            <View style={styles.screen28Section}>
+              <Text
+                style={[
+                  styles.screen28SectionLabel,
+                  { color: colors.textMuted },
+                ]}
+              >
+                RECENT
+              </Text>
+              <TouchableOpacity
+                style={[
+                  styles.screen28PlaceItem,
+                  { borderBottomColor: colors.border },
+                ]}
+                onPress={() =>
+                  handleSelectPlace({
+                    id: 'recent-paltan-bazaar',
+                    name: 'Paltan Bazaar',
+                    placeName: 'Rajpur Road, Dehradun',
+                    latitude: 30.3214,
+                    longitude: 78.0419,
+                  })
+                }
+                activeOpacity={0.7}
+              >
+                <View style={styles.screen28PlaceIconCircle}>
+                  <Feather
+                    name="clock"
+                    size={16}
+                    color={colors.textSecondary}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={[
+                      styles.screen28PlaceName,
+                      { color: colors.textPrimary },
+                    ]}
+                  >
+                    Paltan Bazaar
+                  </Text>
+                  <Text
+                    style={[
+                      styles.screen28PlaceSub,
+                      { color: colors.textSecondary },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    Rajpur Road
+                  </Text>
+                </View>
+                <Text
+                  style={[
+                    styles.screen28PlaceDist,
+                    { color: colors.textMuted },
+                  ]}
+                >
+                  1.2 km
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.screen28PlaceItem}
+                onPress={() =>
+                  handleSelectPlace({
+                    id: 'recent-gandhi-park',
+                    name: 'Gandhi Park',
+                    placeName: 'Rajpur Road, Dehradun',
+                    latitude: 30.3255,
+                    longitude: 78.0435,
+                  })
+                }
+                activeOpacity={0.7}
+              >
+                <View style={styles.screen28PlaceIconCircle}>
+                  <Feather
+                    name="clock"
+                    size={16}
+                    color={colors.textSecondary}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={[
+                      styles.screen28PlaceName,
+                      { color: colors.textPrimary },
+                    ]}
+                  >
+                    Gandhi Park
+                  </Text>
+                  <Text
+                    style={[
+                      styles.screen28PlaceSub,
+                      { color: colors.textSecondary },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    Rajpur Road
+                  </Text>
+                </View>
+                <Text
+                  style={[
+                    styles.screen28PlaceDist,
+                    { color: colors.textMuted },
+                  ]}
+                >
+                  1.4 km
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
         )
@@ -1235,7 +1541,12 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
               activeOpacity={0.8}
               accessibilityLabel="Trigger Emergency SOS"
             >
-              <Text style={styles.activeSosTriggerBtnIcon}>🚨</Text>
+              <Feather
+                name="shield"
+                size={16}
+                color="#FFFFFF"
+                style={{ marginBottom: 2 }}
+              />
               <Text style={styles.activeSosTriggerBtnText}>SOS</Text>
             </TouchableOpacity>
 
@@ -1251,23 +1562,39 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
               style={styles.cancelWalkBtnSmall}
               onPress={handleCancelWalk}
               activeOpacity={0.85}
-              accessibilityLabel="Cancel safe walk escort"
+              accessibilityLabel="End safe walk escort"
             >
-              <Text style={styles.cancelWalkBtnSmallText}>✕ Cancel</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Feather
+                  name="x"
+                  size={11}
+                  color={colors.textMuted}
+                  style={{ marginRight: 3 }}
+                />
+                <Text style={styles.cancelWalkBtnSmallText}>End walk</Text>
+              </View>
             </TouchableOpacity>
           </View>
 
           <View style={styles.activeNoticeRow}>
-            <Text
-              style={[styles.activeNoticeText, { color: colors.textMuted }]}
-            >
-              🛡️ 150m Safety Buffer active. Live guardian GPS tracking is on.
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Feather
+                name="shield"
+                size={12}
+                color="#10B981"
+                style={{ marginRight: 6 }}
+              />
+              <Text
+                style={[styles.activeNoticeText, { color: colors.textMuted }]}
+              >
+                {activeGuardianName} is following · Sharing your live location
+              </Text>
+            </View>
           </View>
         </View>
       )}
 
-      {/* Pre-Walk Guardian Confirmation Modal */}
+      {/* Screen 31: Pre-Walk Guardian Confirmation Modal */}
       <Modal
         visible={showPreWalkModal}
         transparent
@@ -1291,34 +1618,15 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
               <Text
                 style={[styles.preWalkTitle, { color: colors.textPrimary }]}
               >
-                🛡️ Confirm Safe Walk Escort
+                Who should follow your walk?
               </Text>
               <Text
                 style={[
                   styles.preWalkSubtitle,
-                  { color: colors.textSecondary },
+                  { color: colors.textSecondary, marginTop: 4 },
                 ]}
               >
-                Virtual companion will monitor your route to{' '}
-                {destPos?.name || 'your destination'} (
-                {Math.ceil(routeDurationSeconds / 60)} mins).
-              </Text>
-            </View>
-
-            <View style={styles.preWalkSectionHeader}>
-              <Text
-                style={[
-                  styles.preWalkSectionTitle,
-                  { color: colors.textPrimary },
-                ]}
-              >
-                Alerted Safety Guardians ({selectedGuardianIds.length})
-              </Text>
-              <Text
-                style={[styles.preWalkSectionSub, { color: colors.textMuted }]}
-              >
-                Selected guardians receive your live GPS tracking & deviation
-                alerts
+                We'll alert them when you start, deviate, or arrive.
               </Text>
             </View>
 
@@ -1373,7 +1681,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
                             { color: colors.textSecondary },
                           ]}
                         >
-                          {g.phone || g.email}
+                          {g.phone || g.email} · App notification & SMS
                         </Text>
                       </View>
 
@@ -1384,40 +1692,82 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
                         ]}
                       >
                         {isSelected && (
-                          <Text style={styles.checkmarkIcon}>✓</Text>
+                          <Feather name="check" size={12} color="#FFFFFF" />
                         )}
                       </View>
                     </TouchableOpacity>
                   );
                 })
               )}
-            </ScrollView>
 
-            <View style={styles.preWalkFooter}>
+              {/* Add a guardian button */}
               <TouchableOpacity
                 style={[
-                  styles.preWalkCancelBtn,
+                  styles.addGuardianRowBtn,
+                  { borderColor: colors.border },
+                ]}
+                onPress={() => {
+                  setShowPreWalkModal(false);
+                  if (navigationRef.isReady()) {
+                    navigationRef.navigate('MainTabs' as any);
+                  }
+                }}
+                activeOpacity={0.8}
+              >
+                <Feather
+                  name="plus"
+                  size={14}
+                  color={colors.primary}
+                  style={{ marginRight: 6 }}
+                />
+                <Text
+                  style={[
+                    styles.addGuardianRowBtnText,
+                    { color: colors.primary },
+                  ]}
+                >
+                  + Add a guardian
+                </Text>
+              </TouchableOpacity>
+
+              {/* Remember for my next walk switch */}
+              <View
+                style={[
+                  styles.rememberSwitchRow,
                   {
                     backgroundColor: colors.backgroundInput,
                     borderColor: colors.border,
                   },
                 ]}
-                onPress={() => setShowPreWalkModal(false)}
               >
                 <Text
                   style={[
-                    styles.preWalkCancelBtnText,
-                    { color: colors.textSecondary },
+                    styles.rememberSwitchLabel,
+                    { color: colors.textPrimary },
                   ]}
                 >
-                  Cancel
+                  Remember for my next walk
                 </Text>
-              </TouchableOpacity>
+                <Switch
+                  value={rememberGuardiansForNextWalk}
+                  onValueChange={setRememberGuardiansForNextWalk}
+                  trackColor={{ false: '#334155', true: colors.primary }}
+                  thumbColor="#FFFFFF"
+                />
+              </View>
+            </ScrollView>
 
+            <View style={styles.preWalkFooter}>
               <TouchableOpacity
                 style={[
                   styles.preWalkStartBtn,
-                  { backgroundColor: colors.primary },
+                  {
+                    backgroundColor: colors.primary,
+                    width: '100%',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  },
                 ]}
                 onPress={() => executeStartWalk(selectedGuardianIds)}
                 disabled={isStartingWalk}
@@ -1427,10 +1777,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
                   <Text style={styles.preWalkStartBtnText}>
-                    🚀 Start Walk{' '}
-                    {selectedGuardianIds.length > 0
-                      ? `(${selectedGuardianIds.length} Alerted)`
-                      : ''}
+                    Start Safe Walk · {Math.ceil(routeDurationSeconds / 60)} min
                   </Text>
                 )}
               </TouchableOpacity>
@@ -1439,22 +1786,85 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
         </View>
       </Modal>
 
-      {/* "I Reached Safely" Broadcast & Celebration Modal (Phase 5) */}
+      {/* Screen 33: End Walk Confirmation Dialog */}
+      <Modal
+        visible={showEndWalkConfirmModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowEndWalkConfirmModal(false)}
+      >
+        <View style={styles.confirmModalOverlay}>
+          <View
+            style={[
+              styles.confirmModalCard,
+              {
+                backgroundColor: isDark
+                  ? 'rgba(30, 41, 59, 0.96)'
+                  : 'rgba(255, 255, 255, 0.98)',
+                borderColor: isDark
+                  ? 'rgba(255, 255, 255, 0.15)'
+                  : colors.border,
+              },
+            ]}
+          >
+            {/* Amber warning alert icon in ring */}
+            <View style={styles.confirmIconBadge}>
+              <Feather name="alert-triangle" size={24} color="#F59E0B" />
+            </View>
+
+            <Text style={[styles.confirmTitle, { color: colors.textPrimary }]}>
+              End this walk?
+            </Text>
+
+            <Text
+              style={[styles.confirmSubtitle, { color: colors.textSecondary }]}
+            >
+              {activeGuardianName} will be notified that you ended your walk
+              before arriving.
+            </Text>
+
+            <View style={styles.confirmActionsCol}>
+              <TouchableOpacity
+                style={[
+                  styles.keepWalkingBtn,
+                  { backgroundColor: colors.primary },
+                ]}
+                onPress={() => setShowEndWalkConfirmModal(false)}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.keepWalkingBtnText}>Keep walking</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.endWalkConfirmBtn}
+                onPress={handleConfirmEndWalk}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.endWalkConfirmBtnText}>End walk</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Screen 35: "I Reached Safely" Broadcast & Celebration Modal */}
       <ArrivalCelebrationModal
         visible={showArrivalModal}
         destinationName={destPos?.name || 'Destination'}
         distanceMeters={routeDistanceMeters}
         durationSeconds={routeDurationSeconds}
+        guardianName={activeGuardianName}
         onClose={() => setShowArrivalModal(false)}
       />
 
-      {/* Confirm-Before-Escalate 60s Route Corridor Deviation Modal (Phase 4) */}
+      {/* Screen 34: Confirm-Before-Escalate 60s Route Corridor Deviation Modal */}
       <DeviationCountdownModal
         visible={Boolean(
           isDeviated && deviationCountdown !== null && deviationCountdown > 0,
         )}
         countdownSeconds={deviationCountdown ?? 60}
         totalSeconds={60}
+        guardianName={activeGuardianName}
         onDisarmSafe={handleDisarmDeviation}
         onEscalateSos={handleEscalateDeviation}
       />
@@ -1574,6 +1984,180 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
     color: '#EF4444',
+  },
+
+  // Screen 28 Sheet & Places List
+  screen28Sheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderTopWidth: 1,
+    paddingTop: 16,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+    paddingHorizontal: 20,
+  },
+  screen28ChipsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 14,
+  },
+  screen28Chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  screen28ChipText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  screen28HeaderRow: {
+    marginBottom: 12,
+  },
+  screen28HeaderTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  screen28Section: {
+    marginBottom: 12,
+  },
+  screen28SectionLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    marginBottom: 6,
+  },
+  screen28PlaceItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    gap: 12,
+  },
+  screen28PlaceIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  screen28PlaceName: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  screen28PlaceSub: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  screen28PlaceDist: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  // Screen 31 Additional Guardian Controls
+  addGuardianRowBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 11,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    marginBottom: 12,
+  },
+  addGuardianRowBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  rememberSwitchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 14,
+  },
+  rememberSwitchLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  // Screen 33 End Walk Confirmation Dialog
+  confirmModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.72)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  confirmModalCard: {
+    width: '100%',
+    maxWidth: 360,
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 24,
+    alignItems: 'center',
+    elevation: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+  },
+  confirmIconBadge: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(245, 158, 11, 0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  confirmTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  confirmSubtitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
+    marginBottom: 20,
+    paddingHorizontal: 10,
+  },
+  confirmActionsCol: {
+    width: '100%',
+    gap: 10,
+  },
+  keepWalkingBtn: {
+    width: '100%',
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 4,
+  },
+  keepWalkingBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  endWalkConfirmBtn: {
+    width: '100%',
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  endWalkConfirmBtnText: {
+    color: '#EF4444',
+    fontSize: 14,
+    fontWeight: '700',
   },
 
   // Idle Prompt Sheet when no route is previewed

@@ -9,6 +9,7 @@ import {
 import { useTheme } from '../../theme/ThemeContext';
 import { typography } from '../../theme/typography';
 import { MultiModalTravelTimes } from '../../services/routingService';
+import Feather from 'react-native-vector-icons/Feather';
 
 export type TransportMode = 'walk' | 'bike' | 'car';
 export type RouteStrategy = 'safest' | 'fastest';
@@ -32,6 +33,13 @@ export interface MultiModalRouteSheetProps {
   safestDurationSeconds?: number;
   shortcutDistanceMeters?: number;
   shortcutDurationSeconds?: number;
+  safestSafetyScore?: number;
+  shortcutSafetyScore?: number;
+  safestRouteName?: string;
+  shortcutRouteName?: string;
+  safestReportsCount?: number;
+  shortcutReportsCount?: number;
+  guardianSummary?: string;
 }
 
 export const MultiModalRouteSheet: React.FC<MultiModalRouteSheetProps> = ({
@@ -50,6 +58,13 @@ export const MultiModalRouteSheet: React.FC<MultiModalRouteSheetProps> = ({
   safestDurationSeconds,
   shortcutDistanceMeters,
   shortcutDurationSeconds,
+  safestSafetyScore = 95,
+  shortcutSafetyScore = 71,
+  safestRouteName = 'Via Gandhi Road',
+  shortcutRouteName = 'Via Paltan Bazaar',
+  safestReportsCount = 0,
+  shortcutReportsCount = 3,
+  guardianSummary,
 }) => {
   const { colors, isDark } = useTheme();
 
@@ -132,12 +147,30 @@ export const MultiModalRouteSheet: React.FC<MultiModalRouteSheetProps> = ({
           >
             SELECTED DESTINATION
           </Text>
-          <Text
-            style={[styles.sheetHeaderDest, { color: colors.textPrimary }]}
-            numberOfLines={1}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              flex: 1,
+              marginTop: 2,
+            }}
           >
-            📍 {destinationName}
-          </Text>
+            <Feather
+              name="map-pin"
+              size={14}
+              color={colors.primary}
+              style={{ marginRight: 6 }}
+            />
+            <Text
+              style={[
+                styles.sheetHeaderDest,
+                { color: colors.textPrimary, flex: 1 },
+              ]}
+              numberOfLines={1}
+            >
+              {destinationName}
+            </Text>
+          </View>
         </View>
         {handleClear && (
           <TouchableOpacity
@@ -154,33 +187,43 @@ export const MultiModalRouteSheet: React.FC<MultiModalRouteSheetProps> = ({
             accessibilityRole="button"
             accessibilityLabel="Clear Route"
           >
-            <Text style={styles.clearRouteText}>✕ Clear Route</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Feather
+                name="x"
+                size={11}
+                color="#EF4444"
+                style={{ marginRight: 3 }}
+              />
+              <Text style={styles.clearRouteText}>Clear Route</Text>
+            </View>
           </TouchableOpacity>
         )}
       </View>
 
-      {/* Dedicated Walking Route Header */}
+      {/* Choose your walk header (Screen 30) */}
       <View style={styles.walkHeaderBadgeRow}>
-        <Text style={[styles.walkHeaderTitle, { color: colors.textSecondary }]}>
-          SELECT WALKING ROUTE
+        <Text style={[styles.walkHeaderTitle, { color: colors.textPrimary }]}>
+          Choose your walk
         </Text>
-        <View style={styles.walkDedicatedPill}>
-          <Text style={styles.walkDedicatedText}>🚶 DEDICATED WALK</Text>
+        <View style={styles.optionsCountPill}>
+          <Text style={styles.optionsCountText}>3 options</Text>
         </View>
       </View>
 
-      {/* 2 Walking Paths: Path 1 Main Road vs Path 2 Shortcut */}
-      <View style={styles.strategyRow}>
-        {/* Path 1: Well-Lit Corridor (Main Road) */}
+      {/* Screen 30: Safest vs Fastest Route Cards */}
+      <View style={styles.routesStack}>
+        {/* Route 1: Safest Route (Main Road) */}
         <TouchableOpacity
           onPress={() => onSelectStrategy('safest')}
           activeOpacity={0.8}
           style={[
-            styles.strategyCard,
+            styles.routeOptionCard,
             {
               backgroundColor:
                 selectedStrategy === 'safest'
-                  ? 'rgba(16, 185, 129, 0.14)'
+                  ? isDark
+                    ? 'rgba(16, 185, 129, 0.12)'
+                    : '#F0FDF4'
                   : isDark
                     ? '#1E293B'
                     : '#F8FAFC',
@@ -188,99 +231,105 @@ export const MultiModalRouteSheet: React.FC<MultiModalRouteSheetProps> = ({
                 selectedStrategy === 'safest'
                   ? colors.brandEmerald
                   : isDark
-                    ? 'rgba(255, 255, 255, 0.1)'
+                    ? 'rgba(255, 255, 255, 0.08)'
                     : colors.border,
             },
           ]}
           accessibilityRole="button"
-          accessibilityLabel="Main Road Well-Lit Corridor"
+          accessibilityLabel={`Safest route ${safestRouteName}, safety score ${safestSafetyScore}`}
         >
-          <View style={styles.strategyCardHeader}>
-            <Text style={styles.strategyEmoji}>🛡️</Text>
-            <View style={styles.recommendedBadge}>
-              <Text style={styles.recommendedText}>SAFEST • MAIN ROAD</Text>
-            </View>
+          {/* Circular Safety Score Ring */}
+          <View style={[styles.scoreRing, { borderColor: '#10B981' }]}>
+            <Text style={[styles.scoreRingNumber, { color: '#10B981' }]}>
+              {safestSafetyScore}
+            </Text>
+            <Text style={[styles.scoreRingLabel, { color: '#10B981' }]}>
+              Safest
+            </Text>
           </View>
-          <Text style={[styles.strategyTitle, { color: colors.textPrimary }]}>
-            Well-Lit Corridor
-          </Text>
-          <Text
-            style={[
-              styles.strategyDetail,
-              typography.tabularNums,
-              { color: colors.brandEmerald },
-            ]}
-          >
-            {formatDuration(mainRoadSecs)} • {formatDistance(mainRoadMeters)}
-          </Text>
-          <Text
-            style={[styles.strategyFootnote, { color: colors.textSecondary }]}
-          >
-            96% street-lit • CCTV active • avoids unlit alleys
-          </Text>
+
+          {/* Route Details */}
+          <View style={styles.routeDetailsCol}>
+            <Text style={[styles.routeNameText, { color: colors.textPrimary }]}>
+              {safestRouteName}
+            </Text>
+            <Text
+              style={[styles.routeMetricsText, { color: colors.textSecondary }]}
+            >
+              {formatDistance(mainRoadMeters)} · {safestReportsCount} reports
+            </Text>
+          </View>
+
+          {/* Duration */}
+          <View style={styles.routeDurationCol}>
+            <Text
+              style={[styles.routeDurationText, { color: colors.textPrimary }]}
+            >
+              {Math.ceil(mainRoadSecs / 60)} min
+            </Text>
+          </View>
         </TouchableOpacity>
 
-        {/* Path 2: Direct Shortcut */}
+        {/* Route 2: Direct Shortcut (Fastest) */}
         <TouchableOpacity
           onPress={() => onSelectStrategy('fastest')}
           activeOpacity={0.8}
           style={[
-            styles.strategyCard,
+            styles.routeOptionCard,
             {
               backgroundColor:
                 selectedStrategy === 'fastest'
-                  ? 'rgba(99, 102, 241, 0.14)'
+                  ? isDark
+                    ? 'rgba(245, 158, 11, 0.12)'
+                    : '#FFFBEB'
                   : isDark
                     ? '#1E293B'
                     : '#F8FAFC',
               borderColor:
                 selectedStrategy === 'fastest'
-                  ? colors.primary
+                  ? '#F59E0B'
                   : isDark
-                    ? 'rgba(255, 255, 255, 0.1)'
+                    ? 'rgba(255, 255, 255, 0.08)'
                     : colors.border,
             },
           ]}
           accessibilityRole="button"
-          accessibilityLabel="Direct Shortcut Path"
+          accessibilityLabel={`Fastest route ${shortcutRouteName}, safety score ${shortcutSafetyScore}`}
         >
-          <View style={styles.strategyCardHeader}>
-            <Text style={styles.strategyEmoji}>⚡</Text>
-            <View
-              style={[
-                styles.recommendedBadge,
-                { backgroundColor: 'rgba(99, 102, 241, 0.2)' },
-              ]}
-            >
-              <Text
-                style={[styles.recommendedText, { color: colors.primaryLight }]}
-              >
-                FASTEST • SHORTCUT
-              </Text>
-            </View>
+          {/* Circular Safety Score Ring */}
+          <View style={[styles.scoreRing, { borderColor: '#F59E0B' }]}>
+            <Text style={[styles.scoreRingNumber, { color: '#F59E0B' }]}>
+              {shortcutSafetyScore}
+            </Text>
+            <Text style={[styles.scoreRingLabel, { color: '#F59E0B' }]}>
+              Fastest
+            </Text>
           </View>
-          <Text style={[styles.strategyTitle, { color: colors.textPrimary }]}>
-            Direct Shortcut
-          </Text>
-          <Text
-            style={[
-              styles.strategyDetail,
-              typography.tabularNums,
-              { color: colors.primaryLight },
-            ]}
-          >
-            {formatDuration(shortcutSecs)} • {formatDistance(shortcutMeters)}
-          </Text>
-          <Text
-            style={[styles.strategyFootnote, { color: colors.textSecondary }]}
-          >
-            Saves {savedMins} min{savedMins > 1 ? 's' : ''} • connects side
-            lanes
-          </Text>
+
+          {/* Route Details */}
+          <View style={styles.routeDetailsCol}>
+            <Text style={[styles.routeNameText, { color: colors.textPrimary }]}>
+              {shortcutRouteName}
+            </Text>
+            <Text
+              style={[styles.routeMetricsText, { color: colors.textSecondary }]}
+            >
+              {formatDistance(shortcutMeters)} · {shortcutReportsCount} reports
+            </Text>
+          </View>
+
+          {/* Duration */}
+          <View style={styles.routeDurationCol}>
+            <Text
+              style={[styles.routeDurationText, { color: colors.textPrimary }]}
+            >
+              {Math.ceil(shortcutSecs / 60)} min
+            </Text>
+          </View>
         </TouchableOpacity>
       </View>
 
-      {/* Start Escort Button */}
+      {/* Screen 30 CTA Button */}
       <TouchableOpacity
         onPress={handleStart}
         disabled={isStarting}
@@ -288,10 +337,7 @@ export const MultiModalRouteSheet: React.FC<MultiModalRouteSheetProps> = ({
         style={[
           styles.startBtn,
           {
-            backgroundColor:
-              selectedStrategy === 'safest'
-                ? colors.brandEmerald
-                : colors.primary,
+            backgroundColor: colors.primary,
           },
         ]}
         accessibilityRole="button"
@@ -299,12 +345,16 @@ export const MultiModalRouteSheet: React.FC<MultiModalRouteSheetProps> = ({
       >
         <Text style={styles.startBtnText}>
           {isStarting
-            ? 'Activating Guardian Network...'
-            : selectedStrategy === 'safest'
-              ? `🛡️ Start Main Road Walk (${Math.ceil(mainRoadSecs / 60)} min)`
-              : `⚡ Start Shortcut Walk (${Math.ceil(shortcutSecs / 60)} min)`}
+            ? 'Starting Safe Walk...'
+            : `Start Safe Walk · ${Math.ceil((selectedStrategy === 'safest' ? mainRoadSecs : shortcutSecs) / 60)} min`}
         </Text>
       </TouchableOpacity>
+
+      {/* Screen 30 Bottom Footer Caption */}
+      <Text style={[styles.walkFooterCaption, { color: colors.textMuted }]}>
+        {guardianSummary ||
+          'Sharing with guardians (SMS & app). Safe corridor: up to 150 m range.'}
+      </Text>
     </View>
   );
 };
@@ -376,63 +426,64 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
-  walkDedicatedPill: {
-    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+  optionsCountPill: {
+    backgroundColor: 'rgba(99, 102, 241, 0.12)',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 8,
   },
-  walkDedicatedText: {
-    color: '#38BDF8',
+  optionsCountText: {
+    color: '#6366F1',
     fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 0.5,
+    fontWeight: '800',
   },
-  strategyRow: {
-    flexDirection: 'row',
-    gap: 12,
+  routesStack: {
+    gap: 10,
     marginBottom: 14,
   },
-  strategyCard: {
-    flex: 1,
+  routeOptionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
     padding: 12,
     borderRadius: 16,
     borderWidth: 1.5,
+    gap: 12,
   },
-  strategyCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  scoreRing: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 2,
     alignItems: 'center',
-    marginBottom: 6,
+    justifyContent: 'center',
   },
-  strategyEmoji: {
-    fontSize: 18,
-  },
-  recommendedBadge: {
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  recommendedText: {
-    fontSize: 8.5,
+  scoreRingNumber: {
+    fontSize: 15,
     fontWeight: '900',
-    color: '#10B981',
-    letterSpacing: 0.5,
+    lineHeight: 17,
   },
-  strategyTitle: {
-    fontSize: 13,
+  scoreRingLabel: {
+    fontSize: 8,
     fontWeight: '800',
-    marginBottom: 2,
+    textTransform: 'uppercase',
   },
-  strategyDetail: {
-    fontSize: 13,
+  routeDetailsCol: {
+    flex: 1,
+  },
+  routeNameText: {
+    fontSize: 14,
     fontWeight: '800',
-    marginBottom: 4,
   },
-  strategyFootnote: {
-    fontSize: 10,
-    lineHeight: 13,
+  routeMetricsText: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  routeDurationCol: {
+    alignItems: 'flex-end',
+  },
+  routeDurationText: {
+    fontSize: 14,
+    fontWeight: '800',
   },
   startBtn: {
     paddingVertical: 14,
@@ -445,5 +496,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '900',
     letterSpacing: 0.3,
+  },
+  walkFooterCaption: {
+    fontSize: 11,
+    textAlign: 'center',
+    marginTop: 8,
+    lineHeight: 15,
   },
 });

@@ -1,116 +1,94 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
-  Image,
   StatusBar,
-  Platform,
+  Animated,
+  Dimensions,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors } from '../theme/colors';
+import Feather from 'react-native-vector-icons/Feather';
 import { useAuthStore } from '../store/authStore';
+
+const { width } = Dimensions.get('window');
 
 interface WelcomeScreenProps {
   navigation: any;
 }
 
 export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ navigation }) => {
-  const insets = useSafeAreaInsets();
-  const topInset = Math.max(
-    insets.top,
-    Platform.OS === 'android' ? StatusBar.currentHeight || 28 : 0,
-  );
-  const enterAsGuest = useAuthStore(state => state.enterAsGuest);
+  const { hasSeenOnboarding, isAuthenticated } = useAuthStore();
+  const progressAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  const handleEnterGuest = async () => {
-    await enterAsGuest();
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'MainTabs' }],
+  useEffect(() => {
+    // Fade in
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 500,
+      useNativeDriver: true,
+    }).start();
+
+    // Progress bar fill animation across 1.8 seconds, then navigate
+    Animated.timing(progressAnim, {
+      toValue: 1,
+      duration: 1800,
+      useNativeDriver: false,
+    }).start(() => {
+      if (isAuthenticated) {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'MainTabs' }],
+        });
+      } else if (hasSeenOnboarding) {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'AccountSelect' }],
+        });
+      } else {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Onboarding' }],
+        });
+      }
     });
-  };
+  }, [fadeAnim, progressAnim, hasSeenOnboarding, isAuthenticated, navigation]);
+
+  const progressWidth = progressAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0%', '100%'],
+  });
 
   return (
-    <View
-      style={[
-        styles.container,
-        {
-          paddingTop: topInset + 12,
-          paddingBottom: Math.max(insets.bottom, 24),
-        },
-      ]}
-    >
+    <View style={styles.container}>
       <StatusBar barStyle="light-content" />
 
-      {/* Hero Visual Area */}
-      <View style={styles.heroSection}>
-        <View style={styles.iconWrapper}>
-          <Image
-            source={require('../assets/icon.png')}
-            style={styles.logoImage}
-            resizeMode="cover"
-          />
-        </View>
+      {/* Ambient Deep Radial Backing */}
+      <View style={styles.radialBackground} />
 
-        <View style={styles.titleBadge}>
-          <View style={styles.beaconDot} />
-          <Text style={styles.badgeText}>COMMUNITY SAFETY SHIELD</Text>
+      {/* Center Shield & Branding */}
+      <Animated.View style={[styles.centerContent, { opacity: fadeAnim }]}>
+        <View style={styles.shieldEmblem}>
+          <View style={styles.specularTopRim} />
+          <Feather name="shield" size={54} color="#FFFFFF" />
         </View>
 
         <Text style={styles.appTitle}>SAFORA</Text>
-        <Text style={styles.tagline}>
-          Navigate with confidence. Real-time community hazard reporting & safe
-          walk escort.
-        </Text>
+        <Text style={styles.appTagline}>Your personal safety companion</Text>
+      </Animated.View>
 
-        {/* Feature Pills */}
-        <View style={styles.pillsContainer}>
-          <View style={styles.pill}>
-            <Text style={styles.pillText}>🛡️ Real-time SOS</Text>
-          </View>
-          <View style={styles.pill}>
-            <Text style={styles.pillText}>🗺️ Safe Walk</Text>
-          </View>
-          <View style={styles.pill}>
-            <Text style={styles.pillText}>⚠️ Hazard Alerts</Text>
-          </View>
+      {/* Bottom Liquid Glass Progress Bar Track */}
+      <View style={styles.progressContainer}>
+        <View style={styles.progressTrack}>
+          <Animated.View
+            style={[
+              styles.progressBar,
+              {
+                width: progressWidth,
+              },
+            ]}
+          />
         </View>
-      </View>
-
-      {/* Action Buttons */}
-      <View style={styles.actionsSection}>
-        {/* Primary: Create Account */}
-        <TouchableOpacity
-          style={styles.primaryButton}
-          activeOpacity={0.85}
-          onPress={() => navigation.navigate('Register')}
-        >
-          <Text style={styles.primaryButtonText}>Create Account</Text>
-        </TouchableOpacity>
-
-        {/* Secondary: Sign In */}
-        <TouchableOpacity
-          style={styles.secondaryButton}
-          activeOpacity={0.85}
-          onPress={() => navigation.navigate('Login')}
-        >
-          <Text style={styles.secondaryButtonText}>Sign In</Text>
-        </TouchableOpacity>
-
-        {/* Ghost: Continue as Guest */}
-        <TouchableOpacity
-          style={styles.guestButton}
-          activeOpacity={0.7}
-          onPress={handleEnterGuest}
-        >
-          <Text style={styles.guestButtonText}>Continue as Guest →</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.footerNote}>
-          Guest mode gives full preview of safety maps & hazard queries.
-        </Text>
       </View>
     </View>
   );
@@ -119,140 +97,80 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingTop: 48,
-    paddingBottom: 36,
-  },
-  heroSection: {
+    backgroundColor: '#0D0F1D',
+    justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 20,
+    position: 'relative',
   },
-  iconWrapper: {
+  radialBackground: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#0A0D20',
+  },
+  centerContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shieldEmblem: {
     width: 110,
     height: 110,
-    borderRadius: 28,
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: colors.accent,
-    shadowColor: colors.accent,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 14,
-    elevation: 12,
-    marginBottom: 20,
-  },
-  logoImage: {
-    width: '100%',
-    height: '100%',
-  },
-  titleBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.backgroundCard,
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    borderRadius: 20,
+    borderRadius: 34,
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
     borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: 12,
+    borderColor: 'rgba(255, 255, 255, 0.28)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.35,
+    shadowRadius: 50,
+    elevation: 12,
+    position: 'relative',
+    overflow: 'hidden',
   },
-  beaconDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.success,
-    marginRight: 8,
-  },
-  badgeText: {
-    color: colors.accent,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1.2,
+  specularTopRim: {
+    position: 'absolute',
+    top: 0,
+    left: 12,
+    right: 12,
+    height: 1.5,
+    backgroundColor: 'rgba(255, 255, 255, 0.75)',
   },
   appTitle: {
-    fontSize: 38,
-    fontWeight: '900',
-    color: colors.textPrimary,
-    letterSpacing: 3,
-    marginBottom: 8,
-  },
-  tagline: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
-    paddingHorizontal: 16,
-    marginBottom: 24,
-  },
-  pillsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  pill: {
-    backgroundColor: colors.backgroundCard,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  pillText: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  actionsSection: {
-    width: '100%',
-    gap: 12,
-  },
-  primaryButton: {
-    backgroundColor: colors.primary,
-    paddingVertical: 16,
-    borderRadius: 16,
-    alignItems: 'center',
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-  primaryButtonText: {
+    fontFamily: 'System',
+    fontWeight: '800',
+    fontSize: 34,
     color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    letterSpacing: 5.5,
+    marginTop: 24,
   },
-  secondaryButton: {
-    backgroundColor: colors.backgroundCard,
-    paddingVertical: 15,
-    borderRadius: 16,
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: colors.border,
-  },
-  secondaryButtonText: {
-    color: colors.textPrimary,
+  appTagline: {
     fontSize: 15,
-    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.85)',
+    marginTop: 6,
+    fontWeight: '500',
+    letterSpacing: 0.2,
   },
-  guestButton: {
-    paddingVertical: 12,
+  progressContainer: {
+    position: 'absolute',
+    bottom: 80,
+    left: 90,
+    right: 90,
     alignItems: 'center',
   },
-  guestButtonText: {
-    color: colors.accent,
-    fontSize: 14,
-    fontWeight: '600',
-    letterSpacing: 0.3,
+  progressTrack: {
+    width: '100%',
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    overflow: 'hidden',
   },
-  footerNote: {
-    color: colors.textMuted,
-    fontSize: 11,
-    textAlign: 'center',
-    marginTop: 4,
+  progressBar: {
+    height: '100%',
+    borderRadius: 3,
+    backgroundColor: '#6866E6',
   },
 });

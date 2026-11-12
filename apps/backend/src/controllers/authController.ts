@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { AuthService } from "../services/authService";
 import { AuthenticatedRequest } from "../middleware/auth";
 import { AppError } from "../errors/AppError";
+import { CloudinaryService } from "../services/cloudinaryService";
 
 export async function register(
   req: Request,
@@ -122,6 +123,41 @@ export async function changePassword(
     res.status(200).json({
       success: true,
       message: "Password changed successfully",
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function uploadProfilePhoto(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (!req.user) {
+      throw new AppError("Unauthorized", 401);
+    }
+    const file = (req as any).file;
+    if (!file) {
+      throw new AppError("No photo file provided", 400);
+    }
+
+    const result = await CloudinaryService.uploadAvatar(
+      file.buffer,
+      req.user.id,
+    );
+
+    const updatedUser = await AuthService.updateUserProfile(req.user.id, {
+      avatarUrl: result.url,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Profile photo updated successfully",
+      photoUrl: result.url,
+      avatarUrl: result.url,
+      user: updatedUser,
     });
   } catch (err) {
     next(err);

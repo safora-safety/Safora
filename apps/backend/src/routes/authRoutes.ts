@@ -6,9 +6,11 @@ import {
   getMe,
   updateProfile,
   changePassword,
+  uploadProfilePhoto,
 } from "../controllers/authController";
 import { authMiddleware } from "../middleware/auth";
 import { validateBody } from "../middleware/validate";
+import { uploadMiddleware } from "../services/cloudinaryService";
 import {
   registerIpRateLimiter,
   registerEmailRateLimiter,
@@ -51,6 +53,12 @@ router.patch(
   authMiddleware as any,
   validateBody(updateProfileSchema),
   updateProfile,
+);
+router.post(
+  "/profile-photo",
+  authMiddleware as any,
+  uploadMiddleware.single("photo"),
+  uploadProfilePhoto,
 );
 router.post(
   "/change-password",

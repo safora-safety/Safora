@@ -7,34 +7,41 @@ import {
   BackHandler,
   ToastAndroid,
   Platform,
+  Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors } from '../theme/colors';
+import Feather from 'react-native-vector-icons/Feather';
+import { useTheme } from '../theme/ThemeContext';
 import { HomeScreen } from '../screens/HomeScreen';
 import { MapScreen } from '../screens/MapScreen';
 import { SafeWalkScreen } from '../screens/SafeWalkScreen';
+import { ToolsScreen } from '../screens/ToolsScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
+import { useAuthStore } from '../store/authStore';
 
-type TabKey = 'Home' | 'Map' | 'SafeWalk' | 'Profile';
+export type TabKey = 'Home' | 'Radar' | 'SafeWalk' | 'Tools' | 'Profile';
 
 interface TabItem {
   key: TabKey;
   label: string;
-  icon: string;
+  iconName: string;
 }
 
 const TABS: TabItem[] = [
-  { key: 'Home', label: 'Home', icon: '🏠' },
-  { key: 'Map', label: 'Map Radar', icon: '🗺️' },
-  { key: 'SafeWalk', label: 'Safe Walk', icon: '🚶‍♀️' },
-  { key: 'Profile', label: 'Profile', icon: '👤' },
+  { key: 'Home', label: 'Home', iconName: 'home' },
+  { key: 'Radar', label: 'Radar', iconName: 'compass' },
+  { key: 'SafeWalk', label: 'Safe Walk', iconName: 'navigation' },
+  { key: 'Tools', label: 'Tools', iconName: 'grid' },
+  { key: 'Profile', label: 'You', iconName: 'user' },
 ];
 
 export const MainTabNavigator: React.FC = () => {
   const insets = useSafeAreaInsets();
-  // Safe bottom padding for Android 3-button navigation (~48dp), gesture bar (~16-24dp), or hardware buttons (0dp)
-  const bottomBarPadding =
-    Math.max(insets.bottom, 12) + (insets.bottom > 0 ? 4 : 0);
+  const { colors, isDark } = useTheme();
+  const { user } = useAuthStore();
+
+  // Safe bottom padding for navigation bar
+  const bottomBarPadding = Math.max(insets.bottom, 12);
 
   const [activeTab, setActiveTab] = useState<TabKey>('Home');
   const [safeWalkDestination, setSafeWalkDestination] = useState<
@@ -46,17 +53,57 @@ export const MainTabNavigator: React.FC = () => {
     | undefined
   >(undefined);
   const [mapParams, setMapParams] = useState<any>(undefined);
+  const [profileParams, setProfileParams] = useState<any>(undefined);
   const [tabHistory, setTabHistory] = useState<TabKey[]>(['Home']);
   const lastBackPressRef = useRef<number>(0);
+
+  // Tab scale bounce anim
+  const tabScaleAnims = useRef<Record<TabKey, Animated.Value>>({
+    Home: new Animated.Value(1),
+    Radar: new Animated.Value(1),
+    SafeWalk: new Animated.Value(1),
+    Tools: new Animated.Value(1),
+    Profile: new Animated.Value(1),
+  }).current;
+
+  // Unread/Incomplete setup count for "You" tab
+  // If user hasn't completed test drill, lacks phone, or lacks blood group, show badge count
+  const calculateYouBadgeCount = (): number => {
+    let count = 0;
+    if (!user?.hasCompletedTestDrill && !user?.has_completed_test_drill)
+      count += 1;
+    if (!user?.bloodGroup && !user?.blood_group) count += 1;
+    if (!user?.phone) count += 1;
+    return count > 0 ? count : 0;
+  };
+  const youBadgeCount = calculateYouBadgeCount();
 
   const handleNavigateTab = (tab: TabKey, params?: any) => {
     if (params?.destination) {
       setSafeWalkDestination(params.destination);
     }
-    if (tab === 'Map' && params) {
-      // Set or update mapParams (e.g. { openReport: true, showHeatmap: boolean })
+    if (tab === 'Radar' && params) {
       setMapParams({ ...params, timestamp: Date.now() });
     }
+    if (tab === 'Profile' && params) {
+      setProfileParams({ ...params, timestamp: Date.now() });
+    }
+
+    // Trigger liquid spring bounce on the tab icon
+    Animated.sequence([
+      Animated.timing(tabScaleAnims[tab], {
+        toValue: 0.85,
+        duration: 90,
+        useNativeDriver: true,
+      }),
+      Animated.spring(tabScaleAnims[tab], {
+        toValue: 1,
+        speed: 24,
+        bounciness: 9,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
     if (tab === activeTab) return;
 
     if (tab === 'Home') {
@@ -110,30 +157,8 @@ export const MainTabNavigator: React.FC = () => {
     return () => backSubscription.remove();
   }, [tabHistory, activeTab]);
 
-  const renderActiveScreen = () => {
-    switch (activeTab) {
-      case 'Home':
-        return (
-          <HomeScreen
-            onNavigateTab={(tab, params) => handleNavigateTab(tab, params)}
-          />
-        );
-      case 'Map':
-        return (
-          <MapScreen
-            onNavigateTab={handleNavigateTab}
-            route={mapParams ? { params: mapParams } : undefined}
-          />
-        );
-      case 'SafeWalk':
-        return <SafeWalkScreen initialDestination={safeWalkDestination} />;
-      case 'Profile':
-        return <ProfileScreen />;
-    }
-  };
-
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.canvas }]}>
       {/* Screen Container with preserved screen state */}
       <View style={styles.screenArea}>
         <View
@@ -143,18 +168,26 @@ export const MainTabNavigator: React.FC = () => {
           ]}
         >
           <HomeScreen
-            onNavigateTab={(tab, params) => handleNavigateTab(tab, params)}
+            onNavigateTab={(tab, params) => {
+              const mappedTab: TabKey =
+                tab === 'Map' ? 'Radar' : (tab as TabKey);
+              handleNavigateTab(mappedTab, params);
+            }}
           />
         </View>
 
         <View
           style={[
             styles.screenWrapper,
-            activeTab === 'Map' ? styles.visible : styles.hidden,
+            activeTab === 'Radar' ? styles.visible : styles.hidden,
           ]}
         >
           <MapScreen
-            onNavigateTab={handleNavigateTab}
+            onNavigateTab={(tab, params) => {
+              const mappedTab: TabKey =
+                tab === 'Map' ? 'Radar' : (tab as TabKey);
+              handleNavigateTab(mappedTab, params);
+            }}
             route={mapParams ? { params: mapParams } : undefined}
           />
         </View>
@@ -171,34 +204,143 @@ export const MainTabNavigator: React.FC = () => {
         <View
           style={[
             styles.screenWrapper,
+            activeTab === 'Tools' ? styles.visible : styles.hidden,
+          ]}
+        >
+          <ToolsScreen
+            onNavigateTab={(tab, params) => handleNavigateTab(tab, params)}
+          />
+        </View>
+
+        <View
+          style={[
+            styles.screenWrapper,
             activeTab === 'Profile' ? styles.visible : styles.hidden,
           ]}
         >
-          <ProfileScreen />
+          <ProfileScreen
+            route={profileParams ? { params: profileParams } : undefined}
+          />
         </View>
       </View>
 
-      {/* Sleek Bottom Navigation Bar */}
-      <View style={[styles.bottomTabBar, { paddingBottom: bottomBarPadding }]}>
-        {TABS.map(tab => {
-          const isActive = activeTab === tab.key;
-          return (
-            <TouchableOpacity
-              key={tab.key}
-              style={[styles.tabButton, isActive && styles.tabButtonActive]}
-              activeOpacity={0.7}
-              onPress={() => handleNavigateTab(tab.key)}
-            >
-              {isActive && <View style={styles.activeGlowLine} />}
-              <Text style={styles.tabIcon}>{tab.icon}</Text>
-              <Text
-                style={[styles.tabLabel, isActive && styles.tabLabelActive]}
+      {/* Floating Liquid Glass Bottom Navigation Bar */}
+      <View
+        style={[
+          styles.bottomNavContainer,
+          {
+            paddingBottom: bottomBarPadding > 14 ? bottomBarPadding : 10,
+          },
+        ]}
+      >
+        <View
+          style={[
+            styles.liquidNavBar,
+            {
+              backgroundColor: isDark
+                ? 'rgba(20, 24, 44, 0.78)'
+                : 'rgba(255, 255, 255, 0.88)',
+              borderColor: isDark
+                ? 'rgba(255, 255, 255, 0.14)'
+                : 'rgba(110, 100, 225, 0.18)',
+              shadowColor: isDark ? '#000000' : 'rgba(40, 36, 110, 0.22)',
+            },
+          ]}
+        >
+          {/* Top specular highlight rim */}
+          <View
+            pointerEvents="none"
+            style={[
+              styles.specularRim,
+              {
+                backgroundColor: isDark
+                  ? 'rgba(255, 255, 255, 0.35)'
+                  : 'rgba(255, 255, 255, 0.95)',
+              },
+            ]}
+          />
+
+          {TABS.map(tab => {
+            const isActive = activeTab === tab.key;
+            const isYouTab = tab.key === 'Profile';
+
+            return (
+              <TouchableOpacity
+                key={tab.key}
+                style={[
+                  styles.tabButton,
+                  isActive && {
+                    backgroundColor: isDark
+                      ? 'rgba(139, 137, 255, 0.22)'
+                      : 'rgba(75, 73, 168, 0.12)',
+                    borderColor: isDark
+                      ? 'rgba(255, 255, 255, 0.22)'
+                      : 'rgba(75, 73, 168, 0.20)',
+                  },
+                ]}
+                activeOpacity={0.8}
+                onPress={() => handleNavigateTab(tab.key)}
               >
-                {tab.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+                <Animated.View
+                  style={{
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transform: [{ scale: tabScaleAnims[tab.key] }],
+                  }}
+                >
+                  <View style={styles.iconContainer}>
+                    <Feather
+                      name={tab.iconName}
+                      size={20}
+                      color={
+                        isActive
+                          ? isDark
+                            ? '#FFFFFF'
+                            : colors.primaryDark
+                          : isDark
+                            ? '#8387AB'
+                            : '#66647A'
+                      }
+                    />
+
+                    {/* Unread badge on You tab */}
+                    {isYouTab && youBadgeCount > 0 && (
+                      <View
+                        style={[
+                          styles.badgePill,
+                          {
+                            backgroundColor: colors.badgeBackground,
+                            borderColor: isDark ? '#10132A' : '#FFFFFF',
+                          },
+                        ]}
+                      >
+                        <Text style={styles.badgeText}>{youBadgeCount}</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <Text
+                    style={[
+                      styles.tabLabel,
+                      {
+                        color: isActive
+                          ? isDark
+                            ? '#FFFFFF'
+                            : colors.primaryDark
+                          : isDark
+                            ? '#8387AB'
+                            : '#66647A',
+                        fontWeight: isActive ? '800' : '600',
+                      },
+                    ]}
+                  >
+                    {tab.label}
+                  </Text>
+                </Animated.View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </View>
     </View>
   );
@@ -207,7 +349,6 @@ export const MainTabNavigator: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
   },
   screenArea: {
     flex: 1,
@@ -221,52 +362,75 @@ const styles = StyleSheet.create({
   hidden: {
     display: 'none',
   },
-  bottomTabBar: {
+  bottomNavContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  liquidNavBar: {
     flexDirection: 'row',
-    backgroundColor: colors.backgroundCard,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingBottom: 12,
-    paddingTop: 8,
-    paddingHorizontal: 8,
+    width: '100%',
+    height: 64,
+    borderRadius: 32,
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    alignItems: 'center',
     justifyContent: 'space-around',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 12,
+    position: 'relative',
+    overflow: 'hidden',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.45,
+    shadowRadius: 28,
+    elevation: 14,
+  },
+  specularRim: {
+    position: 'absolute',
+    top: 0,
+    left: 18,
+    right: 18,
+    height: 1,
+    opacity: 0.8,
   },
   tabButton: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 6,
-    paddingHorizontal: 14,
-    borderRadius: 12,
+    paddingHorizontal: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    minWidth: 62,
     position: 'relative',
-    minWidth: 70,
   },
-  tabButtonActive: {
-    backgroundColor: 'rgba(79, 70, 229, 0.12)',
-  },
-  activeGlowLine: {
-    position: 'absolute',
-    top: -8,
-    width: 28,
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: colors.accent,
-  },
-  tabIcon: {
-    fontSize: 20,
-    marginBottom: 4,
+  iconContainer: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 3,
   },
   tabLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: colors.textMuted,
+    fontSize: 10,
+    letterSpacing: 0.1,
   },
-  tabLabelActive: {
-    color: colors.accent,
+  badgePill: {
+    position: 'absolute',
+    top: -5,
+    right: -10,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+    borderWidth: 1.5,
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
     fontWeight: '800',
   },
 });

@@ -44,7 +44,16 @@ export const updateProfileSchema = z.object({
   email: z.string().email("Invalid email address").optional(),
   phone: z.string().max(25).optional().nullable(),
   blood_group: z.string().max(10).optional().nullable(),
-  emergency_notes: z.string().max(500).optional().nullable(),
+  bloodGroup: z.string().max(10).optional().nullable(),
+  emergency_notes: z.string().max(1000).optional().nullable(),
+  emergencyNotes: z.string().max(1000).optional().nullable(),
+  allergies: z.string().max(500).optional().nullable(),
+  show_medical_on_lock_screen: z.boolean().optional(),
+  showMedicalOnLockScreen: z.boolean().optional(),
+  has_completed_test_drill: z.boolean().optional(),
+  hasCompletedTestDrill: z.boolean().optional(),
+  avatar_url: z.string().url().optional().nullable(),
+  avatarUrl: z.string().url().optional().nullable(),
   age: z.coerce.number().int().min(1).max(120).optional().nullable(),
   ageNoticeAck: z.boolean().optional(),
   age_notice_ack: z.boolean().optional(),
@@ -67,6 +76,8 @@ export const createReportSchema = z.object({
   latitude: z.coerce.number().min(-90).max(90),
   longitude: z.coerce.number().min(-180).max(180),
   photo_url: z.string().url().optional().nullable(),
+  photo_urls: z.array(z.string().url()).max(3).optional(),
+  show_reporter_name: z.boolean().optional(),
 });
 
 export const nearbyReportsQuerySchema = z.object({
@@ -150,6 +161,12 @@ export const trustedContactSchema = z.object({
   phone: z.string().min(7).max(20),
   email: z.string().email().optional().nullable().or(z.literal("")),
   relationship: z.string().max(50).optional(),
+  notification_channel: z.enum(["app_and_sms", "sms_only"]).optional(),
+  notificationChannel: z.enum(["app_and_sms", "sms_only"]).optional(),
+  can_view_live_walk: z.boolean().optional(),
+  canViewLiveWalk: z.boolean().optional(),
+  notify_on_deviation: z.boolean().optional(),
+  notifyOnDeviation: z.boolean().optional(),
 });
 
 export const testGuardianSchema = z.object({

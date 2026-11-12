@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
 import { AuthService } from '../../services/authService';
+import Feather from 'react-native-vector-icons/Feather';
 
 interface ChangePasswordModalProps {
   visible: boolean;
@@ -119,7 +120,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
           <View style={[styles.header, { borderBottomColor: colors.border }]}>
             <View style={styles.headerTitleRow}>
               <View style={styles.iconCircle}>
-                <Text style={styles.keyEmoji}>🔐</Text>
+                <Feather name="lock" size={18} color={colors.primary} />
               </View>
               <View>
                 <Text style={[styles.title, { color: colors.textPrimary }]}>
@@ -133,11 +134,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
               </View>
             </View>
             <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
-              <Text
-                style={[styles.closeBtnText, { color: colors.textSecondary }]}
-              >
-                ✕
-              </Text>
+              <Feather name="x" size={18} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
@@ -176,8 +173,15 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
                 <TouchableOpacity
                   onPress={() => setShowOld(!showOld)}
                   style={styles.eyeBtn}
+                  accessibilityLabel={
+                    showOld ? 'Hide password' : 'Show password'
+                  }
                 >
-                  <Text style={styles.eyeIcon}>{showOld ? '👁️' : '🔒'}</Text>
+                  <Feather
+                    name={showOld ? 'eye' : 'eye-off'}
+                    size={18}
+                    color={colors.textSecondary}
+                  />
                 </TouchableOpacity>
               </View>
             </View>
@@ -208,8 +212,15 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
                 <TouchableOpacity
                   onPress={() => setShowNew(!showNew)}
                   style={styles.eyeBtn}
+                  accessibilityLabel={
+                    showNew ? 'Hide password' : 'Show password'
+                  }
                 >
-                  <Text style={styles.eyeIcon}>{showNew ? '👁️' : '🔒'}</Text>
+                  <Feather
+                    name={showNew ? 'eye' : 'eye-off'}
+                    size={18}
+                    color={colors.textSecondary}
+                  />
                 </TouchableOpacity>
               </View>
             </View>
@@ -240,10 +251,15 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
                 <TouchableOpacity
                   onPress={() => setShowConfirm(!showConfirm)}
                   style={styles.eyeBtn}
+                  accessibilityLabel={
+                    showConfirm ? 'Hide password' : 'Show password'
+                  }
                 >
-                  <Text style={styles.eyeIcon}>
-                    {showConfirm ? '👁️' : '🔒'}
-                  </Text>
+                  <Feather
+                    name={showConfirm ? 'eye' : 'eye-off'}
+                    size={18}
+                    color={colors.textSecondary}
+                  />
                 </TouchableOpacity>
               </View>
             </View>

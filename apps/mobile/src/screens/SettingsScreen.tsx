@@ -22,6 +22,7 @@ import {
   BatteryOptimizationService,
   DeviceInfo,
 } from '../services/batteryOptimizationService';
+import Feather from 'react-native-vector-icons/Feather';
 
 interface SettingsScreenProps {
   navigation: any;
@@ -51,6 +52,11 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const [isBatteryUnrestricted, setIsBatteryUnrestricted] = useState(false);
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
   const [showBatteryGuideModal, setShowBatteryGuideModal] = useState(false);
+
+  // Screens 60 & 61: Clear Cache & Sign Out confirmation modals
+  const [showClearCacheModal, setShowClearCacheModal] = useState(false);
+  const [showSignOutModal, setShowSignOutModal] = useState(false);
+  const [isCacheCleared, setIsCacheCleared] = useState(false);
 
   useEffect(() => {
     AudioRecorderService.isPermissionGranted().then(setMicGranted);
@@ -144,16 +150,26 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     AsyncStorage.setItem('@safora_pref_reached_notification', String(val));
   };
 
-  const handleClearCache = async () => {
+  const handleClearCache = () => {
+    setShowClearCacheModal(true);
+  };
+
+  const confirmClearCache = async () => {
     try {
       await AsyncStorage.removeItem('@safora_cached_nearby_hazards');
-      Alert.alert(
-        'Cache Cleared',
-        'Local map tiles and cached radar hazards have been cleared successfully.',
-      );
-    } catch {
-      Alert.alert('Notice', 'Cache reset completed.');
-    }
+    } catch {}
+    setShowClearCacheModal(false);
+    setIsCacheCleared(true);
+  };
+
+  const handleSignOutPress = () => {
+    setShowSignOutModal(true);
+  };
+
+  const confirmSignOut = async () => {
+    setShowSignOutModal(false);
+    await logout();
+    navigation.navigate('AccountSelect');
   };
 
   return (
@@ -357,15 +373,23 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   onPress={handleRequestBatteryExemption}
                   activeOpacity={0.8}
                 >
-                  <Text
-                    style={{
-                      color: '#FFFFFF',
-                      fontSize: 12,
-                      fontWeight: '700',
-                    }}
-                  >
-                    ⚡ Remove Limits
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Feather
+                      name="zap"
+                      size={13}
+                      color="#FFFFFF"
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text
+                      style={{
+                        color: '#FFFFFF',
+                        fontSize: 12,
+                        fontWeight: '700',
+                      }}
+                    >
+                      Remove Limits
+                    </Text>
+                  </View>
                 </TouchableOpacity>
               )}
 
@@ -383,15 +407,23 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 onPress={() => setShowBatteryGuideModal(true)}
                 activeOpacity={0.8}
               >
-                <Text
-                  style={{
-                    color: colors.textPrimary,
-                    fontSize: 12,
-                    fontWeight: '700',
-                  }}
-                >
-                  📱 Setup Guide ›
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Feather
+                    name="book-open"
+                    size={13}
+                    color={colors.textPrimary}
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text
+                    style={{
+                      color: colors.textPrimary,
+                      fontSize: 12,
+                      fontWeight: '700',
+                    }}
+                  >
+                    Setup Guide ›
+                  </Text>
+                </View>
               </TouchableOpacity>
             </View>
           </View>
@@ -499,9 +531,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         >
           <View style={styles.themeRow}>
             {[
-              { id: 'light', label: '☀️ Light' },
-              { id: 'dark', label: '🌙 Dark' },
-              { id: 'system', label: '⚙️ Auto' },
+              { id: 'light', label: 'Light', icon: 'sun' },
+              { id: 'dark', label: 'Dark', icon: 'moon' },
+              { id: 'system', label: 'Auto', icon: 'monitor' },
             ].map(item => {
               const isSelected = themeMode === item.id;
               return (
@@ -516,11 +548,20 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       borderColor: isSelected
                         ? colors.primaryLight
                         : colors.border,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'center',
                     },
                   ]}
                   onPress={() => setThemeMode(item.id as any)}
                   activeOpacity={0.8}
                 >
+                  <Feather
+                    name={item.icon}
+                    size={14}
+                    color={isSelected ? '#FFFFFF' : colors.textSecondary}
+                    style={{ marginRight: 6 }}
+                  />
                   <Text
                     style={[
                       styles.themeBtnText,
@@ -576,14 +617,22 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 alignItems: 'center',
               }}
             >
-              <Text
-                style={[
-                  styles.actionItemText,
-                  { color: isGuest ? colors.textMuted : colors.textPrimary },
-                ]}
-              >
-                🔐 Change Account Password
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Feather
+                  name="lock"
+                  size={16}
+                  color={isGuest ? colors.textMuted : colors.primary}
+                  style={{ marginRight: 8 }}
+                />
+                <Text
+                  style={[
+                    styles.actionItemText,
+                    { color: isGuest ? colors.textMuted : colors.textPrimary },
+                  ]}
+                >
+                  Change Account Password
+                </Text>
+              </View>
               <Text
                 style={{
                   color: isGuest ? colors.textMuted : colors.primary,
@@ -607,16 +656,28 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               }}
             >
               <View style={{ flex: 1, paddingRight: 10 }}>
-                <Text
-                  style={[styles.actionItemText, { color: colors.textPrimary }]}
-                >
-                  🎙️ Microphone Evidence Permission
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Feather
+                    name="mic"
+                    size={16}
+                    color={colors.primary}
+                    style={{ marginRight: 8 }}
+                  />
+                  <Text
+                    style={[
+                      styles.actionItemText,
+                      { color: colors.textPrimary },
+                    ]}
+                  >
+                    Microphone Evidence Permission
+                  </Text>
+                </View>
                 <Text
                   style={{
                     color: colors.textMuted,
                     fontSize: 11,
                     marginTop: 2,
+                    marginLeft: 24,
                   }}
                 >
                   Captures 30s ambient audio during emergency SOS broadcasts
@@ -670,11 +731,19 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 alignItems: 'center',
               }}
             >
-              <Text
-                style={[styles.actionItemText, { color: colors.textPrimary }]}
-              >
-                🛡️ Safety Terms & Privacy Policy
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Feather
+                  name="shield"
+                  size={16}
+                  color={colors.primary}
+                  style={{ marginRight: 8 }}
+                />
+                <Text
+                  style={[styles.actionItemText, { color: colors.textPrimary }]}
+                >
+                  Safety Terms & Privacy Policy
+                </Text>
+              </View>
               <Text
                 style={{
                   color: colors.primary,
@@ -705,16 +774,27 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             style={styles.actionItem}
             onPress={handleClearCache}
           >
-            <Text
-              style={[styles.actionItemText, { color: colors.textPrimary }]}
-            >
-              🧹 Clear Local Map Cache & Routes
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Feather
+                name="trash-2"
+                size={16}
+                color={colors.primary}
+                style={{ marginRight: 8 }}
+              />
+              <Text
+                style={[styles.actionItemText, { color: colors.textPrimary }]}
+              >
+                Clear Local Map Cache & Routes
+              </Text>
+            </View>
           </TouchableOpacity>
         </View>
 
         {/* Sign Out Button */}
-        <TouchableOpacity style={styles.signOutBtn} onPress={logout}>
+        <TouchableOpacity
+          style={styles.signOutBtn}
+          onPress={handleSignOutPress}
+        >
           <Text style={styles.signOutText}>
             {isGuest ? 'Exit Guest Mode' : 'Sign Out of SAFORA'}
           </Text>
@@ -794,15 +874,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       onPress={() => setShowBatteryGuideModal(false)}
                       style={{ padding: 6 }}
                     >
-                      <Text
-                        style={{
-                          fontSize: 18,
-                          color: colors.textMuted,
-                          fontWeight: '700',
-                        }}
-                      >
-                        ✕
-                      </Text>
+                      <Feather name="x" size={18} color={colors.textMuted} />
                     </TouchableOpacity>
                   </View>
 
@@ -814,16 +886,25 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       borderRadius: 12,
                       padding: 12,
                       marginBottom: 16,
+                      flexDirection: 'row',
+                      alignItems: 'flex-start',
                     }}
                   >
+                    <Feather
+                      name="alert-triangle"
+                      size={13}
+                      color="#F59E0B"
+                      style={{ marginRight: 6, marginTop: 2 }}
+                    />
                     <Text
                       style={{
                         fontSize: 12,
                         color: '#F59E0B',
                         lineHeight: 18,
+                        flex: 1,
                       }}
                     >
-                      ⚠️ {guide.description}
+                      {guide.description}
                     </Text>
                   </View>
 
@@ -897,15 +978,25 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                     onPress={handleOpenManufacturerSettings}
                     activeOpacity={0.8}
                   >
-                    <Text
-                      style={{
-                        color: '#FFFFFF',
-                        fontSize: 14,
-                        fontWeight: '800',
-                      }}
+                    <View
+                      style={{ flexDirection: 'row', alignItems: 'center' }}
                     >
-                      ⚙️ Open Device Power Settings
-                    </Text>
+                      <Feather
+                        name="settings"
+                        size={14}
+                        color="#FFFFFF"
+                        style={{ marginRight: 6 }}
+                      />
+                      <Text
+                        style={{
+                          color: '#FFFFFF',
+                          fontSize: 14,
+                          fontWeight: '800',
+                        }}
+                      >
+                        Open Device Power Settings
+                      </Text>
+                    </View>
                   </TouchableOpacity>
 
                   <TouchableOpacity
@@ -934,6 +1025,146 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 </ScrollView>
               );
             })()}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Screen 60: Clear map cache confirmation modal */}
+      <Modal
+        visible={showClearCacheModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowClearCacheModal(false)}
+      >
+        <View style={styles.confirmModalOverlay}>
+          <View
+            style={[
+              styles.confirmModalCard,
+              {
+                backgroundColor: isDark
+                  ? 'rgba(30, 41, 59, 0.95)'
+                  : 'rgba(255, 255, 255, 0.98)',
+                borderColor: isDark
+                  ? 'rgba(255, 255, 255, 0.12)'
+                  : 'rgba(0, 0, 0, 0.08)',
+              },
+            ]}
+          >
+            <View style={styles.clearCacheIconCircle}>
+              <Feather name="trash-2" size={24} color={colors.primary} />
+            </View>
+            <Text
+              style={[styles.confirmModalTitle, { color: colors.textPrimary }]}
+            >
+              Clear map cache?
+            </Text>
+            <Text
+              style={[
+                styles.confirmModalSubtitle,
+                { color: colors.textSecondary },
+              ]}
+            >
+              This will remove 24 MB of cached Dehradun maps. They will
+              re-download when you open the map.
+            </Text>
+            <TouchableOpacity
+              style={[
+                styles.clearCacheConfirmBtn,
+                { backgroundColor: colors.primary },
+              ]}
+              onPress={confirmClearCache}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.clearCacheConfirmText}>Clear cache</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.confirmCancelBtn,
+                {
+                  backgroundColor: colors.backgroundInput,
+                  borderColor: colors.border,
+                },
+              ]}
+              onPress={() => setShowClearCacheModal(false)}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.confirmCancelText,
+                  { color: colors.textPrimary },
+                ]}
+              >
+                Cancel
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Screen 61: Sign Out Confirmation Modal */}
+      <Modal
+        visible={showSignOutModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowSignOutModal(false)}
+      >
+        <View style={styles.confirmModalOverlay}>
+          <View
+            style={[
+              styles.confirmModalCard,
+              {
+                backgroundColor: isDark
+                  ? 'rgba(30, 41, 59, 0.95)'
+                  : 'rgba(255, 255, 255, 0.98)',
+                borderColor: isDark
+                  ? 'rgba(255, 255, 255, 0.12)'
+                  : 'rgba(0, 0, 0, 0.08)',
+              },
+            ]}
+          >
+            <View style={styles.signOutIconCircle}>
+              <Feather name="user" size={24} color="#EF4444" />
+            </View>
+            <Text
+              style={[styles.confirmModalTitle, { color: colors.textPrimary }]}
+            >
+              Sign out of SAFORA?
+            </Text>
+            <Text
+              style={[
+                styles.confirmModalSubtitle,
+                { color: colors.textSecondary },
+              ]}
+            >
+              Your guardians and saved places stay on your account.
+            </Text>
+            <TouchableOpacity
+              style={styles.signOutConfirmBtn}
+              onPress={confirmSignOut}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.signOutConfirmText}>Sign out</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.confirmCancelBtn,
+                {
+                  backgroundColor: colors.backgroundInput,
+                  borderColor: colors.border,
+                },
+              ]}
+              onPress={() => setShowSignOutModal(false)}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.confirmCancelText,
+                  { color: colors.textPrimary },
+                ]}
+              >
+                Cancel
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -1049,5 +1280,92 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#64748B',
     marginTop: 10,
+  },
+  confirmModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  confirmModalCard: {
+    width: '100%',
+    maxWidth: 340,
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 24,
+    alignItems: 'center',
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
+    elevation: 10,
+  },
+  clearCacheIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(99, 102, 241, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  signOutIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  confirmModalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  confirmModalSubtitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  clearCacheConfirmBtn: {
+    width: '100%',
+    height: 48,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clearCacheConfirmText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  signOutConfirmBtn: {
+    width: '100%',
+    height: 48,
+    backgroundColor: '#DC2626',
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  signOutConfirmText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  confirmCancelBtn: {
+    width: '100%',
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmCancelText: {
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

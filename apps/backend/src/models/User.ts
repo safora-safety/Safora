@@ -7,6 +7,10 @@ export interface UserRow {
   phone?: string | null;
   blood_group?: string | null;
   emergency_notes?: string | null;
+  allergies?: string | null;
+  show_medical_on_lock_screen?: boolean | null;
+  is_verified?: boolean | null;
+  has_completed_test_drill?: boolean | null;
   password?: string;
   role: UserRole;
   is_active?: boolean;
@@ -26,6 +30,10 @@ export interface UserEntity {
   phone?: string;
   bloodGroup?: string;
   emergencyNotes?: string;
+  allergies?: string;
+  showMedicalOnLockScreen?: boolean;
+  isVerified?: boolean;
+  hasCompletedTestDrill?: boolean;
   role: UserRole;
   isActive?: boolean;
   authProvider?: string;
@@ -56,6 +64,10 @@ export class UserModel {
       phone: row.phone || undefined,
       bloodGroup: row.blood_group || undefined,
       emergencyNotes: row.emergency_notes || undefined,
+      allergies: row.allergies || undefined,
+      showMedicalOnLockScreen: Boolean(row.show_medical_on_lock_screen),
+      isVerified: row.is_verified !== false,
+      hasCompletedTestDrill: Boolean(row.has_completed_test_drill),
       role: row.role || "user",
       isActive: row.is_active !== undefined ? Boolean(row.is_active) : true,
       authProvider: row.auth_provider || "local",

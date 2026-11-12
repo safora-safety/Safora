@@ -12,37 +12,41 @@ import {
   ActivityIndicator,
   RefreshControl,
   Platform,
+  Animated,
+  Image,
 } from 'react-native';
+import Feather from 'react-native-vector-icons/Feather';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/authStore';
 import { useTheme } from '../theme/ThemeContext';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SirenService } from '../services/sirenService';
 import {
   getCurrentCoordinates,
   LocationCoordinates,
   CAMPUS_COORDINATES,
+  reverseGeocode,
 } from '../services/locationService';
 import { ReportService } from '../services/reportService';
 import { SosService } from '../services/sosService';
-import { SafetyScoreResponse } from '@safora/shared-types';
-import { FloatingSearchCapsule } from '../components/map/FloatingSearchCapsule';
-import { FakeCallModal } from '../components/decoy/FakeCallModal';
-import { CalculatorDecoyModal } from '../components/decoy/CalculatorDecoyModal';
-import { SosGracePeriodOverlay, AudioWaveformBars } from '../components';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AudioRecorderService } from '../services/audioRecorderService';
+import { SafetyScoreResponse, TrustedContact } from '@safora/shared-types';
+import { GlassCard } from '../components/common/GlassCard';
+import { GlassButton } from '../components/common/GlassButton';
+import { ReportHazardModal } from '../components/hazards/ReportHazardModal';
+import { SosGracePeriodOverlay } from '../components/emergency/SosGracePeriodOverlay';
+import { SosActiveCockpitModal } from '../components/emergency/SosActiveCockpitModal';
+import { OfflineEmergencyModal } from '../components/emergency/OfflineEmergencyModal';
+import { AudioWaveformBars } from '../components/emergency/AudioWaveformBars';
 import { JourneyService } from '../services/journeyService';
 import {
   onJourneyLocation,
   onJourneyStart,
   onJourneyEnded,
-  ensureSocketConnected,
 } from '../services/socketService';
 import { navigationRef } from '../navigation/RootNavigator';
 
 interface HomeScreenProps {
   onNavigateTab?: (
-    tab: 'Home' | 'Map' | 'SafeWalk' | 'Profile',
+    tab: 'Home' | 'Map' | 'Radar' | 'SafeWalk' | 'Tools' | 'Profile',
     params?: any,
   ) => void;
 }
@@ -55,17 +59,26 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
   );
   const { user, isGuest } = useAuthStore();
   const { colors, isDark } = useTheme();
+
   const [coords, setCoords] = useState<LocationCoordinates>(CAMPUS_COORDINATES);
+  const [locationName, setLocationName] = useState('Dehradun');
   const [safetyScore, setSafetyScore] = useState<SafetyScoreResponse | null>(
     null,
   );
   const [scoreStatus, setScoreStatus] = useState<
     'loading' | 'success' | 'error'
   >('loading');
-  const [sosCountdown, setSosCountdown] = useState<number | null>(null);
-  const [showFakeCall, setShowFakeCall] = useState(false);
-  const [fakeCallDelay, setFakeCallDelay] = useState<number | null>(null);
-  const [showDecoyCalculator, setShowDecoyCalculator] = useState(false);
+  const [hazardsCount, setHazardsCount] = useState(0);
+  const [contacts, setContacts] = useState<TrustedContact[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [isSirenActive, setIsSirenActive] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [showSosOverlay, setShowSosOverlay] = useState(false);
+  const [showSosActiveCockpit, setShowSosActiveCockpit] = useState(false);
+  const [showOfflineEmergency, setShowOfflineEmergency] = useState(false);
+  const [sosCountdown, setSosCountdown] = useState(5);
+
+  // Active tracked companion (SYN-4)
   const [activeTrackedWalker, setActiveTrackedWalker] = useState<{
     journeyId: string | number;
     walkerName: string;
@@ -74,12 +87,78 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
     deviated?: boolean;
     lastSeen: Date;
   } | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
-  const [isSirenActive, setIsSirenActive] = useState(false);
-  const [isAudioRecording, setIsAudioRecording] = useState(false);
 
   const lastAlertedJourneyIdRef = useRef<string | number | null>(null);
 
+  // Pulsing SOS liquid ripple animation
+  const rippleScale = useRef(new Animated.Value(1)).current;
+  const rippleOpacity = useRef(new Animated.Value(0.4)).current;
+
+  useEffect(() => {
+    const pulseAnim = Animated.loop(
+      Animated.parallel([
+        Animated.timing(rippleScale, {
+          toValue: 1.45,
+          duration: 1600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(rippleOpacity, {
+          toValue: 0,
+          duration: 1600,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    pulseAnim.start();
+    return () => pulseAnim.stop();
+  }, [rippleScale, rippleOpacity]);
+
+  // Load live safety score
+  const loadSafetyScore = (lat: number, lng: number) => {
+    setScoreStatus('loading');
+    ReportService.getSafetyScore(lat, lng)
+      .then(res => {
+        if (res && typeof res.safetyScore === 'number') {
+          setSafetyScore(res);
+          setHazardsCount(res.factors?.totalHazardsNearby || 0);
+          setScoreStatus('success');
+        } else {
+          setScoreStatus('error');
+        }
+      })
+      .catch(() => {
+        setScoreStatus('error');
+      });
+  };
+
+  // Initial load
+  useEffect(() => {
+    getCurrentCoordinates()
+      .then(c => {
+        setCoords(c);
+        loadSafetyScore(c.latitude, c.longitude);
+        reverseGeocode(c.latitude, c.longitude)
+          .then(addr => {
+            if (addr) {
+              const part = addr.split(',')[0]?.trim();
+              if (part) setLocationName(part);
+            }
+          })
+          .catch(() => {});
+      })
+      .catch(() => {
+        loadSafetyScore(
+          CAMPUS_COORDINATES.latitude,
+          CAMPUS_COORDINATES.longitude,
+        );
+      });
+
+    SosService.getContacts()
+      .then(setContacts)
+      .catch(() => {});
+  }, []);
+
+  // Guardian escort tracking polling and sockets
   const checkActiveEscort = async () => {
     if (isGuest || !user) return;
     try {
@@ -129,14 +208,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
     }
   };
 
-  // Realtime guardian tracking listener (SYN-4)
   useEffect(() => {
     checkActiveEscort();
-
-    // Auto-fetch active escort every 8 seconds so Device B detects new walks immediately
-    const pollTimer = setInterval(() => {
-      checkActiveEscort();
-    }, 8000);
+    const pollTimer = setInterval(() => checkActiveEscort(), 8000);
 
     const unsubLoc = onJourneyLocation((payload: any) => {
       if (!payload || !payload.latitude || !payload.longitude) return;
@@ -155,54 +229,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
     const unsubStart = onJourneyStart((payload: any) => {
       checkActiveEscort();
       Vibration.vibrate([0, 300, 100, 300]);
-      const walker = payload?.walkerName || 'Your contact';
-      Alert.alert(
-        '🚶‍♀️ Live Safe Walk Started',
-        `${walker} has started a Safe Walk escort session. Live GPS tracking is active!`,
-        [
-          { text: 'Later', style: 'cancel' },
-          {
-            text: 'Watch Live Escort',
-            onPress: () => {
-              if (navigationRef.isReady()) {
-                (navigationRef as any).navigate('GuardianLive', {
-                  journeyId: payload?.journeyId,
-                  walkerName: walker,
-                  initialLocation: payload?.origin,
-                });
-              }
-            },
-          },
-        ],
-      );
     });
 
-    const unsubEnd = onJourneyEnded((payload: any) => {
-      const status = payload?.status || 'completed';
-      setActiveTrackedWalker(prev => {
-        if (!prev) return null;
-        if (
-          !payload?.journeyId ||
-          String(prev.journeyId) === String(payload.journeyId)
-        ) {
-          const wName = prev.walkerName || 'Walker';
-          if (status === 'completed') {
-            Vibration.vibrate(500);
-            Alert.alert(
-              '✅ Safe Arrival Confirmed',
-              `${wName} has reached their destination safely! Safe Walk escort session completed.`,
-            );
-          } else if (status === 'cancelled') {
-            Vibration.vibrate([0, 200, 100, 200]);
-            Alert.alert(
-              '🛑 Safe Walk Cancelled',
-              `${wName} has cancelled their Safe Walk session.`,
-            );
-          }
-          return null;
-        }
-        return prev;
-      });
+    const unsubEnd = onJourneyEnded(() => {
+      setActiveTrackedWalker(null);
     });
 
     return () => {
@@ -213,28 +243,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
     };
   }, [user, isGuest]);
 
-  const loadSafetyScore = (lat: number, lng: number) => {
-    setScoreStatus('loading');
-    ReportService.getSafetyScore(lat, lng)
-      .then(res => {
-        if (res && typeof res.safetyScore === 'number') {
-          setSafetyScore(res);
-          setScoreStatus('success');
-        } else {
-          setScoreStatus('error');
-        }
-      })
-      .catch(() => {
-        setScoreStatus('error');
-      });
-  };
-
   const onRefresh = async () => {
     setRefreshing(true);
     try {
       const c = await getCurrentCoordinates();
       setCoords(c);
       loadSafetyScore(c.latitude, c.longitude);
+      const contactsList = await SosService.getContacts();
+      setContacts(contactsList);
       await checkActiveEscort();
     } catch {
     } finally {
@@ -242,378 +258,72 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
     }
   };
 
-  const togglePanicSiren = async () => {
-    if (isSirenActive) {
-      await SirenService.stopSiren();
-      setIsSirenActive(false);
-      Alert.alert(
-        'Siren Silenced',
-        'Emergency siren alarm has been deactivated.',
-      );
-    } else {
-      Vibration.vibrate([0, 500, 200, 500]);
-      const started = await SirenService.startSiren();
-      if (started) {
-        setIsSirenActive(true);
-      }
-    }
-  };
-
-  useEffect(() => {
-    getCurrentCoordinates().then(c => {
-      setCoords(c);
-      loadSafetyScore(c.latitude, c.longitude);
-    });
-
-    // Check and recover any interrupted SOS audio recordings from cold reboot
-    AudioRecorderService.recoverPendingEvidence().catch(() => {});
-
-    // Ensure microphone permission is prompted if user bypassed onboarding
-    AudioRecorderService.isPermissionGranted().then(granted => {
-      if (!granted) {
-        AudioRecorderService.requestPermissionOnce().catch(() => {});
-      }
-    });
-
-    const audioCheckTimer = setInterval(() => {
-      setIsAudioRecording(AudioRecorderService.isCurrentlyRecording());
-    }, 1500);
-
-    return () => clearInterval(audioCheckTimer);
-  }, []);
-
-  // 5-second countdown abort window for SOS
-  useEffect(() => {
-    let timer: any;
-    if (sosCountdown !== null && sosCountdown > 0) {
-      Vibration.vibrate(200);
-      timer = setInterval(() => {
-        setSosCountdown(prev => (prev !== null ? prev - 1 : null));
-      }, 1000);
-    } else if (sosCountdown === 0) {
-      setSosCountdown(null);
-      dispatchRealSos();
-    }
-    return () => clearInterval(timer);
-  }, [sosCountdown]);
-
-  // Delay timer for Fake Incoming Call
-  useEffect(() => {
-    let timer: any;
-    if (fakeCallDelay !== null && fakeCallDelay > 0) {
-      timer = setTimeout(() => {
-        setFakeCallDelay(null);
-        setShowFakeCall(true);
-      }, fakeCallDelay * 1000);
-    }
-    return () => clearTimeout(timer);
-  }, [fakeCallDelay]);
-
-  const handleSosPress = () => {
-    if (isGuest) {
-      Alert.alert(
-        '🔒 SOS Locked in Guest Mode',
-        'Emergency SOS broadcasts live GPS, audio evidence, and notifies your emergency guardians.\n\nTo activate Emergency SOS and configure emergency contacts, please sign in or create an account.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Sign In / Switch Account',
-            onPress: () => {
-              if (navigationRef.isReady()) {
-                (navigationRef as any).navigate('AccountSelect');
-              }
-            },
-          },
-        ],
-      );
-      return;
-    }
-    setSosCountdown(5);
-  };
-
-  const cancelSos = () => {
-    setSosCountdown(null);
-    Vibration.cancel();
-    SirenService.stopSiren().catch(() => {});
+  const handleStopSiren = async () => {
+    await SirenService.stopSiren();
     setIsSirenActive(false);
-    setIsAudioRecording(false);
-    AudioRecorderService.stopSilent().catch(() => {});
-    Alert.alert('SOS Cancelled', 'Emergency broadcast was safely aborted.');
   };
 
-  const dispatchRealSos = async () => {
-    Vibration.vibrate([0, 800, 300, 800]);
+  const handleOfflineSms = () => {
+    setShowOfflineEmergency(true);
+  };
 
-    let isLoudSiren = false;
-    try {
-      const loudPref = await AsyncStorage.getItem('@safora_pref_loud_siren');
-      isLoudSiren = loudPref === 'true';
-    } catch {}
-
-    if (isLoudSiren) {
-      SirenService.startSiren().catch(() => {});
-      setIsSirenActive(true);
-    }
-
-    // Pre-warm Socket.IO connection in parallel with SOS dispatch
-    ensureSocketConnected(3000).catch(() => {});
-
-    if (!isLoudSiren) {
-      AudioRecorderService.startRecording()
-        .then(started => {
-          if (started) setIsAudioRecording(true);
-        })
-        .catch(() => {});
-    }
-
-    let onlineSuccess = false;
-    let contactsCount = 0;
-    let alertId: string | number | undefined;
-
-    try {
-      const res = await SosService.triggerSOS({
-        latitude: coords.latitude,
-        longitude: coords.longitude,
-      });
-
-      if (res && res.alert) {
-        onlineSuccess = !res.isOffline;
-        contactsCount = res.contactsNotified || 0;
-        alertId = res.alert.id;
-        if (!isLoudSiren) {
-          AudioRecorderService.setAlertId(alertId);
-        }
-      }
-    } catch {
-      onlineSuccess = false;
-    }
-
-    // Determine target primary contact for carrier SMS
-    let targetPhone = '112';
-    let contactName = 'Emergency Helpline';
-    try {
-      const stored = await AsyncStorage.getItem(
-        '@safora_custom_emergency_contacts',
-      );
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const firstReal = parsed.find(
-            c => c.phone && c.phone.replace(/\D/g, '').length >= 10,
-          );
-          if (firstReal && firstReal.phone) {
-            targetPhone = firstReal.phone.replace(/[^\d+]/g, '');
-            contactName = firstReal.name || 'Guardian';
+  // SOS Countdown timer
+  useEffect(() => {
+    let timer: NodeJS.Timeout | null = null;
+    if (showSosOverlay) {
+      setSosCountdown(5);
+      timer = setInterval(() => {
+        setSosCountdown(prev => {
+          if (prev <= 1) {
+            clearInterval(timer!);
+            setShowSosOverlay(false);
+            setShowSosActiveCockpit(true);
+            return 0;
           }
-        }
-      }
-    } catch {}
-
-    const mapsLink = `https://maps.google.com/?q=${coords.latitude.toFixed(5)},${coords.longitude.toFixed(5)}`;
-    const body = encodeURIComponent(
-      `🚨 EMERGENCY SOS! I need immediate help. My live GPS coordinates: ${mapsLink} (${coords.areaName}) - Sent via SAFORA`,
-    );
-
-    // Dual Dispatch Dialog: Confirms online dispatch and offers direct carrier SMS
-    Alert.alert(
-      '🚨 EMERGENCY SOS BROADCAST',
-      onlineSuccess
-        ? `Emergency broadcast transmitted!\n\n• 📍 GPS: ${coords.latitude.toFixed(4)}°N, ${coords.longitude.toFixed(4)}°E (${coords.areaName})\n• 🔔 ${contactsCount} guardian(s) alerted via push notification.\n• 🎙️ 30s ambient audio evidence is recording.\n\nOpen SMS now to send direct carrier text to ${contactName} (${targetPhone})?`
-        : `Network offline or server unreachable.\n\nImmediate cellular failover: Send emergency SMS to ${contactName} (${targetPhone}) now with live GPS coordinates?`,
-      [
-        { text: 'Dismiss', style: 'cancel' },
-        {
-          text: '📱 Send Emergency SMS',
-          style: 'destructive',
-          onPress: () => {
-            Linking.openURL(`sms:${targetPhone}?body=${body}`).catch(() => {
-              Linking.openURL(`sms:?body=${body}`).catch(() => {
-                Alert.alert(
-                  'Offline SMS',
-                  `Emergency coordinates: ${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}\nPlease text ${targetPhone}.`,
-                );
-              });
-            });
-          },
-        },
-      ],
-      { cancelable: false },
-    );
-  };
-
-  // Offline SMS Fallback (Zero-Internet SOS Dispatch)
-  const dispatchOfflineSmsSos = async () => {
-    if (isGuest) {
-      Alert.alert(
-        '🔒 Offline SOS Locked in Guest Mode',
-        'Offline SMS SOS broadcasts emergency coordinates to your registered emergency contacts.\n\nPlease sign in or create an account to configure contacts.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Sign In / Switch Account',
-            onPress: () => {
-              if (navigationRef.isReady()) {
-                (navigationRef as any).navigate('AccountSelect');
-              }
-            },
-          },
-        ],
-      );
-      return;
+          return prev - 1;
+        });
+      }, 1000);
     }
-    let targetPhone = '112';
-    try {
-      const stored = await AsyncStorage.getItem(
-        '@safora_custom_emergency_contacts',
-      );
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const firstReal = parsed.find(
-            c => c.phone && c.phone.replace(/\D/g, '').length >= 10,
-          );
-          if (firstReal && firstReal.phone) {
-            targetPhone = firstReal.phone.replace(/\s+/g, '');
-          }
-        }
-      }
-    } catch {}
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [showSosOverlay]);
 
-    const mapsLink = `https://maps.google.com/?q=${coords.latitude.toFixed(5)},${coords.longitude.toFixed(5)}`;
-    const body = encodeURIComponent(
-      `🚨 EMERGENCY SOS! I need immediate help. My live GPS coordinates: ${mapsLink} (${coords.areaName}) - Sent via SAFORA`,
-    );
-    Linking.openURL(`sms:${targetPhone}?body=${body}`).catch(() => {
-      Linking.openURL(`sms:?body=${body}`).catch(() => {
-        Alert.alert(
-          'Offline SMS',
-          `Emergency coordinates: ${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}\nPlease text ${targetPhone}.`,
-        );
-      });
-    });
+  // Greeting based on time of day
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
   };
 
-  const triggerFakeCallNow = () => {
-    setShowFakeCall(true);
-  };
+  const displayName = user?.name
+    ? user.name.split(' ')[0]
+    : isGuest
+      ? 'Explorer'
+      : 'Citizen';
 
-  const triggerFakeCallWithDelay = (seconds: number) => {
-    setFakeCallDelay(seconds);
-    Alert.alert(
-      '⏱️ Escape Call Scheduled',
-      `Your phone will ring in ${seconds} seconds with a realistic incoming call. Place it in your pocket or hold it naturally.`,
-      [{ text: 'OK' }],
-    );
-  };
+  const guardianSubtitle =
+    contacts.length > 0
+      ? `${contacts
+          .slice(0, 2)
+          .map(c => c.name)
+          .join(' and ')} can receive your SOS.`
+      : 'Add emergency contacts to receive your SOS.';
 
-  const getScoreColor = (score: number) => {
-    if (score >= 80) return colors.success;
-    if (score >= 50) return colors.warning;
-    return colors.danger;
-  };
+  const scoreValue = safetyScore ? safetyScore.safetyScore : 100;
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[styles.container, { backgroundColor: colors.canvas }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
-
-      {/* Top Header Bar */}
-      <View
-        style={[
-          styles.topBar,
-          {
-            backgroundColor: colors.backgroundCard,
-            borderBottomColor: colors.border,
-            paddingTop: topInset + 10,
-          },
-        ]}
-      >
-        <View style={styles.logoRow}>
-          <View style={styles.beaconDot} />
-          <Text style={[styles.brandTitle, { color: colors.textPrimary }]}>
-            SAFORA
-          </Text>
-        </View>
-
-        <TouchableOpacity
-          style={styles.userActions}
-          onPress={() => onNavigateTab?.('Profile')}
-        >
-          <View
-            style={[
-              styles.badge,
-              isGuest ? styles.guestBadge : styles.memberBadge,
-            ]}
-          >
-            <Text style={styles.badgeText}>
-              {isGuest
-                ? '👤 GUEST MODE'
-                : `🛡️ ${user?.name?.split(' ')[0] || 'MEMBER'}`}
-            </Text>
-          </View>
-        </TouchableOpacity>
-      </View>
-
-      {/* Live Hardware GPS Bar */}
-      <View
-        style={[
-          styles.gpsBar,
-          {
-            backgroundColor: isDark ? '#0A0F1D' : colors.surfaceHover,
-            borderBottomColor: colors.border,
-          },
-        ]}
-      >
-        <Text style={styles.gpsIcon}>📍</Text>
-        <Text
-          style={[styles.gpsText, { color: colors.textSecondary }]}
-          numberOfLines={1}
-        >
-          {coords.areaName || 'Detecting live street...'}
-        </Text>
-        <View style={styles.liveChip}>
-          <View style={styles.pulseDot} />
-          <Text style={styles.liveChipText}>
-            {coords.isLive ? 'LIVE GPS' : 'GPS READY'}
-          </Text>
-        </View>
-      </View>
-
-      {/* Live Audio Streaming Status Banner with Waveform Equalizer (Phase 4) */}
-      {isAudioRecording && (
-        <View style={styles.audioBanner}>
-          <AudioWaveformBars
-            isRecording={true}
-            barCount={7}
-            height={18}
-            activeColor="#EF4444"
-            labelText="EMERGENCY AUDIO EVIDENCE STREAMING"
-          />
-        </View>
-      )}
-
-      {/* Quick Destination Search Capsule (Google Maps Habit) */}
-      <TouchableOpacity
-        activeOpacity={0.88}
-        onPress={() => onNavigateTab?.('Map')}
-        style={styles.searchCapsuleTouch}
-        accessibilityRole="button"
-        accessibilityLabel="Search destination and open map"
-      >
-        <View pointerEvents="none">
-          <FloatingSearchCapsule
-            searchQuery=""
-            onSearchChange={() => {}}
-            onClear={() => {}}
-            placeholder="Where are you walking to?"
-            safetyScore={safetyScore ? safetyScore.safetyScore : null}
-          />
-        </View>
-      </TouchableOpacity>
 
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: Math.max(insets.bottom, 20) + 40 },
+          {
+            paddingTop: topInset + 10,
+            paddingBottom: Math.max(insets.bottom, 20) + 80,
+          },
         ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -624,11 +334,80 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
           />
         }
       >
-        {/* Active Guardian Live Escort Banner (SYN-4) */}
+        {/* Top Header Row (Screen 15) */}
+        <View style={styles.topHeader}>
+          <View style={styles.greetingCol}>
+            <Text style={[styles.greetingText, { color: colors.textPrimary }]}>
+              {getGreeting()}, {displayName}
+            </Text>
+            <Text
+              style={[
+                styles.locationSubText,
+                { color: isDark ? '#A3A7C8' : colors.textSecondary },
+              ]}
+            >
+              {locationName} · Location updated just now
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            style={[
+              styles.bellButton,
+              {
+                backgroundColor: isDark
+                  ? 'rgba(255, 255, 255, 0.08)'
+                  : '#ECE9FA',
+                borderColor: isDark
+                  ? 'rgba(255, 255, 255, 0.15)'
+                  : 'rgba(110, 100, 225, 0.18)',
+              },
+            ]}
+            onPress={() =>
+              onNavigateTab?.('Profile', { section: 'notifications' })
+            }
+            activeOpacity={0.8}
+          >
+            <Feather
+              name="bell"
+              size={18}
+              color={isDark ? '#C3C1FF' : colors.primaryDark}
+            />
+            <View
+              style={[
+                styles.badgePill,
+                { backgroundColor: colors.badgeBackground },
+              ]}
+            >
+              <Text style={styles.badgeText}>3</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        {/* Screen 16: Siren Active Banner */}
+        {isSirenActive && (
+          <View style={styles.sirenPlayingCard}>
+            <View style={styles.sirenIconSlot}>
+              <Feather name="volume-2" size={18} color="#FFFFFF" />
+            </View>
+            <View style={styles.sirenTextCol}>
+              <Text style={styles.sirenPlayingTitle}>Siren is playing</Text>
+              <Text style={styles.sirenPlayingSub}>Loud alarm is on</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.sirenStopChip}
+              onPress={handleStopSiren}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.sirenStopText}>Stop</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Active Guardian Companion Live Escort Banner (SYN-4) */}
         {activeTrackedWalker && (
           <TouchableOpacity
             style={[
-              styles.guardianLiveBanner,
+              styles.companionBanner,
               {
                 backgroundColor: activeTrackedWalker.deviated
                   ? 'rgba(239, 68, 68, 0.15)'
@@ -638,7 +417,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
                   : '#10B981',
               },
             ]}
-            activeOpacity={0.8}
+            activeOpacity={0.85}
             onPress={() => {
               if (navigationRef.isReady()) {
                 (navigationRef as any).navigate('GuardianLive', {
@@ -652,954 +431,793 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
               }
             }}
           >
-            <View style={styles.guardianLiveIconCircle}>
-              <Text style={{ fontSize: 20 }}>🚶‍♀️</Text>
-            </View>
-            <View style={{ flex: 1, marginLeft: 12 }}>
-              <View
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
-              >
-                <View
-                  style={[
-                    styles.pulseDot,
-                    {
-                      backgroundColor: activeTrackedWalker.deviated
-                        ? '#EF4444'
-                        : '#10B981',
-                    },
-                  ]}
-                />
-                <Text
-                  style={[
-                    styles.guardianLiveTitle,
-                    { color: colors.textPrimary },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {activeTrackedWalker.walkerName} is on a Safe Walk
-                </Text>
-              </View>
+            <Feather name="navigation" size={18} color="#10B981" />
+            <View style={{ flex: 1, marginLeft: 10 }}>
               <Text
-                style={[
-                  styles.guardianLiveSub,
-                  { color: colors.textSecondary },
-                ]}
+                style={[styles.companionTitle, { color: colors.textPrimary }]}
+              >
+                {activeTrackedWalker.walkerName} is on a Safe Walk
+              </Text>
+              <Text
+                style={[styles.companionSub, { color: colors.textSecondary }]}
               >
                 {activeTrackedWalker.deviated
                   ? '⚠️ Off safe route — Tap to track live'
-                  : 'Live GPS escort active — Tap to view map'}
+                  : 'Live GPS escort active — Tap to track'}
               </Text>
             </View>
-            <Text style={[styles.guardianLiveArrow, { color: colors.primary }]}>
-              →
-            </Text>
+            <Feather name="chevron-right" size={18} color="#10B981" />
           </TouchableOpacity>
         )}
 
-        {/* Live Community Safety Index Widget — 3 Render States (V1 SYN-1) */}
-        {scoreStatus === 'loading' && (
-          <View
-            style={[
-              styles.scoreCard,
-              {
-                backgroundColor: colors.backgroundCard,
-                borderColor: colors.border,
-                alignItems: 'center',
-                justifyContent: 'center',
-                paddingVertical: 24,
-                gap: 8,
-              },
-            ]}
-          >
-            <ActivityIndicator size="small" color={colors.primary} />
-            <Text
-              style={[styles.scoreCardSub, { color: colors.textSecondary }]}
-            >
-              Calculating community safety index for your location...
-            </Text>
-          </View>
-        )}
-
-        {scoreStatus === 'error' && (
-          <View
-            style={[
-              styles.scoreCard,
-              {
-                backgroundColor: colors.backgroundCard,
-                borderColor: colors.border,
-              },
-            ]}
-          >
-            <View style={styles.scoreHeader}>
-              <View style={styles.scoreTitleGroup}>
-                <Text
-                  style={[styles.scoreCardTitle, { color: colors.textPrimary }]}
-                >
-                  Community Safety Index
-                </Text>
-                <Text style={[styles.scoreCardSub, { color: colors.danger }]}>
-                  Couldn't load your safety score
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={[
-                  styles.retryBtn,
-                  {
-                    backgroundColor: colors.surfaceHover,
-                    borderColor: colors.border,
-                  },
-                ]}
-                onPress={() =>
-                  loadSafetyScore(coords.latitude, coords.longitude)
-                }
-              >
-                <Text style={[styles.retryBtnText, { color: colors.primary }]}>
-                  🔄 Retry
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
-        {scoreStatus === 'success' && safetyScore && (
-          <View
-            style={[
-              styles.scoreCard,
-              {
-                backgroundColor: colors.backgroundCard,
-                borderColor: colors.border,
-              },
-            ]}
-          >
-            <View style={styles.scoreHeader}>
-              <View style={styles.scoreTitleGroup}>
-                <Text
-                  style={[styles.scoreCardTitle, { color: colors.textPrimary }]}
-                >
-                  Community Safety Index
-                </Text>
-                <Text
-                  style={[styles.scoreCardSub, { color: colors.textSecondary }]}
-                >
-                  Real-time active street & lighting reports
-                </Text>
-              </View>
-              <View
-                style={[
-                  styles.scoreNumberCircle,
-                  {
-                    backgroundColor: colors.backgroundInput,
-                    borderColor: getScoreColor(safetyScore.safetyScore),
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.scoreNumberText,
-                    { color: getScoreColor(safetyScore.safetyScore) },
-                  ]}
-                >
-                  {safetyScore.safetyScore}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.scoreFooterRow}>
-              <View
-                style={[
-                  styles.riskPill,
-                  {
-                    backgroundColor:
-                      getScoreColor(safetyScore.safetyScore) + '20',
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.riskPillText,
-                    { color: getScoreColor(safetyScore.safetyScore) },
-                  ]}
-                >
-                  {safetyScore.safetyScore >= 80
-                    ? 'CALM & WELL-LIT'
-                    : safetyScore.safetyScore >= 50
-                      ? 'MODERATE VIGILANCE'
-                      : 'HIGH RISK AREA'}
-                </Text>
-              </View>
-              <Text style={styles.scoreNearbyText}>
-                {safetyScore.factors?.totalHazardsNearby || 0} active community
-                hazards nearby
-              </Text>
-            </View>
-          </View>
-        )}
-
-        {/* SOS Emergency Action Card */}
-        <View
-          style={[
-            styles.sosCard,
-            {
-              backgroundColor: colors.backgroundCard,
-              borderColor: colors.border,
-            },
-          ]}
-        >
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginBottom: 4,
-            }}
-          >
-            <Text style={styles.sosHeading}>INSTANT EMERGENCY SOS</Text>
-            {isGuest && (
-              <View style={styles.guestLockedBadge}>
-                <Text style={styles.guestLockedBadgeText}>🔒 GUEST LOCKED</Text>
-              </View>
-            )}
-          </View>
-          <Text style={[styles.sosSubheading, { color: colors.textSecondary }]}>
-            {isGuest
-              ? 'SOS broadcast is locked in Guest Mode • Tap to unlock'
-              : sosCountdown !== null
-                ? `DISPATCHING IN ${sosCountdown}s • TAP TO ABORT`
-                : 'Press & hold or tap to notify emergency network'}
-          </Text>
-
-          {/* Concentric Circle SOS Button */}
-          <View style={styles.sosRippleContainer}>
-            <View
-              style={[
-                styles.sosOuterRing,
-                isGuest && styles.sosOuterRingLocked,
-              ]}
-            />
-            {sosCountdown === null ? (
-              <TouchableOpacity
-                style={[styles.sosButton, isGuest && styles.sosButtonLocked]}
-                activeOpacity={0.85}
-                onPress={handleSosPress}
-              >
-                <Text
-                  style={[styles.sosButtonText, isGuest && { fontSize: 26 }]}
-                >
-                  {isGuest ? '🔒 SOS' : 'SOS'}
-                </Text>
-                <Text style={styles.sosButtonSubtext}>
-                  {isGuest ? 'TAP TO UNLOCK' : 'PRESS FOR HELP'}
-                </Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={[styles.sosButton, styles.sosButtonCountdown]}
-                activeOpacity={0.85}
-                onPress={cancelSos}
-              >
-                <Text style={styles.sosCountdownNumber}>{sosCountdown}</Text>
-                <Text style={styles.sosAbortText}>TAP TO ABORT</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Offline SMS SOS Fallback Button */}
-          <TouchableOpacity
-            style={[styles.offlineSmsBtn, isGuest && { opacity: 0.65 }]}
-            onPress={dispatchOfflineSmsSos}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.offlineSmsBtnIcon}>📡</Text>
-            <Text style={styles.offlineSmsBtnText}>
-              {isGuest
-                ? 'Offline SMS SOS 🔒 (Requires Account)'
-                : 'Offline SMS SOS (No Internet / Basements)'}
-            </Text>
-          </TouchableOpacity>
-
-          <Text style={[styles.sosFooterNote, { color: colors.textMuted }]}>
-            {isGuest
-              ? 'Emergency broadcast and guardian notification loops are locked in Guest Mode. Tap SOS to sign in and activate full protection.'
-              : 'Sends live coordinates and audio to your guardians. Quick-dial 112 is one tap away.'}
-          </Text>
-        </View>
-
-        {/* Human Safety Features: Discrete Escape & Stealth Decoy */}
-        <View
-          style={[
-            styles.escapeCard,
-            {
-              backgroundColor: colors.backgroundCard,
-              borderColor: colors.border,
-            },
-          ]}
-        >
-          <View style={styles.escapeHeaderRow}>
-            <View style={styles.escapeIconCircle}>
-              <Text style={styles.escapeEmoji}>🛡️</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.escapeTitle, { color: colors.textPrimary }]}>
-                Discrete Escape & Decoy Tools
-              </Text>
-              <Text
-                style={[styles.escapeSubtitle, { color: colors.textSecondary }]}
-              >
-                Fake phone calls to excuse yourself, or a stealth calculator
-                decoy with secret duress PIN 9999.
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.escapeActionsRow}>
-            <TouchableOpacity
-              style={styles.escapeBtnNow}
-              onPress={triggerFakeCallNow}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.escapeBtnNowText}>📞 Ring Call Now</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.escapeBtnDelay}
-              onPress={() => triggerFakeCallWithDelay(15)}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.escapeBtnDelayText}>⏱️ In 15s</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.decoyBtn}
-              onPress={() => setShowDecoyCalculator(true)}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.decoyBtnText}>🎭 Calculator Decoy</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Personal Panic Siren Deterrent Card */}
+        {/* Search Capsule (Screen 15) */}
         <TouchableOpacity
           style={[
-            styles.panicSirenCard,
-            isSirenActive && styles.panicSirenCardActive,
+            styles.searchCapsule,
             {
-              backgroundColor: isSirenActive
-                ? 'rgba(239, 68, 68, 0.2)'
-                : colors.backgroundCard,
-              borderColor: isSirenActive ? '#EF4444' : colors.border,
+              backgroundColor: isDark
+                ? 'rgba(20, 24, 44, 0.75)'
+                : 'rgba(236, 233, 250, 0.85)',
+              borderColor: colors.border,
             },
           ]}
-          onPress={togglePanicSiren}
-          activeOpacity={0.8}
+          onPress={() => onNavigateTab?.('Radar')}
+          activeOpacity={0.85}
         >
-          <Text style={styles.panicSirenEmoji}>
-            {isSirenActive ? '🛑' : '📢'}
+          <Feather
+            name="search"
+            size={18}
+            color={isDark ? '#8387AB' : '#94A3B8'}
+          />
+          <Text
+            style={[
+              styles.searchPlaceholder,
+              { color: isDark ? '#E1E4F5' : colors.textPrimary },
+            ]}
+          >
+            Where are you walking to?
           </Text>
-          <View style={{ flex: 1 }}>
-            <Text
-              style={[
-                styles.panicSirenTitle,
-                { color: isSirenActive ? '#EF4444' : colors.textPrimary },
-              ]}
-            >
-              {isSirenActive
-                ? 'SIREN ACTIVE — TAP TO STOP'
-                : 'Personal Panic Siren'}
-            </Text>
-            <Text
-              style={[
-                styles.panicSirenSubtitle,
-                { color: colors.textSecondary },
-              ]}
-            >
-              {isSirenActive
-                ? 'Blasting high-decibel alarm through device speakers'
-                : 'High-decibel audible deterrent to scare attackers'}
-            </Text>
-          </View>
           <View
             style={[
-              styles.panicSirenBadge,
+              styles.scoreRingSmall,
               {
-                backgroundColor: isSirenActive
-                  ? '#EF4444'
-                  : 'rgba(239, 68, 68, 0.15)',
+                borderColor:
+                  scoreStatus === 'error'
+                    ? '#F0A93B'
+                    : scoreValue >= 80
+                      ? '#6FE3B5'
+                      : '#F59E0B',
               },
             ]}
           >
             <Text
               style={[
-                styles.panicSirenBadgeText,
-                { color: isSirenActive ? '#FFFFFF' : '#EF4444' },
+                styles.scoreRingSmallText,
+                {
+                  color:
+                    scoreStatus === 'error'
+                      ? '#F0A93B'
+                      : scoreValue >= 80
+                        ? '#6FE3B5'
+                        : '#F59E0B',
+                },
               ]}
             >
-              {isSirenActive ? 'SILENCE' : 'SOUND ALARM'}
+              {scoreStatus === 'error' ? '!' : scoreValue}
             </Text>
           </View>
         </TouchableOpacity>
 
-        {/* Core Services Grid */}
-        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-          Safety Tools & Services
-        </Text>
-        <View style={styles.gridContainer}>
-          {[
-            {
-              emoji: '🚶‍♀️',
-              title: 'Safe Walk',
-              desc: 'Turn-by-turn road escort with arrival alert',
-              action: 'Start Route →',
-              tab: 'SafeWalk' as const,
-            },
-            {
-              emoji: '⚠️',
-              title: 'Report Hazard',
-              desc: 'Pin broken lights with photo proof',
-              action: 'Pin Hazard →',
-              tab: 'Map' as const,
-            },
-            {
-              emoji: '🗺️',
-              title: 'Live Heatmap',
-              desc: 'Verified street safety scores & search bar',
-              action: 'View Map →',
-              tab: 'Map' as const,
-            },
-            {
-              emoji: '👥',
-              title: 'Guardian Network',
-              desc: 'Emergency contacts & family notification loop',
-              action: 'Manage →',
-              tab: 'Profile' as const,
-            },
-          ].map(item => (
-            <TouchableOpacity
-              key={item.title}
-              style={[
-                styles.gridCard,
-                {
-                  backgroundColor: colors.backgroundCard,
-                  borderColor: colors.border,
+        {/* Place Shortcut Chips */}
+        <View style={styles.chipsRow}>
+          <TouchableOpacity
+            style={[
+              styles.chip,
+              {
+                backgroundColor: isDark
+                  ? 'rgba(139, 137, 255, 0.17)'
+                  : '#ECE9FA',
+              },
+            ]}
+            onPress={() =>
+              onNavigateTab?.('SafeWalk', {
+                destination: {
+                  name: 'Home',
+                  latitude: 30.3243,
+                  longitude: 78.0418,
                 },
+              })
+            }
+            activeOpacity={0.8}
+          >
+            <Feather
+              name="home"
+              size={13}
+              color={isDark ? '#C3C1FF' : colors.primaryDark}
+              style={{ marginRight: 5 }}
+            />
+            <Text
+              style={[
+                styles.chipText,
+                { color: isDark ? '#C3C1FF' : colors.primaryDark },
               ]}
-              onPress={() => {
-                if (item.title === 'Report Hazard' && isGuest) {
-                  Alert.alert(
-                    '🔒 Citizen Account Required',
-                    'To maintain safety radar integrity and prevent false alarms, hazard reporting requires a registered citizen account.',
-                    [
-                      { text: 'Cancel', style: 'cancel' },
-                      {
-                        text: 'Sign In / Register',
-                        onPress: () => onNavigateTab?.('Profile'),
-                      },
-                    ],
-                  );
-                  return;
-                }
-                onNavigateTab?.(
-                  item.tab,
-                  item.title === 'Live Heatmap'
-                    ? { showHeatmap: true }
-                    : item.title === 'Report Hazard'
-                      ? { openReport: true }
-                      : undefined,
-                );
-              }}
             >
-              <Text style={styles.cardEmoji}>{item.emoji}</Text>
-              <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
-                {item.title}
-              </Text>
-              <Text style={[styles.cardDesc, { color: colors.textSecondary }]}>
-                {item.desc}
-              </Text>
-              <Text style={[styles.cardAction, { color: colors.primary }]}>
-                {item.action}
-              </Text>
-            </TouchableOpacity>
-          ))}
+              Home
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.chip,
+              {
+                backgroundColor: isDark
+                  ? 'rgba(255, 255, 255, 0.08)'
+                  : '#ECE9FA',
+              },
+            ]}
+            onPress={() =>
+              onNavigateTab?.('SafeWalk', {
+                destination: {
+                  name: 'Ghanta Ghar',
+                  latitude: 30.3244,
+                  longitude: 78.0425,
+                },
+              })
+            }
+            activeOpacity={0.8}
+          >
+            <Text
+              style={[
+                styles.chipText,
+                { color: isDark ? '#A3A7C8' : colors.textSecondary },
+              ]}
+            >
+              Ghanta Ghar
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.chip,
+              {
+                backgroundColor: isDark
+                  ? 'rgba(255, 255, 255, 0.08)'
+                  : '#ECE9FA',
+              },
+            ]}
+            onPress={() => onNavigateTab?.('SafeWalk')}
+            activeOpacity={0.8}
+          >
+            <Text
+              style={[
+                styles.chipText,
+                { color: isDark ? '#A3A7C8' : colors.textSecondary },
+              ]}
+            >
+              + Save
+            </Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Persistent Legal & Safety Disclaimer (SEC-4) */}
-        <View style={styles.persistentSafetyNote}>
-          <Text
+        {/* Screen 15 / 17: Dynamic Area Safety Score Preview Map Card */}
+        <View style={styles.mapCardContainer}>
+          {/* Map Preview Background */}
+          <View
             style={[
-              styles.persistentSafetyNoteText,
-              { color: colors.textMuted },
+              styles.mapPlaceholder,
+              { backgroundColor: isDark ? '#14182C' : '#E8E5F7' },
             ]}
           >
-            ℹ️ Safora is a companion safety and virtual escort network.{' '}
-            <Text style={{ fontWeight: '700', color: colors.textSecondary }}>
-              Safora does not replace calling 112.
-            </Text>{' '}
-            In any immediate emergency, always dial 112 directly.
-          </Text>
+            <View style={styles.mapGridPattern}>
+              <Feather
+                name="map"
+                size={54}
+                color={
+                  isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)'
+                }
+              />
+            </View>
+          </View>
+
+          {/* Floating Top-Left Area Safety Score Pill */}
+          <TouchableOpacity
+            style={[
+              styles.floatingScoreBadge,
+              {
+                backgroundColor: isDark
+                  ? 'rgba(24, 28, 50, 0.82)'
+                  : 'rgba(255, 255, 255, 0.92)',
+                borderColor: colors.border,
+              },
+            ]}
+            onPress={() => loadSafetyScore(coords.latitude, coords.longitude)}
+            activeOpacity={0.85}
+          >
+            <View
+              style={[
+                styles.scoreRingLarge,
+                {
+                  borderColor:
+                    scoreStatus === 'error'
+                      ? '#F0A93B'
+                      : scoreValue >= 80
+                        ? '#6FE3B5'
+                        : '#F59E0B',
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.scoreRingLargeText,
+                  {
+                    color:
+                      scoreStatus === 'error'
+                        ? '#F0A93B'
+                        : scoreValue >= 80
+                          ? '#6FE3B5'
+                          : '#F59E0B',
+                  },
+                ]}
+              >
+                {scoreStatus === 'error' ? '!' : scoreValue}
+              </Text>
+            </View>
+            <View>
+              <Text
+                style={[styles.areaScoreTitle, { color: colors.textPrimary }]}
+              >
+                Area safety score
+              </Text>
+              <Text
+                style={[
+                  styles.areaScoreSub,
+                  {
+                    color:
+                      scoreStatus === 'error'
+                        ? '#F5C56B'
+                        : scoreValue >= 80
+                          ? '#6FE3B5'
+                          : '#F59E0B',
+                  },
+                ]}
+              >
+                {scoreStatus === 'error'
+                  ? 'Could not load · Retry'
+                  : scoreValue >= 80
+                    ? `Calm and well-lit · ${hazardsCount} hazards`
+                    : `Caution advised · ${hazardsCount} hazards`}
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          {/* Floating Bottom-Right Explore Radar Pill */}
+          <TouchableOpacity
+            style={[
+              styles.floatingExplorePill,
+              {
+                backgroundColor: isDark
+                  ? 'rgba(24, 28, 50, 0.82)'
+                  : 'rgba(255, 255, 255, 0.92)',
+                borderColor: colors.border,
+              },
+            ]}
+            onPress={() => onNavigateTab?.('Radar')}
+            activeOpacity={0.85}
+          >
+            <Text
+              style={[styles.exploreRadarText, { color: colors.textPrimary }]}
+            >
+              Explore radar ›
+            </Text>
+          </TouchableOpacity>
         </View>
+
+        {/* "Your circle is ready" Card */}
+        <GlassCard
+          variant="card"
+          style={styles.circleReadyCard}
+          onPress={() => onNavigateTab?.('Profile', { section: 'guardians' })}
+        >
+          <View style={styles.circleReadyRow}>
+            <View style={styles.circleIconBox}>
+              <Feather name="shield" size={18} color="#6FE3B5" />
+            </View>
+            <View style={styles.circleTextCol}>
+              <Text style={[styles.circleTitle, { color: colors.textPrimary }]}>
+                Your circle is ready
+              </Text>
+              <Text
+                style={[
+                  styles.circleSub,
+                  { color: isDark ? '#A3A7C8' : colors.textSecondary },
+                ]}
+              >
+                {guardianSubtitle}
+              </Text>
+            </View>
+            <Text
+              style={[
+                styles.manageLink,
+                { color: isDark ? '#B4B2FF' : colors.primary },
+              ]}
+            >
+              Manage
+            </Text>
+          </View>
+        </GlassCard>
+
+        {/* Instant Emergency SOS Card */}
+        <GlassCard variant="card" style={styles.sosCard}>
+          <Text style={styles.sosSectionHeader}>INSTANT EMERGENCY SOS</Text>
+
+          {/* Center Circular SOS Button with Liquid Ripple */}
+          <View style={styles.sosButtonContainer}>
+            <Animated.View
+              style={[
+                styles.rippleRing,
+                {
+                  transform: [{ scale: rippleScale }],
+                  opacity: rippleOpacity,
+                },
+              ]}
+            />
+            <TouchableOpacity
+              style={styles.circularSosButton}
+              onPress={() => setShowSosOverlay(true)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.sosButtonLabel}>SOS</Text>
+              <Text style={styles.sosButtonSubLabel}>PRESS FOR HELP</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Offline SMS SOS Pill */}
+          <TouchableOpacity
+            style={styles.offlineSmsPill}
+            onPress={handleOfflineSms}
+            activeOpacity={0.8}
+          >
+            <Feather
+              name="radio"
+              size={14}
+              color="#9CC2FF"
+              style={{ marginRight: 6 }}
+            />
+            <Text style={styles.offlineSmsText}>
+              Offline SMS SOS · no internet
+            </Text>
+          </TouchableOpacity>
+        </GlassCard>
+
+        {/* Bottom Actions Row */}
+        <View style={styles.bottomButtonsRow}>
+          <GlassButton
+            title="Safe Walk"
+            variant="primary"
+            size="md"
+            onPress={() => onNavigateTab?.('SafeWalk')}
+            leftIcon={<Feather name="navigation" size={16} color="#FFFFFF" />}
+            style={styles.actionHalfBtn}
+          />
+
+          <GlassButton
+            title="Report hazard"
+            variant="secondary"
+            size="md"
+            onPress={() => setShowReportModal(true)}
+            leftIcon={
+              <Feather
+                name="alert-triangle"
+                size={16}
+                color={isDark ? '#C3C1FF' : colors.primaryDark}
+              />
+            }
+            style={styles.actionHalfBtn}
+          />
+        </View>
+
+        {/* Footnote Notice */}
+        <Text
+          style={[
+            styles.footnoteText,
+            { color: isDark ? '#8387AB' : colors.textMuted },
+          ]}
+        >
+          SAFORA does not replace calling 112. In danger, call 112.
+        </Text>
       </ScrollView>
 
-      {/* Fake Call Modal */}
-      <FakeCallModal
-        visible={showFakeCall}
-        onClose={() => setShowFakeCall(false)}
-        callerName="Mom 🏠"
-        callerNumber="+91 98765 43210"
+      {/* Hazard Report Modal */}
+      <ReportHazardModal
+        visible={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        coordinates={coords}
+        onReportCreated={() =>
+          loadSafetyScore(coords.latitude, coords.longitude)
+        }
       />
 
-      {/* Stealth Calculator Decoy Modal */}
-      <CalculatorDecoyModal
-        visible={showDecoyCalculator}
-        onClose={() => setShowDecoyCalculator(false)}
-        duressPin="9999"
-      />
-
-      {/* Phase 4: 5-Second Emergency SOS Grace-Period Abort Overlay */}
+      {/* SOS Grace Period Overlay (Screen 36) */}
       <SosGracePeriodOverlay
-        visible={sosCountdown !== null && sosCountdown > 0}
-        countdown={sosCountdown || 0}
-        onCancel={cancelSos}
+        visible={showSosOverlay}
+        countdown={sosCountdown}
+        guardianNames={
+          contacts.map(c => c.name).join(' and ') || 'Reena and Seema'
+        }
+        onCancel={() => setShowSosOverlay(false)}
         onTriggerImmediately={() => {
-          setSosCountdown(null);
-          dispatchRealSos();
+          setShowSosOverlay(false);
+          setShowSosActiveCockpit(true);
         }}
+      />
+
+      {/* Screen 37: Active SOS Cockpit Modal */}
+      <SosActiveCockpitModal
+        visible={showSosActiveCockpit}
+        coordinates={coords}
+        guardians={contacts}
+        onDisarm={() => setShowSosActiveCockpit(false)}
+      />
+
+      {/* Screen 38: Offline Emergency Screen Modal */}
+      <OfflineEmergencyModal
+        visible={showOfflineEmergency}
+        coordinates={coords}
+        guardianNames={
+          contacts.map(c => c.name).join(' and ') || 'Reena and Seema'
+        }
+        onClose={() => setShowOfflineEmergency(false)}
       />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  topBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 48,
-    paddingBottom: 14,
-  },
-  logoRow: { flexDirection: 'row', alignItems: 'center' },
-  beaconDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#10B981',
-    marginRight: 8,
-  },
-  brandTitle: {
-    fontSize: 20,
-    fontWeight: '900',
-    letterSpacing: 2,
-  },
-  userActions: { flexDirection: 'row', alignItems: 'center' },
-  badge: { paddingVertical: 5, paddingHorizontal: 12, borderRadius: 14 },
-  guestBadge: {
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-    borderWidth: 1,
-    borderColor: '#F59E0B',
-  },
-  memberBadge: {
-    backgroundColor: 'rgba(56, 189, 248, 0.15)',
-    borderWidth: 1,
-    borderColor: '#38BDF8',
-  },
-  badgeText: { fontSize: 11, fontWeight: '800', color: '#F8FAFC' },
-  gpsBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    gap: 8,
-  },
-  searchCapsuleTouch: {
-    marginVertical: 10,
-  },
-  gpsIcon: { fontSize: 13 },
-  gpsText: {
+  container: {
     flex: 1,
-    fontSize: 12,
-    fontWeight: '600',
   },
-  liveChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    gap: 5,
-  },
-  pulseDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#10B981',
-  },
-  liveChipText: {
-    color: '#10B981',
-    fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: 0.8,
-  },
-  audioBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(239, 68, 68, 0.3)',
+  scrollContent: {
     paddingHorizontal: 20,
-    paddingVertical: 8,
-    gap: 8,
   },
-  audioDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#EF4444',
-  },
-  audioBannerText: {
-    color: '#EF4444',
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.3,
-  },
-  scrollContent: { padding: 20, paddingBottom: 40, gap: 16 },
-  scoreCard: {
-    borderRadius: 18,
-    borderWidth: 1,
-    padding: 16,
-    gap: 12,
-  },
-  scoreHeader: {
+  topHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-  },
-  scoreTitleGroup: { flex: 1, paddingRight: 10 },
-  scoreCardTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  scoreCardSub: { fontSize: 11, marginTop: 2 },
-  retryBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  retryBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  scoreNumberCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    borderWidth: 3,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  scoreNumberText: { fontSize: 20, fontWeight: '900' },
-  scoreFooterRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  riskPill: { paddingVertical: 4, paddingHorizontal: 10, borderRadius: 8 },
-  riskPillText: { fontSize: 10, fontWeight: '800' },
-  scoreNearbyText: { color: '#94A3B8', fontSize: 11 },
-  sosCard: {
-    borderWidth: 1,
-    borderRadius: 22,
-    padding: 22,
-    alignItems: 'center',
-  },
-  sosHeading: {
-    color: '#EF4444',
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 1.5,
-    marginBottom: 4,
-  },
-  sosSubheading: {
-    fontSize: 12,
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  sosRippleContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 170,
-    height: 170,
-    marginBottom: 14,
-  },
-  sosOuterRing: {
-    position: 'absolute',
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    borderWidth: 1.5,
-    borderColor: 'rgba(239, 68, 68, 0.25)',
-    backgroundColor: 'rgba(239, 68, 68, 0.05)',
-  },
-  sosButton: {
-    width: 130,
-    height: 130,
-    borderRadius: 65,
-    backgroundColor: '#EF4444',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 4,
-    borderColor: '#FFFFFF',
-    shadowColor: '#EF4444',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.6,
-    shadowRadius: 18,
-    elevation: 10,
-  },
-  guestLockedBadge: {
-    backgroundColor: 'rgba(245, 158, 11, 0.18)',
-    borderWidth: 1,
-    borderColor: '#F59E0B',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-  },
-  guestLockedBadgeText: {
-    color: '#F59E0B',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  sosButtonLocked: {
-    backgroundColor: '#78350F',
-    borderColor: '#F59E0B',
-    shadowColor: '#B45309',
-  },
-  sosOuterRingLocked: {
-    borderColor: 'rgba(245, 158, 11, 0.25)',
-    backgroundColor: 'rgba(245, 158, 11, 0.05)',
-  },
-  sosButtonCountdown: {
-    backgroundColor: '#991B1B',
-    borderColor: '#F59E0B',
-  },
-  sosButtonText: {
-    color: '#FFFFFF',
-    fontSize: 32,
-    fontWeight: '900',
-    letterSpacing: 2,
-  },
-  sosButtonSubtext: {
-    color: 'rgba(255, 255, 255, 0.9)',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1,
-  },
-  sosCountdownNumber: {
-    color: '#FFFFFF',
-    fontSize: 44,
-    fontWeight: '900',
-  },
-  sosAbortText: {
-    color: '#F59E0B',
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
-  offlineSmsBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(56, 189, 248, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(56, 189, 248, 0.3)',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 14,
-    gap: 8,
     marginBottom: 12,
   },
-  offlineSmsBtnIcon: { fontSize: 14 },
-  offlineSmsBtnText: {
-    color: '#38BDF8',
-    fontSize: 11,
+  greetingCol: {
+    flex: 1,
+  },
+  greetingText: {
+    fontSize: 22,
     fontWeight: '800',
+    letterSpacing: -0.3,
   },
-  sosFooterNote: { fontSize: 11, textAlign: 'center' },
-  escapeCard: {
-    borderWidth: 1,
-    borderRadius: 18,
-    padding: 16,
-    gap: 14,
-  },
-  escapeHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  escapeIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(56, 189, 248, 0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  escapeEmoji: { fontSize: 22 },
-  escapeTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  escapeSubtitle: {
-    fontSize: 11,
-    lineHeight: 16,
-    marginTop: 2,
-  },
-  escapeActionsRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  escapeBtnNow: {
-    flex: 1.2,
-    backgroundColor: '#38BDF8',
-    paddingVertical: 10,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  escapeBtnNowText: {
-    color: '#070A11',
-    fontWeight: '800',
-    fontSize: 11,
-  },
-  escapeBtnDelay: {
-    flex: 0.9,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    paddingVertical: 10,
-    borderRadius: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-  },
-  escapeBtnDelayText: {
-    color: '#F8FAFC',
-    fontWeight: '700',
-    fontSize: 11,
-  },
-  decoyBtn: {
-    flex: 1.4,
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-    paddingVertical: 10,
-    borderRadius: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#F59E0B',
-  },
-  decoyBtnText: {
-    color: '#F59E0B',
-    fontWeight: '800',
-    fontSize: 11,
-  },
-  sectionTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  gridContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  gridCard: {
-    width: '48%',
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: 14,
-  },
-  cardEmoji: { fontSize: 24, marginBottom: 6 },
-  cardTitle: {
+  locationSubText: {
     fontSize: 13,
-    fontWeight: '700',
-    marginBottom: 3,
+    marginTop: 2,
+    fontWeight: '500',
   },
-  cardDesc: {
-    fontSize: 10,
-    lineHeight: 14,
-    marginBottom: 8,
-  },
-  cardAction: { fontSize: 11, fontWeight: '700' },
-  guardianLiveBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 14,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    marginBottom: 16,
-  },
-  guardianLiveIconCircle: {
+  bellButton: {
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    position: 'relative',
+  },
+  badgePill: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: '#10132A',
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  sirenPlayingCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(240, 90, 110, 0.16)',
+    borderColor: 'rgba(240, 90, 110, 0.38)',
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginBottom: 12,
+  },
+  sirenIconSlot: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#C0344A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  sirenTextCol: {
+    flex: 1,
+  },
+  sirenPlayingTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#FF8FA0',
+  },
+  sirenPlayingSub: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginTop: 1,
+  },
+  sirenStopChip: {
+    backgroundColor: '#C0344A',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 10,
+  },
+  sirenStopText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  companionBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+  },
+  companionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  companionSub: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  searchCapsule: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 50,
+    borderRadius: 25,
+    borderWidth: 1,
+    paddingLeft: 16,
+    paddingRight: 8,
+    marginBottom: 10,
+  },
+  searchPlaceholder: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 10,
+  },
+  scoreRingSmall: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  guardianLiveTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    flex: 1,
-  },
-  guardianLiveSub: {
-    fontSize: 11,
-    marginTop: 2,
-  },
-  guardianLiveArrow: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginLeft: 8,
-  },
-  persistentSafetyNote: {
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
-    marginTop: 8,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
-  },
-  persistentSafetyNoteText: {
-    fontSize: 11,
-    lineHeight: 16,
-    textAlign: 'center',
-  },
-  panicSirenCard: {
-    borderWidth: 1.5,
-    borderRadius: 18,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  panicSirenCardActive: {
-    borderColor: '#EF4444',
-  },
-  panicSirenEmoji: {
-    fontSize: 26,
-  },
-  panicSirenTitle: {
-    fontSize: 14,
+  scoreRingSmallText: {
+    fontSize: 12,
     fontWeight: '800',
   },
-  panicSirenSubtitle: {
-    fontSize: 11,
-    marginTop: 2,
-    lineHeight: 15,
+  chipsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 14,
   },
-  panicSirenBadge: {
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 14,
+  },
+  chipText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  mapCardContainer: {
+    height: 176,
+    borderRadius: 18,
+    overflow: 'hidden',
+    position: 'relative',
+    marginBottom: 12,
+  },
+  mapPlaceholder: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mapGridPattern: {
+    opacity: 0.6,
+  },
+  floatingScoreBadge: {
+    position: 'absolute',
+    left: 10,
+    top: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 8,
+    paddingLeft: 8,
+    paddingRight: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+  },
+  scoreRingLarge: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 2.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scoreRingLargeText: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  areaScoreTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  areaScoreSub: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 1,
+  },
+  floatingExplorePill: {
+    position: 'absolute',
+    right: 10,
+    bottom: 10,
     paddingVertical: 6,
     paddingHorizontal: 12,
-    borderRadius: 10,
+    borderRadius: 12,
+    borderWidth: 1,
   },
-  panicSirenBadgeText: {
+  exploreRadarText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  circleReadyCard: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 12,
+    backgroundColor: 'rgba(52, 211, 153, 0.14)',
+    borderColor: 'rgba(52, 211, 153, 0.3)',
+  },
+  circleReadyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  circleIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: 'rgba(24, 28, 50, 0.64)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  circleTextCol: {
+    flex: 1,
+  },
+  circleTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  circleSub: {
     fontSize: 11,
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  manageLink: {
+    fontSize: 13,
+    fontWeight: '800',
+    marginLeft: 8,
+  },
+  sosCard: {
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  sosSectionHeader: {
+    color: '#FF7B8E',
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    fontSize: 11,
+    marginBottom: 12,
+  },
+  sosButtonContainer: {
+    width: 120,
+    height: 120,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    marginBottom: 8,
+  },
+  rippleRing: {
+    position: 'absolute',
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: 'rgba(192, 52, 74, 0.35)',
+  },
+  circularSosButton: {
+    width: 92,
+    height: 92,
+    borderRadius: 46,
+    backgroundColor: '#C0344A',
+    borderWidth: 4,
+    borderColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#C0344A',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.55,
+    shadowRadius: 26,
+    elevation: 10,
+  },
+  sosButtonLabel: {
+    color: '#FFFFFF',
+    fontSize: 26,
     fontWeight: '900',
-    letterSpacing: 0.5,
+    letterSpacing: 1,
+  },
+  sosButtonSubLabel: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    marginTop: 1,
+  },
+  offlineSmsPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: 'rgba(80, 140, 255, 0.16)',
+    marginTop: 10,
+  },
+  offlineSmsText: {
+    color: '#9CC2FF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  bottomButtonsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 10,
+  },
+  actionHalfBtn: {
+    flex: 1,
+    borderRadius: 14,
+    height: 46,
+  },
+  footnoteText: {
+    textAlign: 'center',
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: '500',
+    marginTop: 4,
   },
 });

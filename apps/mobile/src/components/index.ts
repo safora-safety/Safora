@@ -1,12 +1,17 @@
 // Mobile Components Barrel Export
 // Grouped into semantic subfolders: common, decoy, emergency, hazards, map, profile
 
-export * from './common/GoogleLogo';
+export * from './common';
 export * from './decoy/CalculatorDecoyModal';
 export * from './decoy/FakeCallModal';
 export * from './emergency/ContactModal';
 export * from './emergency/MicrophoneConsentModal';
+export * from './emergency/LocationConsentModal';
+export * from './emergency/NotificationConsentModal';
 export * from './emergency/SosGracePeriodOverlay';
+export * from './emergency/SosActiveCockpitModal';
+export * from './emergency/OfflineEmergencyModal';
+export * from './emergency/EmergencyDirectoryModal';
 export * from './emergency/AudioWaveformBars';
 export * from './emergency/DeviationCountdownModal';
 export * from './hazards/HazardCategoryChips';

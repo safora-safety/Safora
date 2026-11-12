@@ -14,6 +14,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useAuthStore } from '../store/authStore';
 import { GoogleLogo } from '../components/common/GoogleLogo';
+import Feather from 'react-native-vector-icons/Feather';
 
 interface RegisterScreenProps {
   navigation: any;
@@ -268,8 +269,15 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
               <TouchableOpacity
                 style={styles.eyeBtn}
                 onPress={() => setShowPassword(p => !p)}
+                accessibilityLabel={
+                  showPassword ? 'Hide password' : 'Show password'
+                }
               >
-                <Text style={styles.eyeIcon}>{showPassword ? '🙈' : '👁️'}</Text>
+                <Feather
+                  name={showPassword ? 'eye' : 'eye-off'}
+                  size={19}
+                  color={colors.textSecondary}
+                />
               </TouchableOpacity>
             </View>
             {/* Strength Bar */}
@@ -331,10 +339,15 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
               <TouchableOpacity
                 style={styles.eyeBtn}
                 onPress={() => setShowConfirmPassword(p => !p)}
+                accessibilityLabel={
+                  showConfirmPassword ? 'Hide password' : 'Show password'
+                }
               >
-                <Text style={styles.eyeIcon}>
-                  {showConfirmPassword ? '🙈' : '👁️'}
-                </Text>
+                <Feather
+                  name={showConfirmPassword ? 'eye' : 'eye-off'}
+                  size={19}
+                  color={colors.textSecondary}
+                />
               </TouchableOpacity>
             </View>
           </View>
@@ -405,7 +418,9 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
           <Text style={[styles.footerText, { color: colors.textSecondary }]}>
             Already have an account?{' '}
           </Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Auth', { initialTab: 'login' })}
+          >
             <Text style={[styles.footerLink, { color: colors.primary }]}>
               Sign In
             </Text>

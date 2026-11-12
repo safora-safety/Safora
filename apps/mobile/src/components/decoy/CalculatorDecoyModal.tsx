@@ -15,6 +15,7 @@ import { SosService } from '../../services/sosService';
 import { getCurrentCoordinates } from '../../services/locationService';
 import { AudioRecorderService } from '../../services/audioRecorderService';
 import { typography } from '../../theme/typography';
+import Feather from 'react-native-vector-icons/Feather';
 
 interface CalculatorDecoyModalProps {
   visible: boolean;
@@ -192,7 +193,7 @@ export const CalculatorDecoyModal: React.FC<CalculatorDecoyModalProps> = ({
             activeOpacity={0.7}
             accessibilityLabel="Close Calculator"
           >
-            <Text style={styles.exitText}>✕</Text>
+            <Feather name="x" size={18} color="#94A3B8" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Calculator</Text>
           <View style={{ width: 42 }} />

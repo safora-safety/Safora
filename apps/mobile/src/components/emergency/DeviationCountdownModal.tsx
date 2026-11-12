@@ -8,15 +8,19 @@ import {
   Animated,
   Vibration,
   StatusBar,
+  Linking,
 } from 'react-native';
 import { typography } from '../../theme/typography';
+import Feather from 'react-native-vector-icons/Feather';
 
 export interface DeviationCountdownModalProps {
   visible: boolean;
   countdownSeconds: number; // e.g. 60 down to 0
   totalSeconds?: number; // default 60
+  guardianName?: string;
   onDisarmSafe: () => void;
   onEscalateSos: () => void;
+  onCall112?: () => void;
 }
 
 export const DeviationCountdownModal: React.FC<
@@ -25,8 +29,10 @@ export const DeviationCountdownModal: React.FC<
   visible,
   countdownSeconds,
   totalSeconds = 60,
+  guardianName,
   onDisarmSafe,
   onEscalateSos,
+  onCall112,
 }) => {
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
@@ -93,12 +99,6 @@ export const DeviationCountdownModal: React.FC<
 
           {/* Central Radial Countdown Ring */}
           <View style={styles.countdownContainer}>
-            <View
-              style={[
-                styles.countdownRingOuter,
-                { borderColor: `${accentColor}33` },
-              ]}
-            />
             <Animated.View
               style={[
                 styles.countdownCircleInner,
@@ -117,54 +117,61 @@ export const DeviationCountdownModal: React.FC<
               >
                 {countdownSeconds}
               </Text>
-              <Text style={styles.countdownSecLabel}>SECS LEFT</Text>
             </Animated.View>
           </View>
 
-          <Text style={styles.titleText}>Are you safe?</Text>
+          <Text style={styles.titleText}>Are you okay?</Text>
           <Text style={styles.descriptionText}>
-            You moved away from your planned walking route. An emergency SOS
-            alert with your live location will automatically be sent to your
-            guardians when the timer ends.
+            You moved away from your route. {guardianName || 'Your circle'} is
+            alerted in {countdownSeconds}s if you do not answer.
           </Text>
 
-          {/* High-Contrast Action Buttons */}
+          {/* Screen 34 Action Buttons */}
           <View style={styles.buttonStack}>
-            {/* Primary: Disarm (I Am Safe) */}
+            {/* Primary: I am safe */}
             <TouchableOpacity
-              style={styles.disarmButton}
+              style={styles.safeButton}
               activeOpacity={0.85}
               onPress={onDisarmSafe}
               accessibilityRole="button"
               accessibilityLabel="I Am Safe. Cancel emergency countdown"
             >
-              <Text style={styles.disarmButtonIcon}>✅</Text>
-              <View style={styles.btnTextCol}>
-                <Text style={styles.disarmButtonMainText}>
-                  I AM SAFE (CANCEL ALERT)
-                </Text>
-                <Text style={styles.disarmButtonSubText}>
-                  Cancel alert and resume walk
-                </Text>
-              </View>
+              <Text style={styles.safeButtonText}>I am safe</Text>
             </TouchableOpacity>
 
-            {/* Escalate Immediately */}
+            {/* Secondary: SOS - I need help */}
             <TouchableOpacity
-              style={styles.escalateButton}
+              style={styles.sosButton}
               activeOpacity={0.85}
               onPress={onEscalateSos}
               accessibilityRole="button"
               accessibilityLabel="Need Help Now. Immediately send Emergency SOS"
             >
-              <Text style={styles.escalateButtonIcon}>🚨</Text>
-              <View style={styles.btnTextCol}>
-                <Text style={styles.escalateButtonMainText}>
-                  NEED HELP NOW (SEND SOS)
-                </Text>
-                <Text style={styles.escalateButtonSubText}>
-                  Immediately alert guardians & police (112)
-                </Text>
+              <Text style={styles.sosButtonText}>SOS · I need help</Text>
+            </TouchableOpacity>
+
+            {/* Tertiary: Call 112 */}
+            <TouchableOpacity
+              style={styles.call112Button}
+              activeOpacity={0.85}
+              onPress={onCall112 || (() => Linking.openURL('tel:112'))}
+              accessibilityRole="button"
+              accessibilityLabel="Call 112"
+            >
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Feather
+                  name="phone"
+                  size={14}
+                  color="#EF4444"
+                  style={{ marginRight: 6 }}
+                />
+                <Text style={styles.call112ButtonText}>Call 112</Text>
               </View>
             </TouchableOpacity>
           </View>
@@ -276,71 +283,57 @@ const styles = StyleSheet.create({
   },
   buttonStack: {
     width: '100%',
-    gap: 12,
+    gap: 10,
   },
-  disarmButton: {
+  safeButton: {
     width: '100%',
-    height: 64,
-    backgroundColor: '#10B981',
-    borderRadius: 18,
-    flexDirection: 'row',
+    height: 52,
+    backgroundColor: '#6366F1',
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 16,
-    elevation: 8,
-    shadowColor: '#10B981',
+    elevation: 4,
+    shadowColor: '#6366F1',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
   },
-  disarmButtonIcon: {
-    fontSize: 22,
-    marginRight: 12,
-  },
-  btnTextCol: {
-    justifyContent: 'center',
-  },
-  disarmButtonMainText: {
+  safeButtonText: {
     color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '900',
-    letterSpacing: 0.6,
+    fontSize: 15,
+    fontWeight: '800',
   },
-  disarmButtonSubText: {
-    color: 'rgba(255, 255, 255, 0.85)',
-    fontSize: 11,
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  escalateButton: {
+  sosButton: {
     width: '100%',
-    height: 60,
+    height: 52,
     backgroundColor: '#EF4444',
-    borderRadius: 18,
-    flexDirection: 'row',
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 16,
-    elevation: 6,
+    elevation: 4,
     shadowColor: '#EF4444',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
     shadowRadius: 8,
   },
-  escalateButtonIcon: {
-    fontSize: 20,
-    marginRight: 12,
-  },
-  escalateButtonMainText: {
+  sosButtonText: {
     color: '#FFFFFF',
     fontSize: 15,
-    fontWeight: '900',
-    letterSpacing: 0.6,
+    fontWeight: '800',
   },
-  escalateButtonSubText: {
-    color: 'rgba(255, 255, 255, 0.85)',
-    fontSize: 11,
-    fontWeight: '600',
-    marginTop: 1,
+  call112Button: {
+    width: '100%',
+    height: 48,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: 'rgba(239, 68, 68, 0.45)',
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  call112ButtonText: {
+    color: '#EF4444',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

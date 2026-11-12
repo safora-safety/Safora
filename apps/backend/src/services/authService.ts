@@ -235,7 +235,16 @@ export class AuthService {
       email?: string;
       phone?: string | null;
       blood_group?: string | null;
+      bloodGroup?: string | null;
       emergency_notes?: string | null;
+      emergencyNotes?: string | null;
+      allergies?: string | null;
+      show_medical_on_lock_screen?: boolean | null;
+      showMedicalOnLockScreen?: boolean | null;
+      has_completed_test_drill?: boolean | null;
+      hasCompletedTestDrill?: boolean | null;
+      avatar_url?: string | null;
+      avatarUrl?: string | null;
       age?: number | null;
       age_notice_ack?: boolean | null;
       ageNoticeAck?: boolean | null;
@@ -258,8 +267,18 @@ export class AuthService {
       name: data.name,
       email: data.email,
       phone: data.phone,
-      blood_group: data.blood_group,
-      emergency_notes: data.emergency_notes,
+      blood_group: data.blood_group || data.bloodGroup,
+      emergency_notes: data.emergency_notes || data.emergencyNotes,
+      allergies: data.allergies,
+      show_medical_on_lock_screen:
+        data.show_medical_on_lock_screen !== undefined
+          ? data.show_medical_on_lock_screen
+          : data.showMedicalOnLockScreen,
+      has_completed_test_drill:
+        data.has_completed_test_drill !== undefined
+          ? data.has_completed_test_drill
+          : data.hasCompletedTestDrill,
+      avatar_url: data.avatar_url || data.avatarUrl,
       age: data.age,
       age_notice_ack:
         data.ageNoticeAck !== undefined

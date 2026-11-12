@@ -1,8 +1,20 @@
 import React from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Modal,
+  ScrollView,
+  Dimensions,
+} from 'react-native';
+import Feather from 'react-native-vector-icons/Feather';
 import { useTheme } from '../../theme/ThemeContext';
+import { GlassCard } from '../common/GlassCard';
+import { GlassButton } from '../common/GlassButton';
 
-interface MicrophoneConsentModalProps {
+const { width } = Dimensions.get('window');
+
+export interface MicrophoneConsentModalProps {
   visible: boolean;
   onConsent: () => void;
   onDecline: () => void;
@@ -23,124 +35,238 @@ export const MicrophoneConsentModal: React.FC<MicrophoneConsentModalProps> = ({
       onRequestClose={onDecline}
     >
       <View style={styles.overlay}>
-        <View
-          style={[
-            styles.card,
-            {
-              backgroundColor: colors.backgroundCard,
-              borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
-            },
-          ]}
+        {/* Dim backdrop */}
+        <View style={styles.dimBackdrop} />
+
+        {/* Frosted Liquid Glass Modal */}
+        <GlassCard
+          variant="sheet"
+          style={styles.modalCard}
+          contentStyle={styles.cardContent}
         >
-          {/* Icon & Badge */}
-          <View style={styles.header}>
+          {/* Top Bar Header */}
+          <View style={styles.topHeader}>
             <View
               style={[
                 styles.iconBox,
                 {
                   backgroundColor: isDark
-                    ? 'rgba(99,102,241,0.15)'
-                    : 'rgba(99,102,241,0.1)',
+                    ? 'rgba(139, 137, 255, 0.22)'
+                    : '#ECE9FA',
                 },
               ]}
             >
-              <Text style={styles.iconEmoji}>🎙️</Text>
+              <Feather
+                name="mic"
+                size={24}
+                color={isDark ? '#C3C1FF' : colors.primaryDark}
+              />
             </View>
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>EMERGENCY AUDIO CONSENT</Text>
-            </View>
-          </View>
-
-          {/* Title */}
-          <Text style={[styles.title, { color: colors.textPrimary }]}>
-            Ambient Audio Evidence
-          </Text>
-
-          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            SAFORA can capture 30 seconds of ambient audio when you trigger an
-            Emergency SOS to assist responders and provide forensic protection.
-          </Text>
-
-          {/* Key Privacy Highlights */}
-          <View style={styles.features}>
-            <View style={styles.featureRow}>
-              <Text style={styles.featureBullet}>🚨</Text>
-              <View style={styles.featureTextCol}>
-                <Text
-                  style={[styles.featureTitle, { color: colors.textPrimary }]}
-                >
-                  Emergency-Only Activation
-                </Text>
-                <Text
-                  style={[styles.featureDesc, { color: colors.textSecondary }]}
-                >
-                  Microphone is never accessed during normal map navigation or
-                  idle app state.
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.featureRow}>
-              <Text style={styles.featureBullet}>🔐</Text>
-              <View style={styles.featureTextCol}>
-                <Text
-                  style={[styles.featureTitle, { color: colors.textPrimary }]}
-                >
-                  Scoped Access
-                </Text>
-                <Text
-                  style={[styles.featureDesc, { color: colors.textSecondary }]}
-                >
-                  Shared only with your designated emergency contacts and
-                  verified dispatch staff.
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.featureRow}>
-              <Text style={styles.featureBullet}>⚙️</Text>
-              <View style={styles.featureTextCol}>
-                <Text
-                  style={[styles.featureTitle, { color: colors.textPrimary }]}
-                >
-                  Revocable Anytime
-                </Text>
-                <Text
-                  style={[styles.featureDesc, { color: colors.textSecondary }]}
-                >
-                  You can disable this permission at any time from the app
-                  Settings or Profile.
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Action Buttons */}
-          <View style={styles.actions}>
-            <TouchableOpacity
-              activeOpacity={0.85}
-              style={[styles.primaryBtn, { backgroundColor: colors.primary }]}
-              onPress={onConsent}
-            >
-              <Text style={styles.primaryBtnText}>Enable & Consent</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              activeOpacity={0.7}
-              style={styles.secondaryBtn}
-              onPress={onDecline}
-            >
+            <View style={styles.headerTextCol}>
               <Text
                 style={[
-                  styles.secondaryBtnText,
-                  { color: colors.textSecondary },
+                  styles.headerSubtitle,
+                  { color: isDark ? '#A3A7C8' : colors.textSecondary },
                 ]}
               >
-                Not Now (Skip Audio)
+                Your privacy, your choice
               </Text>
-            </TouchableOpacity>
+              <Text
+                style={[
+                  styles.headerTag,
+                  { color: isDark ? '#B4B2FF' : colors.primary },
+                ]}
+              >
+                Optional setup
+              </Text>
+            </View>
           </View>
-        </View>
+
+          {/* Title & Description */}
+          <Text style={[styles.title, { color: colors.textPrimary }]}>
+            Add emergency audio?
+          </Text>
+          <Text
+            style={[
+              styles.description,
+              { color: isDark ? '#A3A7C8' : colors.textSecondary },
+            ]}
+          >
+            If you trigger an SOS, SAFORA can capture 30 seconds of audio to
+            help explain what is happening.
+          </Text>
+
+          {/* Privacy Rules Glass List */}
+          <GlassCard variant="card" style={styles.rulesCard}>
+            <View style={styles.ruleRow}>
+              <View
+                style={[
+                  styles.ruleBullet,
+                  {
+                    backgroundColor: isDark
+                      ? 'rgba(139, 137, 255, 0.18)'
+                      : '#ECE9FA',
+                  },
+                ]}
+              >
+                <Feather
+                  name="shield"
+                  size={14}
+                  color={isDark ? '#C3C1FF' : colors.primaryDark}
+                />
+              </View>
+              <View style={styles.ruleTextWrap}>
+                <Text style={[styles.ruleTitle, { color: colors.textPrimary }]}>
+                  Only during an SOS
+                </Text>
+                <Text
+                  style={[
+                    styles.ruleSub,
+                    { color: isDark ? '#A3A7C8' : colors.textSecondary },
+                  ]}
+                >
+                  No microphone access on walks, maps or while idle.
+                </Text>
+              </View>
+            </View>
+
+            <View
+              style={[
+                styles.divider,
+                {
+                  backgroundColor: isDark
+                    ? 'rgba(255, 255, 255, 0.08)'
+                    : 'rgba(110, 100, 225, 0.1)',
+                },
+              ]}
+            />
+
+            <View style={styles.ruleRow}>
+              <View
+                style={[
+                  styles.ruleBullet,
+                  {
+                    backgroundColor: isDark
+                      ? 'rgba(139, 137, 255, 0.18)'
+                      : '#ECE9FA',
+                  },
+                ]}
+              >
+                <Feather
+                  name="lock"
+                  size={14}
+                  color={isDark ? '#C3C1FF' : colors.primaryDark}
+                />
+              </View>
+              <View style={styles.ruleTextWrap}>
+                <Text style={[styles.ruleTitle, { color: colors.textPrimary }]}>
+                  Restricted sharing
+                </Text>
+                <Text
+                  style={[
+                    styles.ruleSub,
+                    { color: isDark ? '#A3A7C8' : colors.textSecondary },
+                  ]}
+                >
+                  Only your chosen emergency contacts and authorized response
+                  staff.
+                </Text>
+              </View>
+            </View>
+
+            <View
+              style={[
+                styles.divider,
+                {
+                  backgroundColor: isDark
+                    ? 'rgba(255, 255, 255, 0.08)'
+                    : 'rgba(110, 100, 225, 0.1)',
+                },
+              ]}
+            />
+
+            <View style={styles.ruleRow}>
+              <View
+                style={[
+                  styles.ruleBullet,
+                  {
+                    backgroundColor: isDark
+                      ? 'rgba(139, 137, 255, 0.18)'
+                      : '#ECE9FA',
+                  },
+                ]}
+              >
+                <Feather
+                  name="settings"
+                  size={14}
+                  color={isDark ? '#C3C1FF' : colors.primaryDark}
+                />
+              </View>
+              <View style={styles.ruleTextWrap}>
+                <Text style={[styles.ruleTitle, { color: colors.textPrimary }]}>
+                  Change your mind anytime
+                </Text>
+                <Text
+                  style={[
+                    styles.ruleSub,
+                    { color: isDark ? '#A3A7C8' : colors.textSecondary },
+                  ]}
+                >
+                  Turn it off in Settings. SOS still works without audio.
+                </Text>
+              </View>
+            </View>
+          </GlassCard>
+
+          {/* Network Resilient Callout */}
+          <GlassCard variant="subtle" style={styles.calloutCard}>
+            <View style={styles.calloutRow}>
+              <Feather
+                name="wifi-off"
+                size={16}
+                color={isDark ? '#C3C1FF' : colors.primary}
+              />
+              <Text
+                style={[
+                  styles.calloutText,
+                  { color: isDark ? '#C3C1FF' : colors.primaryDark },
+                ]}
+              >
+                Audio uploads need internet. If offline, the clip stays on your
+                device until a connection returns.
+              </Text>
+            </View>
+          </GlassCard>
+
+          {/* Action Buttons */}
+          <View style={styles.actionsCol}>
+            <GlassButton
+              title="Enable emergency audio"
+              variant="primary"
+              size="md"
+              onPress={onConsent}
+              leftIcon={<Feather name="mic" size={16} color="#FFFFFF" />}
+              style={styles.actionBtn}
+            />
+
+            <GlassButton
+              title="Not now"
+              variant="secondary"
+              size="md"
+              onPress={onDecline}
+              style={styles.actionBtn}
+            />
+
+            <Text
+              style={[
+                styles.footnote,
+                { color: isDark ? '#8387AB' : colors.textMuted },
+              ]}
+            >
+              Your phone will ask for microphone permission next.
+            </Text>
+          </View>
+        </GlassCard>
       </View>
     </Modal>
   );
@@ -149,113 +275,127 @@ export const MicrophoneConsentModal: React.FC<MicrophoneConsentModalProps> = ({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.65)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    paddingHorizontal: 20,
   },
-  card: {
+  dimBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(7, 9, 20, 0.72)',
+  },
+  modalCard: {
+    width: Math.min(width - 32, 380),
+    paddingVertical: 24,
+    paddingHorizontal: 20,
+    borderRadius: 28,
+  },
+  cardContent: {
     width: '100%',
-    maxWidth: 400,
-    borderRadius: 24,
-    borderWidth: 1,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.35,
-    shadowRadius: 20,
-    elevation: 10,
   },
-  header: {
+  topHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 14,
   },
   iconBox: {
     width: 48,
     height: 48,
-    borderRadius: 14,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 12,
   },
-  iconEmoji: {
-    fontSize: 26,
-  },
-  badge: {
-    backgroundColor: 'rgba(99,102,241,0.15)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  badgeText: {
-    color: '#818CF8',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: '900',
-    letterSpacing: -0.3,
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 13,
-    lineHeight: 18,
-    marginBottom: 20,
-  },
-  features: {
-    gap: 14,
-    marginBottom: 24,
-  },
-  featureRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  featureBullet: {
-    fontSize: 16,
-    marginTop: 2,
-  },
-  featureTextCol: {
+  headerTextCol: {
     flex: 1,
   },
-  featureTitle: {
+  headerSubtitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  headerTag: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: '800',
+    marginBottom: 6,
+    letterSpacing: -0.3,
+  },
+  description: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 14,
+    fontWeight: '500',
+  },
+  rulesCard: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+  },
+  ruleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 6,
+  },
+  ruleBullet: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+    marginTop: 2,
+  },
+  ruleTextWrap: {
+    flex: 1,
+  },
+  ruleTitle: {
     fontSize: 13,
     fontWeight: '700',
-    marginBottom: 2,
   },
-  featureDesc: {
-    fontSize: 12,
-    lineHeight: 16,
+  ruleSub: {
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 2,
+    fontWeight: '500',
   },
-  actions: {
-    gap: 10,
+  divider: {
+    height: 1,
+    marginVertical: 4,
   },
-  primaryBtn: {
-    paddingVertical: 14,
-    borderRadius: 14,
-    alignItems: 'center',
-    shadowColor: '#6366F1',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  primaryBtnText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  secondaryBtn: {
+  calloutCard: {
     paddingVertical: 10,
-    alignItems: 'center',
+    paddingHorizontal: 12,
+    marginBottom: 16,
   },
-  secondaryBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
+  calloutRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  calloutText: {
+    fontSize: 11,
+    lineHeight: 15,
+    flex: 1,
+    fontWeight: '500',
+  },
+  actionsCol: {
+    width: '100%',
+    gap: 8,
+  },
+  actionBtn: {
+    width: '100%',
+  },
+  footnote: {
+    textAlign: 'center',
+    fontSize: 11,
+    marginTop: 4,
+    fontWeight: '500',
   },
 });
-
-export default MicrophoneConsentModal;

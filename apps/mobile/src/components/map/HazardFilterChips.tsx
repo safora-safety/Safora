@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
 import { typography } from '../../theme/typography';
+import Feather from 'react-native-vector-icons/Feather';
 
 export type FilterCategory =
   'all' | 'lighting' | 'crowd' | 'police' | 'hazard' | 'high_risk';
@@ -19,12 +20,12 @@ export interface FilterChipOption {
 }
 
 const FILTER_OPTIONS: FilterChipOption[] = [
-  { key: 'all', label: 'All Hazards', icon: '✨' },
-  { key: 'lighting', label: 'Well-Lit', icon: '💡' },
-  { key: 'crowd', label: 'Crowded Areas', icon: '👥' },
-  { key: 'police', label: 'Police & Desks', icon: '🛡️' },
-  { key: 'hazard', label: 'Reported', icon: '⚠️' },
-  { key: 'high_risk', label: 'High Risk (3+)', icon: '⚡' },
+  { key: 'all', label: 'All Hazards', icon: 'layers' },
+  { key: 'lighting', label: 'Well-Lit', icon: 'sun' },
+  { key: 'crowd', label: 'Crowded Areas', icon: 'users' },
+  { key: 'police', label: 'Police & Desks', icon: 'shield' },
+  { key: 'hazard', label: 'Reported', icon: 'alert-triangle' },
+  { key: 'high_risk', label: 'High Risk (3+)', icon: 'zap' },
 ];
 
 interface HazardFilterChipsProps {
@@ -75,7 +76,12 @@ export const HazardFilterChips: React.FC<HazardFilterChipsProps> = ({
               accessibilityState={{ selected: isSelected }}
               accessibilityLabel={`${item.label} filter chip`}
             >
-              <Text style={styles.chipIcon}>{item.icon}</Text>
+              <Feather
+                name={item.icon}
+                size={12}
+                color={isSelected ? '#FFFFFF' : colors.textSecondary}
+                style={{ marginRight: 5 }}
+              />
               <Text
                 style={[
                   styles.chipLabel,

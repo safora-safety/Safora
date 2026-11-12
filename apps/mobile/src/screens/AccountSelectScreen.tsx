@@ -10,8 +10,9 @@ import {
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Feather from 'react-native-vector-icons/Feather';
+import { useTheme } from '../theme/ThemeContext';
 import { useAuthStore, SavedProfile } from '../store/authStore';
-import { colors } from '../theme/colors';
 
 interface AccountSelectScreenProps {
   navigation: any;
@@ -25,6 +26,7 @@ export const AccountSelectScreen: React.FC<AccountSelectScreenProps> = ({
     insets.top,
     Platform.OS === 'android' ? StatusBar.currentHeight || 28 : 0,
   );
+  const { colors, isDark } = useTheme();
   const { savedProfiles, enterAsGuest, removeSavedProfile } = useAuthStore();
 
   const handleEnterGuest = async () => {
@@ -37,6 +39,7 @@ export const AccountSelectScreen: React.FC<AccountSelectScreenProps> = ({
 
   const handleSelectProfile = (profile: SavedProfile) => {
     navigation.navigate('Auth', {
+      initialTab: 'login',
       prefillEmail: profile.email,
       prefillName: profile.name,
     });
@@ -57,115 +60,199 @@ export const AccountSelectScreen: React.FC<AccountSelectScreenProps> = ({
     );
   };
 
-  return (
-    <View
-      style={[
-        styles.container,
-        {
-          paddingTop: topInset + 14,
-          paddingBottom: Math.max(insets.bottom, 24),
-        },
-      ]}
-    >
-      <StatusBar barStyle="light-content" />
+  const hasSavedProfiles = savedProfiles && savedProfiles.length > 0;
 
-      {/* Ambient Top Glow Header */}
-      <View style={styles.header}>
-        <View style={styles.shieldGlow}>
-          <Text style={styles.shieldEmoji}>🛡️</Text>
+  return (
+    <View style={[styles.container, { backgroundColor: colors.canvas }]}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+
+      {/* Top Header Section */}
+      <View style={[styles.headerSection, { paddingTop: topInset + 30 }]}>
+        <View
+          style={[
+            styles.logoShieldCircle,
+            { backgroundColor: colors.primaryDark },
+          ]}
+        >
+          <Feather name="shield" size={40} color="#FFFFFF" />
         </View>
-        <Text style={styles.appTitle}>SAFORA</Text>
-        <Text style={styles.tagline}>Who is using SAFORA?</Text>
-        <Text style={styles.subTagline}>
+
+        <Text style={[styles.brandTitle, { color: colors.textPrimary }]}>
+          SAFORA
+        </Text>
+        <Text style={[styles.headingText, { color: colors.textPrimary }]}>
+          Who is using SAFORA?
+        </Text>
+        <Text
+          style={[
+            styles.subheadingText,
+            { color: isDark ? '#A3A7C8' : colors.textSecondary },
+          ]}
+        >
           Select a profile or start in guest mode
         </Text>
       </View>
 
-      {/* Center Profile Circles Grid (JioHotstar / Streaming Style) */}
+      {/* Profiles Grid / Row */}
       <ScrollView
-        contentContainerStyle={styles.profilesGrid}
+        contentContainerStyle={styles.profilesScrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.circlesRow}>
-          {/* 1. Saved Accounts (If any exist) */}
-          {savedProfiles.map(profile => {
-            const initial = (profile.name || 'U').charAt(0).toUpperCase();
-            return (
-              <View key={String(profile.id)} style={styles.profileItem}>
-                <TouchableOpacity
-                  style={styles.avatarCircleActive}
-                  activeOpacity={0.8}
-                  onPress={() => handleSelectProfile(profile)}
-                  onLongPress={() => handleConfirmDelete(profile)}
-                >
-                  <Text style={styles.avatarInitial}>{initial}</Text>
+        <View style={styles.profilesRow}>
+          {/* Saved Profiles (Screen 7) */}
+          {hasSavedProfiles &&
+            savedProfiles.map(profile => {
+              const initial = (profile.name || 'U').charAt(0).toUpperCase();
+              return (
+                <View key={String(profile.id)} style={styles.profileCol}>
                   <TouchableOpacity
-                    style={styles.removeBadge}
-                    onPress={() => handleConfirmDelete(profile)}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    style={[
+                      styles.savedAvatarCircle,
+                      { backgroundColor: colors.primaryDark },
+                    ]}
+                    activeOpacity={0.8}
+                    onPress={() => handleSelectProfile(profile)}
+                    onLongPress={() => handleConfirmDelete(profile)}
                   >
-                    <Text style={styles.removeBadgeText}>✕</Text>
+                    <Text style={styles.avatarInitial}>{initial}</Text>
+                    <TouchableOpacity
+                      style={styles.deleteBadge}
+                      onPress={() => handleConfirmDelete(profile)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Feather name="x" size={11} color="#FFFFFF" />
+                    </TouchableOpacity>
                   </TouchableOpacity>
-                </TouchableOpacity>
-                <Text style={styles.profileName} numberOfLines={1}>
-                  {profile.name}
-                </Text>
-                <Text style={styles.profileSub} numberOfLines={1}>
-                  Saved Account
-                </Text>
-              </View>
-            );
-          })}
+                  <Text
+                    style={[styles.profileName, { color: colors.textPrimary }]}
+                    numberOfLines={1}
+                  >
+                    {profile.name}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.profileRole,
+                      { color: isDark ? '#A3A7C8' : colors.textSecondary },
+                    ]}
+                  >
+                    Saved account
+                  </Text>
+                </View>
+              );
+            })}
 
-          {/* 2. Guest Mode Circle */}
-          <View style={styles.profileItem}>
+          {/* Guest Mode Circle */}
+          <View style={styles.profileCol}>
             <TouchableOpacity
-              style={styles.avatarCircleGuest}
+              style={[
+                styles.guestAvatarCircle,
+                {
+                  backgroundColor: isDark
+                    ? 'rgba(139, 137, 255, 0.17)'
+                    : '#ECE9FA',
+                },
+              ]}
               activeOpacity={0.8}
               onPress={handleEnterGuest}
             >
-              <Text style={styles.guestIcon}>👤</Text>
+              <Feather
+                name="user"
+                size={34}
+                color={isDark ? '#B4B2FF' : colors.primaryDark}
+              />
             </TouchableOpacity>
-            <Text style={styles.profileName}>Guest</Text>
-            <Text style={styles.profileSub}>Explore Mode</Text>
+            <Text style={[styles.profileName, { color: colors.textPrimary }]}>
+              Guest
+            </Text>
+            <Text
+              style={[
+                styles.profileRole,
+                { color: isDark ? '#A3A7C8' : colors.textSecondary },
+              ]}
+            >
+              Explore mode
+            </Text>
           </View>
 
-          {/* 3. Add Account / Sign In Dotted Circle */}
-          <View style={styles.profileItem}>
+          {/* Sign In / Switch Account Circle */}
+          <View style={styles.profileCol}>
             <TouchableOpacity
-              style={styles.avatarCircleAdd}
+              style={[
+                styles.addAvatarCircle,
+                {
+                  borderColor: isDark ? '#6F6DC8' : colors.primary,
+                },
+              ]}
               activeOpacity={0.8}
               onPress={() =>
                 navigation.navigate('Auth', { initialTab: 'login' })
               }
             >
-              <Text style={styles.addPlusIcon}>+</Text>
+              <Text
+                style={[
+                  styles.plusSign,
+                  { color: isDark ? '#B4B2FF' : colors.primary },
+                ]}
+              >
+                +
+              </Text>
             </TouchableOpacity>
-            <Text style={styles.profileName}>
-              {savedProfiles.length > 0 ? 'Switch / Add' : 'Sign In'}
+            <Text style={[styles.profileName, { color: colors.textPrimary }]}>
+              {hasSavedProfiles ? 'Switch / Add' : 'Sign in'}
             </Text>
-            <Text style={styles.profileSub}>
-              {savedProfiles.length > 0 ? 'New Account' : 'Login / Sign Up'}
+            <Text
+              style={[
+                styles.profileRole,
+                { color: isDark ? '#A3A7C8' : colors.textSecondary },
+              ]}
+            >
+              {hasSavedProfiles ? 'New account' : 'Login or sign up'}
             </Text>
           </View>
         </View>
       </ScrollView>
 
-      {/* Bottom Actions & Tour Option */}
-      <View style={styles.footer}>
+      {/* Bottom Disclaimer and Tour Action */}
+      <View
+        style={[
+          styles.footerSection,
+          { paddingBottom: Math.max(insets.bottom, 24) + 12 },
+        ]}
+      >
+        <Text
+          style={[
+            styles.guestDisclaimer,
+            { color: isDark ? '#8387AB' : colors.textMuted },
+          ]}
+        >
+          Guest mode has limited features. Sign in to use SOS alerts and
+          guardians.
+        </Text>
+
         <TouchableOpacity
-          style={styles.tourButton}
+          style={[
+            styles.tourButton,
+            {
+              backgroundColor: isDark
+                ? 'rgba(75, 73, 168, 0.12)'
+                : 'rgba(92, 90, 200, 0.08)',
+              borderColor: isDark
+                ? 'rgba(75, 73, 168, 0.35)'
+                : 'rgba(92, 90, 200, 0.25)',
+            },
+          ]}
           onPress={() => navigation.navigate('Onboarding')}
           activeOpacity={0.8}
         >
-          <Text style={styles.tourButtonText}>
-            ✨ View App Tour & Safety Features →
+          <Text
+            style={[
+              styles.tourButtonText,
+              { color: isDark ? '#B4B2FF' : colors.primaryDark },
+            ]}
+          >
+            View app tour and safety features →
           </Text>
         </TouchableOpacity>
-
-        <Text style={styles.footerCaption}>
-          Universal Community Safety Network • Real-Time Safety Radar
-        </Text>
       </View>
     </View>
   );
@@ -174,178 +261,145 @@ export const AccountSelectScreen: React.FC<AccountSelectScreenProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#070A11',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 56,
-    paddingBottom: 32,
   },
-  header: {
+  headerSection: {
     alignItems: 'center',
-    marginTop: 12,
+    paddingHorizontal: 24,
   },
-  shieldGlow: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    backgroundColor: 'rgba(79, 70, 229, 0.18)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(99, 102, 241, 0.45)',
+  logoShieldCircle: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 14,
-    shadowColor: '#6366F1',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 14,
+    shadowColor: '#4B49A8',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.35,
+    shadowRadius: 28,
     elevation: 8,
+    marginBottom: 16,
   },
-  shieldEmoji: {
-    fontSize: 32,
-  },
-  appTitle: {
+  brandTitle: {
     fontSize: 26,
-    fontWeight: '900',
-    color: '#F8FAFC',
-    letterSpacing: 3,
-    marginBottom: 6,
-  },
-  tagline: {
-    fontSize: 20,
     fontWeight: '800',
-    color: '#FFFFFF',
+    letterSpacing: 2.5,
     marginBottom: 4,
   },
-  subTagline: {
+  headingText: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  subheadingText: {
     fontSize: 13,
-    color: '#94A3B8',
     fontWeight: '500',
   },
-  profilesGrid: {
+  profilesScrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 24,
+    paddingVertical: 20,
   },
-  circlesRow: {
+  profilesRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 24,
-    maxWidth: 340,
+    gap: 32,
+    paddingHorizontal: 20,
   },
-  profileItem: {
+  profileCol: {
     alignItems: 'center',
-    width: 96,
+    width: 90,
   },
-  avatarCircleActive: {
-    width: 82,
-    height: 82,
-    borderRadius: 41,
-    backgroundColor: '#4F46E5',
+  savedAvatarCircle: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2.5,
-    borderColor: '#818CF8',
-    marginBottom: 10,
-    shadowColor: '#4F46E5',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.6,
-    shadowRadius: 12,
-    elevation: 10,
+    shadowColor: '#4B49A8',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.35,
+    shadowRadius: 24,
+    elevation: 6,
+    marginBottom: 8,
     position: 'relative',
   },
   avatarInitial: {
-    fontSize: 34,
-    fontWeight: '900',
     color: '#FFFFFF',
-    letterSpacing: 1,
+    fontSize: 28,
+    fontWeight: '800',
   },
-  removeBadge: {
+  deleteBadge: {
     position: 'absolute',
-    top: -4,
-    right: -4,
+    top: 0,
+    right: 0,
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: '#EF4444',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: '#FFFFFF',
-  },
-  removeBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '900',
-  },
-  avatarCircleGuest: {
-    width: 82,
-    height: 82,
-    borderRadius: 41,
-    backgroundColor: 'rgba(30, 41, 59, 0.85)',
+    backgroundColor: '#C0344A',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#475569',
-    marginBottom: 10,
+    borderColor: '#0A0D20',
   },
-  guestIcon: {
-    fontSize: 32,
-  },
-  avatarCircleAdd: {
-    width: 82,
-    height: 82,
-    borderRadius: 41,
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+  guestAvatarCircle: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 8,
+  },
+  addAvatarCircle: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
     borderWidth: 2,
-    borderColor: '#6366F1',
     borderStyle: 'dashed',
-    marginBottom: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
   },
-  addPlusIcon: {
-    fontSize: 36,
-    color: '#818CF8',
-    fontWeight: '300',
-    marginTop: -2,
+  plusSign: {
+    fontSize: 32,
+    fontWeight: '400',
+    lineHeight: 34,
   },
   profileName: {
     fontSize: 14,
-    fontWeight: '800',
-    color: '#F8FAFC',
+    fontWeight: '700',
     textAlign: 'center',
     marginBottom: 2,
   },
-  profileSub: {
+  profileRole: {
     fontSize: 11,
-    color: '#64748B',
-    fontWeight: '600',
+    fontWeight: '500',
     textAlign: 'center',
   },
-  footer: {
+  footerSection: {
+    paddingHorizontal: 28,
     alignItems: 'center',
-    gap: 12,
+  },
+  guestDisclaimer: {
+    textAlign: 'center',
+    fontSize: 12,
+    lineHeight: 17,
+    marginBottom: 16,
+    fontWeight: '500',
   },
   tourButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    backgroundColor: 'rgba(79, 70, 229, 0.12)',
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 26,
     borderWidth: 1,
-    borderColor: 'rgba(99, 102, 241, 0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tourButtonText: {
-    color: '#A5B4FC',
     fontSize: 13,
     fontWeight: '700',
     letterSpacing: 0.2,
-  },
-  footerCaption: {
-    fontSize: 11,
-    color: '#475569',
-    fontWeight: '500',
   },
 });

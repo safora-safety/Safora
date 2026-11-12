@@ -318,8 +318,28 @@ export async function initDatabase(): Promise<void> {
         ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'manual';
     `);
 
+    // 13. V2 — Liquid Glass UI Extensions (Allergies, Lock-screen medical, Multi-photo, Guardian channels)
+    await client.query(`
+      ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS allergies TEXT DEFAULT 'None known',
+        ADD COLUMN IF NOT EXISTS show_medical_on_lock_screen BOOLEAN DEFAULT FALSE,
+        ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT TRUE,
+        ADD COLUMN IF NOT EXISTS has_completed_test_drill BOOLEAN DEFAULT FALSE;
+
+      ALTER TABLE trusted_contacts
+        ADD COLUMN IF NOT EXISTS notification_channel VARCHAR(30) DEFAULT 'app_and_sms',
+        ADD COLUMN IF NOT EXISTS can_view_live_walk BOOLEAN DEFAULT TRUE,
+        ADD COLUMN IF NOT EXISTS notify_on_deviation BOOLEAN DEFAULT TRUE;
+
+      CREATE INDEX IF NOT EXISTS idx_trusted_contacts_reverse_guardian 
+        ON trusted_contacts (guardian_user_id) WHERE guardian_user_id IS NOT NULL;
+
+      ALTER TABLE reports
+        ADD COLUMN IF NOT EXISTS photo_urls TEXT[] DEFAULT '{}';
+    `);
+
     console.log(
-      "[INFO] V1 schema extensions applied (breadcrumbs, watchdog, age/terms)",
+      "[INFO] V1 & V2 schema extensions applied (breadcrumbs, watchdog, age/terms, medical, photo_urls)",
     );
 
     // 13. Seed verified safety dataset ONLY on a fresh, completely empty database (never purge or overwrite user data)

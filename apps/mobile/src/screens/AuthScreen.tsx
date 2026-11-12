@@ -2,17 +2,21 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
   ScrollView,
   StatusBar,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Feather from 'react-native-vector-icons/Feather';
+import { useTheme } from '../theme/ThemeContext';
 import { useAuthStore } from '../store/authStore';
+import { GlassInput } from '../components/common/GlassInput';
+import { GlassButton } from '../components/common/GlassButton';
+import { GlassCard } from '../components/common/GlassCard';
 import { GoogleLogo } from '../components/common/GoogleLogo';
 
 interface AuthScreenProps {
@@ -29,6 +33,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     insets.top,
     Platform.OS === 'android' ? StatusBar.currentHeight || 28 : 0,
   );
+  const { colors, isDark } = useTheme();
+
   const initialTab =
     route?.params?.initialTab === 'register' ? 'register' : 'login';
   const prefillEmail = route?.params?.prefillEmail || '';
@@ -39,9 +45,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const [email, setEmail] = useState(prefillEmail);
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
-  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
   const {
     login,
@@ -73,31 +77,24 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     if (activeTab === 'login') {
       const ok = await login(email.trim(), password);
       if (ok) {
-        // RootNavigator's needsTerms effect will automatically redirect
-        // to Terms if the user hasn't accepted yet, or MainTabs if they have.
-        // We just need to trigger any navigation to let the effect run.
-        try {
-          const user = useAuthStore.getState().user;
-          const hasAccepted = Boolean(
-            user?.terms_accepted_at || (user as any)?.termsAcceptedAt,
-          );
-          const hasAck = Boolean(
-            user?.age_notice_ack || (user as any)?.ageNoticeAck,
-          );
+        const user = useAuthStore.getState().user;
+        const hasAccepted = Boolean(
+          user?.terms_accepted_at || (user as any)?.termsAcceptedAt,
+        );
+        const hasAck = Boolean(
+          user?.age_notice_ack || (user as any)?.ageNoticeAck,
+        );
 
-          if (!hasAccepted || !hasAck) {
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'Terms' }],
-            });
-          } else {
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'MainTabs' }],
-            });
-          }
-        } catch {
-          navigation.navigate('MainTabs');
+        if (!hasAccepted || !hasAck) {
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'Terms' }],
+          });
+        } else {
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'MainTabs' }],
+          });
         }
       }
     } else {
@@ -105,14 +102,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         setLocalError('Please enter your full name.');
         return;
       }
-      if (!phone.trim() || phone.trim().length < 10) {
-        setLocalError('Please enter a valid 10-digit phone number.');
+      if (!phone.trim() || phone.replace(/\D/g, '').length < 10) {
+        setLocalError('Please enter a valid 10-digit emergency phone number.');
         return;
       }
       if (password.length < 6) {
         setLocalError('Password must be at least 6 characters.');
         return;
       }
+
       const ok = await register(
         name.trim(),
         email.trim(),
@@ -120,299 +118,357 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         password,
       );
       if (ok) {
-        // New users always need to accept terms
-        try {
-          navigation.reset({
-            index: 0,
-            routes: [{ name: 'Terms' }],
-          });
-        } catch {
-          navigation.navigate('Terms');
-        }
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Terms' }],
+        });
       }
     }
   };
 
-  const handleGoogleSignIn = async () => {
+  const handleGoogleAuth = async () => {
     setLocalError(null);
     clearError();
-    setIsGoogleLoading(true);
-    try {
-      const ok = await loginWithGoogle();
-      if (ok) {
-        try {
-          const u = useAuthStore.getState().user;
-          const hasTerms = Boolean(
-            u?.terms_accepted_at || (u as any)?.termsAcceptedAt,
-          );
-          const hasAck = Boolean(u?.age_notice_ack || (u as any)?.ageNoticeAck);
-          if (!hasTerms || !hasAck) {
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'Terms' }],
-            });
-          } else {
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'MainTabs' }],
-            });
-          }
-        } catch {
-          navigation.navigate('MainTabs');
-        }
+    const ok = await loginWithGoogle();
+    if (ok) {
+      const user = useAuthStore.getState().user;
+      const hasAccepted = Boolean(
+        user?.terms_accepted_at || (user as any)?.termsAcceptedAt,
+      );
+      const hasAck = Boolean(
+        user?.age_notice_ack || (user as any)?.ageNoticeAck,
+      );
+
+      if (!hasAccepted || !hasAck) {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Terms' }],
+        });
+      } else {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'MainTabs' }],
+        });
       }
-    } catch (err: unknown) {
-      const msg =
-        err instanceof Error ? err.message : 'Google authentication failed';
-      setLocalError(msg);
-    } finally {
-      setIsGoogleLoading(false);
     }
   };
 
-  const displayError = localError || error;
+  const handleEnterOfflineShield = async () => {
+    await enterAsGuest();
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'MainTabs' }],
+    });
+  };
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
+      style={[styles.container, { backgroundColor: colors.canvas }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+
+      {/* Top Header Bar */}
+      <View style={[styles.topBar, { paddingTop: topInset + 10 }]}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.navigate('AccountSelect')}
+          activeOpacity={0.7}
+        >
+          <Feather
+            name="arrow-left"
+            size={16}
+            color={isDark ? '#C3C1FF' : colors.primaryDark}
+          />
+          <Text
+            style={[
+              styles.backText,
+              { color: isDark ? '#C3C1FF' : colors.primaryDark },
+            ]}
+          >
+            Profiles
+          </Text>
+        </TouchableOpacity>
+
+        <View style={styles.secureBadge}>
+          <Text style={styles.secureBadgeText}>SECURE CITIZEN ACCESS</Text>
+        </View>
+      </View>
 
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
-          {
-            paddingTop: topInset + 12,
-            paddingBottom: Math.max(insets.bottom, 24),
-          },
+          { paddingBottom: Math.max(insets.bottom, 24) + 20 },
         ]}
-        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
-        {/* Top Navigation Row */}
-        <View style={styles.topRow}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          >
-            <Text style={styles.backButtonText}>← Profiles</Text>
-          </TouchableOpacity>
-          <View style={styles.badgeLive}>
-            <View style={styles.liveDot} />
-            <Text style={styles.badgeLiveText}>SECURE CITIZEN ACCESS</Text>
-          </View>
-        </View>
+        {/* Screen Title & Subtitle */}
+        <Text style={[styles.screenTitle, { color: colors.textPrimary }]}>
+          {activeTab === 'login' ? 'Welcome back' : 'Create account'}
+        </Text>
+        <Text
+          style={[
+            styles.screenSubtitle,
+            { color: isDark ? '#A3A7C8' : colors.textSecondary },
+          ]}
+        >
+          {activeTab === 'login'
+            ? 'Sign in to see your radar and contacts'
+            : 'Join the community safety network'}
+        </Text>
 
-        {/* Title Header */}
-        <View style={styles.titleSection}>
-          <Text style={styles.screenTitle}>
-            {activeTab === 'login' ? 'Welcome Back' : 'Create Account'}
-          </Text>
-          <Text style={styles.screenSubtitle}>
-            {activeTab === 'login'
-              ? 'Sign in to access your emergency radar & contacts'
-              : 'Join the community safety network for instant SOS'}
-          </Text>
-        </View>
-
-        {/* Segmented Switch [ Sign In | Create Account ] */}
-        <View style={styles.segmentedContainer}>
+        {/* Segmented Control Pill */}
+        <View
+          style={[
+            styles.segmentedControl,
+            {
+              backgroundColor: isDark ? 'rgba(20, 24, 44, 0.72)' : '#ECE9FA',
+              borderColor: colors.border,
+            },
+          ]}
+        >
           <TouchableOpacity
             style={[
-              styles.segmentTab,
-              activeTab === 'login' && styles.segmentTabActive,
+              styles.segmentItem,
+              activeTab === 'login' && [
+                styles.segmentItemActive,
+                { backgroundColor: colors.primaryDark },
+              ],
             ]}
             onPress={() => {
               setActiveTab('login');
               setLocalError(null);
-              clearError();
             }}
             activeOpacity={0.8}
           >
             <Text
               style={[
                 styles.segmentText,
-                activeTab === 'login' && styles.segmentTextActive,
+                {
+                  color:
+                    activeTab === 'login'
+                      ? '#FFFFFF'
+                      : isDark
+                        ? '#A3A7C8'
+                        : colors.textSecondary,
+                  fontWeight: activeTab === 'login' ? '800' : '600',
+                },
               ]}
             >
-              Sign In
+              Sign in
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[
-              styles.segmentTab,
-              activeTab === 'register' && styles.segmentTabActive,
+              styles.segmentItem,
+              activeTab === 'register' && [
+                styles.segmentItemActive,
+                { backgroundColor: colors.primaryDark },
+              ],
             ]}
             onPress={() => {
               setActiveTab('register');
               setLocalError(null);
-              clearError();
             }}
             activeOpacity={0.8}
           >
             <Text
               style={[
                 styles.segmentText,
-                activeTab === 'register' && styles.segmentTextActive,
+                {
+                  color:
+                    activeTab === 'register'
+                      ? '#FFFFFF'
+                      : isDark
+                        ? '#A3A7C8'
+                        : colors.textSecondary,
+                  fontWeight: activeTab === 'register' ? '800' : '600',
+                },
               ]}
             >
-              Create Account
+              Create account
             </Text>
           </TouchableOpacity>
         </View>
 
-        {/* Error Notification */}
-        {displayError && (
-          <View style={styles.errorBox}>
-            <Text style={styles.errorText}>⚠️ {displayError}</Text>
+        {/* Error Feedback */}
+        {(localError || error) && (
+          <View style={styles.errorBanner}>
+            <Feather name="alert-circle" size={16} color="#FF8FA0" />
+            <Text style={styles.errorBannerText}>{localError || error}</Text>
           </View>
         )}
 
         {/* Form Fields */}
-        <View style={styles.formCard}>
-          {/* Full Name (Register only) */}
+        <View style={styles.formContainer}>
           {activeTab === 'register' && (
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Full Name</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="e.g. Aditi Sharma"
-                placeholderTextColor="#64748B"
-                value={name}
-                onChangeText={setName}
-                autoCapitalize="words"
-              />
-            </View>
+            <GlassInput
+              label="Full name"
+              placeholder="e.g. Aditi Sharma"
+              value={name}
+              onChangeText={setName}
+              autoCapitalize="words"
+              leftIcon={
+                <Feather
+                  name="user"
+                  size={18}
+                  color={isDark ? '#8387AB' : '#94A3B8'}
+                />
+              }
+            />
           )}
 
-          {/* Email Address */}
-          <View style={styles.inputGroup}>
-            <View style={styles.labelRow}>
-              <Text style={styles.inputLabel}>Email Address</Text>
-              {email.length > 0 && (
+          <GlassInput
+            label="Email address"
+            placeholder={
+              activeTab === 'login'
+                ? 'e.g. aditi@example.com'
+                : 'e.g. aditi@gmail.com'
+            }
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            leftIcon={
+              <Feather
+                name="mail"
+                size={18}
+                color={isDark ? '#8387AB' : '#94A3B8'}
+              />
+            }
+          />
+
+          {activeTab === 'register' && (
+            <GlassInput
+              label="Emergency phone number"
+              placeholder="10-digit mobile"
+              value={phone}
+              onChangeText={setPhone}
+              keyboardType="phone-pad"
+              hint="Used only to alert you and verify your account."
+              leftIcon={
+                <Feather
+                  name="phone"
+                  size={18}
+                  color={isDark ? '#8387AB' : '#94A3B8'}
+                />
+              }
+            />
+          )}
+
+          <GlassInput
+            label="Password"
+            placeholder="Minimum 6 characters"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            leftIcon={
+              <Feather
+                name="lock"
+                size={18}
+                color={isDark ? '#8387AB' : '#94A3B8'}
+              />
+            }
+          />
+
+          {activeTab === 'login' && (
+            <TouchableOpacity
+              style={styles.forgotPasswordRow}
+              onPress={() =>
+                Alert.alert(
+                  'Password Assistance',
+                  'If you forgot your password, please contact support@safora.app or use Google Sign-in to access your account.',
+                )
+              }
+            >
+              <Text
+                style={[
+                  styles.forgotText,
+                  { color: isDark ? '#B4B2FF' : colors.primary },
+                ]}
+              >
+                Forgot password?
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Primary Submit Button */}
+          <GlassButton
+            title={activeTab === 'login' ? 'Sign in →' : 'Create account →'}
+            variant="primary"
+            size="lg"
+            loading={isLoading}
+            onPress={handleAuthSubmit}
+            style={styles.submitBtn}
+          />
+
+          {/* Divider */}
+          <View style={styles.dividerRow}>
+            <View
+              style={[styles.dividerLine, { backgroundColor: colors.border }]}
+            />
+            <Text
+              style={[
+                styles.dividerText,
+                { color: isDark ? '#8387AB' : colors.textMuted },
+              ]}
+            >
+              OR CONTINUE WITH
+            </Text>
+            <View
+              style={[styles.dividerLine, { backgroundColor: colors.border }]}
+            />
+          </View>
+
+          {/* Google Sign-in */}
+          <GlassButton
+            title={
+              activeTab === 'login'
+                ? 'Continue with Google'
+                : 'Sign up with Google'
+            }
+            variant="secondary"
+            size="lg"
+            leftIcon={<GoogleLogo size={20} />}
+            onPress={handleGoogleAuth}
+            style={styles.googleBtn}
+          />
+
+          {/* Offline Safety Shield Entry (Screen 8) */}
+          {activeTab === 'login' ? (
+            <GlassCard
+              variant="card"
+              style={styles.offlineShieldCard}
+              onPress={handleEnterOfflineShield}
+            >
+              <View style={styles.offlineCardRow}>
+                <Feather
+                  name="shield"
+                  size={18}
+                  color={isDark ? '#C3C1FF' : colors.primary}
+                />
                 <Text
                   style={[
-                    styles.validationTag,
-                    isEmailValid(email) ? styles.tagValid : styles.tagInvalid,
+                    styles.offlineShieldText,
+                    { color: isDark ? '#C3C1FF' : colors.primaryDark },
                   ]}
                 >
-                  {isEmailValid(email) ? '✓ Valid' : '✕ Invalid'}
-                </Text>
-              )}
-            </View>
-            <TextInput
-              style={styles.textInput}
-              placeholder="e.g. aditi@gmail.com"
-              placeholderTextColor="#64748B"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-          </View>
-
-          {/* Phone Number (Register only) */}
-          {activeTab === 'register' && (
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Emergency Phone Number</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="10-digit mobile (e.g. 9876543210)"
-                placeholderTextColor="#64748B"
-                value={phone}
-                onChangeText={setPhone}
-                keyboardType="phone-pad"
-                maxLength={10}
-              />
-            </View>
-          )}
-
-          {/* Password */}
-          <View style={styles.inputGroup}>
-            <View style={styles.labelRow}>
-              <Text style={styles.inputLabel}>Password</Text>
-              <TouchableOpacity
-                onPress={() => setShowPassword(!showPassword)}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Text style={styles.showToggleText}>
-                  {showPassword ? 'Hide' : 'Show'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-            <TextInput
-              style={styles.textInput}
-              placeholder="Minimum 6 characters"
-              placeholderTextColor="#64748B"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-              autoCapitalize="none"
-            />
-          </View>
-
-          {/* Submit Button */}
-          <TouchableOpacity
-            style={styles.submitButton}
-            onPress={handleAuthSubmit}
-            disabled={isLoading || isGoogleLoading}
-            activeOpacity={0.85}
-          >
-            {isLoading ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <Text style={styles.submitButtonText}>
-                {activeTab === 'login' ? 'Sign In' : 'Create Account'} →
-              </Text>
-            )}
-          </TouchableOpacity>
-
-          {/* Google Sign-In Divider */}
-          <View style={styles.dividerRow}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>or continue with</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          {/* Continue with Google Button */}
-          <TouchableOpacity
-            style={styles.googleButton}
-            onPress={handleGoogleSignIn}
-            disabled={isLoading || isGoogleLoading}
-            activeOpacity={0.85}
-          >
-            {isGoogleLoading ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <View style={styles.googleButtonContent}>
-                <GoogleLogo size={20} />
-                <Text style={styles.googleButtonText}>
-                  {activeTab === 'login'
-                    ? 'Continue with Google'
-                    : 'Sign up with Google'}
+                  Low or no internet? Continue with Offline Safety Shield →
                 </Text>
               </View>
-            )}
-          </TouchableOpacity>
-
-          {/* Low / No Internet Offline Emergency Entry */}
-          <TouchableOpacity
-            style={styles.offlineEntryBtn}
-            onPress={async () => {
-              await enterAsGuest();
-              navigation.navigate('MainTabs');
-            }}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.offlineEntryIcon}>📶</Text>
-            <Text style={styles.offlineEntryText}>
-              In low or no internet? Continue with Offline Safety Shield →
+            </GlassCard>
+          ) : (
+            <Text
+              style={[
+                styles.termsNoticeText,
+                { color: isDark ? '#8387AB' : colors.textMuted },
+              ]}
+            >
+              By continuing you agree to the Safety Terms and Privacy Policy.
             </Text>
-          </TouchableOpacity>
+          )}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -422,257 +478,155 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#070A11',
   },
-  scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: 22,
-    paddingTop: 52,
-    paddingBottom: 40,
-  },
-  topRow: {
+  topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 24,
+    paddingHorizontal: 20,
+    paddingBottom: 10,
   },
   backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     paddingVertical: 6,
     paddingHorizontal: 12,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
   },
-  backButtonText: {
-    color: '#818CF8',
+  backText: {
     fontSize: 13,
     fontWeight: '700',
   },
-  badgeLive: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 4,
+  secureBadge: {
+    backgroundColor: 'rgba(52, 211, 153, 0.15)',
     paddingHorizontal: 10,
-    borderRadius: 20,
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    paddingVertical: 5,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)',
-    gap: 6,
+    borderColor: 'rgba(52, 211, 153, 0.3)',
   },
-  liveDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#10B981',
-  },
-  badgeLiveText: {
-    color: '#10B981',
-    fontSize: 10,
+  secureBadgeText: {
+    color: '#7BE8BC',
+    fontSize: 11,
     fontWeight: '800',
-    letterSpacing: 0.8,
+    letterSpacing: 0.6,
   },
-  titleSection: {
-    marginBottom: 20,
+  scrollContent: {
+    paddingHorizontal: 22,
+    paddingTop: 12,
   },
   screenTitle: {
-    fontSize: 28,
-    fontWeight: '900',
-    color: '#F8FAFC',
-    marginBottom: 6,
+    fontSize: 30,
+    fontWeight: '800',
+    letterSpacing: -0.6,
+    marginBottom: 4,
   },
   screenSubtitle: {
-    fontSize: 13,
-    color: '#94A3B8',
-    lineHeight: 20,
-  },
-  segmentedContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#0F172A',
-    borderRadius: 14,
-    padding: 4,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  segmentTab: {
-    flex: 1,
-    paddingVertical: 11,
-    alignItems: 'center',
-    borderRadius: 10,
-  },
-  segmentTabActive: {
-    backgroundColor: '#4F46E5',
-    shadowColor: '#4F46E5',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.4,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  segmentText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#94A3B8',
-  },
-  segmentTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '800',
-  },
-  errorBox: {
-    backgroundColor: 'rgba(239, 68, 68, 0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.4)',
-    borderRadius: 12,
-    padding: 12,
+    fontSize: 14,
+    fontWeight: '500',
     marginBottom: 16,
   },
-  errorText: {
-    color: '#FCA5A5',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  formCard: {
-    backgroundColor: '#0E1526',
-    borderRadius: 20,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.07)',
-    gap: 16,
-  },
-  inputGroup: {
-    gap: 6,
-  },
-  labelRow: {
+  segmentedControl: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  inputLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#CBD5E1',
-    letterSpacing: 0.2,
-  },
-  validationTag: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  tagValid: {
-    color: '#10B981',
-  },
-  tagInvalid: {
-    color: '#F87171',
-  },
-  showToggleText: {
-    color: '#818CF8',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  textInput: {
-    backgroundColor: '#070B14',
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#1E293B',
+    padding: 4,
+    marginBottom: 18,
+  },
+  segmentItem: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    color: '#FFFFFF',
+  },
+  segmentItemActive: {
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  segmentText: {
     fontSize: 14,
   },
-  submitButton: {
-    backgroundColor: '#4F46E5',
-    borderRadius: 14,
-    paddingVertical: 14,
+  errorBanner: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8,
-    shadowColor: '#4F46E5',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-    elevation: 6,
+    gap: 8,
+    backgroundColor: 'rgba(240, 90, 110, 0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(240, 90, 110, 0.4)',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 14,
   },
-  submitButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: 0.5,
+  errorBannerText: {
+    color: '#FF8FA0',
+    fontSize: 13,
+    fontWeight: '600',
+    flex: 1,
+  },
+  formContainer: {
+    width: '100%',
+  },
+  forgotPasswordRow: {
+    alignSelf: 'flex-start',
+    marginTop: -6,
+    marginBottom: 16,
+    paddingVertical: 4,
+  },
+  forgotText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  submitBtn: {
+    marginTop: 6,
+    marginBottom: 18,
   },
   dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 18,
-    gap: 12,
+    marginVertical: 14,
   },
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#1E293B',
   },
   dividerText: {
-    color: '#64748B',
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
+    fontSize: 11,
+    fontWeight: '700',
+    paddingHorizontal: 12,
+    letterSpacing: 0.8,
   },
-  googleButton: {
-    backgroundColor: '#0F172A',
-    borderRadius: 14,
-    paddingVertical: 13,
-    borderWidth: 1.2,
-    borderColor: '#334155',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 3,
+  googleBtn: {
+    marginBottom: 16,
   },
-  googleButtonContent: {
+  offlineShieldCard: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginTop: 6,
+  },
+  offlineCardRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
+    gap: 10,
   },
-  googleIconCircle: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: '#EA4335',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  googleIconLetter: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '900',
-    marginTop: -1,
-  },
-  googleButtonText: {
-    color: '#F8FAFC',
-    fontSize: 14,
+  offlineShieldText: {
+    fontSize: 13,
     fontWeight: '700',
-    letterSpacing: 0.2,
-  },
-  offlineEntryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(79, 70, 229, 0.12)',
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(99, 102, 241, 0.3)',
-    marginTop: 16,
-    gap: 8,
-  },
-  offlineEntryIcon: {
-    fontSize: 16,
-  },
-  offlineEntryText: {
-    color: '#A5B4FC',
-    fontSize: 12,
-    fontWeight: '700',
-    textAlign: 'center',
     flex: 1,
+    lineHeight: 18,
+  },
+  termsNoticeText: {
+    textAlign: 'center',
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 8,
+    paddingHorizontal: 16,
+    fontWeight: '500',
   },
 });

@@ -6,70 +6,64 @@ import {
   TouchableOpacity,
   ScrollView,
   Dimensions,
-  Image,
   StatusBar,
   NativeSyntheticEvent,
   NativeScrollEvent,
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors } from '../theme/colors';
+import Feather from 'react-native-vector-icons/Feather';
+import { useTheme } from '../theme/ThemeContext';
 import { useAuthStore } from '../store/authStore';
-import { AudioRecorderService } from '../services/audioRecorderService';
-import { MicrophoneConsentModal } from '../components/emergency/MicrophoneConsentModal';
+import { GlassButton } from '../components/common/GlassButton';
 
 const { width } = Dimensions.get('window');
 
 interface Slide {
   id: string;
   badge: string;
-  emoji: string;
+  iconName: string;
   title: string;
   subtitle: string;
   description: string;
-  accentColor: string;
 }
 
 const SLIDES: Slide[] = [
   {
     id: '1',
     badge: 'COMMUNITY SAFETY SHIELD',
-    emoji: '🛡️',
+    iconName: 'shield',
     title: 'Welcome to SAFORA',
-    subtitle: 'Your Personal Safety Companion',
+    subtitle: 'Your personal safety companion',
     description:
-      'A proactive women & citizen safety network with real-time hazard radar, live location tracking, and immediate guardian alerts.',
-    accentColor: colors.accent,
+      'A safety network for women and citizens with a live hazard radar, location sharing and quick alerts to your guardians.',
   },
   {
     id: '2',
-    badge: 'SAFETY RADAR & 10KM CACHE',
-    emoji: '🗺️',
-    title: 'Live Radar & Maps',
-    subtitle: 'Satellite, Street & Offline Views',
+    badge: 'SAFETY RADAR',
+    iconName: 'compass',
+    title: 'Live radar and maps',
+    subtitle: 'Spot hazards before you get there',
     description:
-      'Spot poorly lit roads, isolated spots, and hazards. Includes multi-modal routing for Car, 2-Wheeler, and Walk with automatic 10km offline map caching.',
-    accentColor: '#38BDF8',
+      'Spot poorly lit roads, isolated spots and hazards, with offline maps for the area around you.',
   },
   {
     id: '3',
     badge: 'VIRTUAL ESCORT',
-    emoji: '🚶‍♀️',
-    title: 'Safe Walk Escort',
-    subtitle: 'Never Walk Alone',
+    iconName: 'navigation',
+    title: 'Safe Walk escort',
+    subtitle: 'Never walk alone',
     description:
-      'Live road corridor tracking with automatic timer checks, corridor deviation detection, and one-tap safe arrival sharing to loved ones.',
-    accentColor: colors.warning,
+      'Share your walk with a guardian, get route guidance and an alarm trigger when you arrive safely.',
   },
   {
     id: '4',
-    badge: 'LOW-INTERNET RESILIENT',
-    emoji: '🚨',
-    title: 'Instant SOS & Decoy',
-    subtitle: 'Zero-Internet Safety Fallbacks',
+    badge: 'WORKS WITHOUT INTERNET',
+    iconName: 'alert-triangle',
+    title: 'Instant SOS and decoy',
+    subtitle: 'Safety fallbacks without internet',
     description:
-      'Emergency SMS with live GPS coordinates for your trusted contacts, fast 112 calling, and a stealth calculator decoy for discreet emergencies. Safora does not replace calling 112.',
-    accentColor: colors.danger,
+      'Emergency SMS with zero-internet, fast 112 calling and a calculator decoy. SAFORA does not replace calling 112.',
   },
 ];
 
@@ -85,146 +79,204 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     insets.top,
     Platform.OS === 'android' ? StatusBar.currentHeight || 28 : 0,
   );
+  const { colors, isDark } = useTheme();
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [showConsentModal, setShowConsentModal] = useState(false);
   const scrollRef = useRef<any>(null);
   const completeOnboarding = useAuthStore(state => state.completeOnboarding);
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const slide = Math.round(event.nativeEvent.contentOffset.x / width);
-    if (slide !== currentIndex) {
+    if (slide !== currentIndex && slide >= 0 && slide < SLIDES.length) {
       setCurrentIndex(slide);
     }
   };
 
+  const handleFinish = async () => {
+    await completeOnboarding();
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'AccountSelect' }],
+    });
+  };
+
   const handleNext = async () => {
     if (currentIndex < SLIDES.length - 1) {
-      scrollRef.current?.scrollTo({
-        x: (currentIndex + 1) * width,
-        animated: true,
-      });
+      const nextIndex = currentIndex + 1;
+      scrollRef.current?.scrollTo({ x: nextIndex * width, animated: true });
+      setCurrentIndex(nextIndex);
     } else {
-      // Show explicit in-app consent modal explaining emergency audio evidence
-      setShowConsentModal(true);
+      await handleFinish();
     }
   };
 
-  const handleConsentAccept = async () => {
-    setShowConsentModal(false);
-    await AudioRecorderService.requestPermission().catch(() => {});
-    await AudioRecorderService.markConsentDecided();
-    await completeOnboarding();
-    navigation.replace('AccountSelect');
-  };
-
-  const handleConsentDecline = async () => {
-    setShowConsentModal(false);
-    await AudioRecorderService.markConsentDecided();
-    await completeOnboarding();
-    navigation.replace('AccountSelect');
-  };
-
-  const handleSkip = () => {
-    // Skipping intro slides must still prompt for essential emergency microphone consent
-    setShowConsentModal(true);
-  };
-
   return (
-    <View
-      style={[
-        styles.container,
-        {
-          paddingBottom: Math.max(insets.bottom, 24),
-        },
-      ]}
-    >
-      <StatusBar barStyle="light-content" />
-      <MicrophoneConsentModal
-        visible={showConsentModal}
-        onConsent={handleConsentAccept}
-        onDecline={handleConsentDecline}
-      />
+    <View style={[styles.container, { backgroundColor: colors.canvas }]}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
-      {/* Top Header with Skip */}
-      <View style={[styles.topBar, { paddingTop: topInset + 10 }]}>
-        <View style={styles.brandGroup}>
-          <Image
-            source={require('../assets/icon.png')}
-            style={styles.miniLogo}
-          />
-          <Text style={styles.brandTitle}>SAFORA</Text>
+      {/* Top Header */}
+      <View style={[styles.topHeader, { paddingTop: topInset + 8 }]}>
+        <View style={styles.brandRow}>
+          <View
+            style={[
+              styles.brandIconBox,
+              { backgroundColor: colors.primaryDark },
+            ]}
+          >
+            <Feather name="shield" size={18} color="#FFFFFF" />
+          </View>
+          <Text style={[styles.brandText, { color: colors.textPrimary }]}>
+            SAFORA
+          </Text>
         </View>
 
-        {currentIndex < SLIDES.length - 1 && (
-          <TouchableOpacity onPress={handleSkip} style={styles.skipButton}>
-            <Text style={styles.skipText}>Skip</Text>
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity
+          style={[
+            styles.skipButton,
+            {
+              backgroundColor: isDark ? 'rgba(139, 137, 255, 0.17)' : '#ECE9FA',
+              borderColor: isDark
+                ? 'rgba(255, 255, 255, 0.12)'
+                : 'rgba(110, 100, 225, 0.18)',
+            },
+          ]}
+          onPress={handleFinish}
+          activeOpacity={0.8}
+        >
+          <Text
+            style={[
+              styles.skipText,
+              { color: isDark ? '#C3C1FF' : colors.primaryDark },
+            ]}
+          >
+            Skip
+          </Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Sliding Horizontal Content */}
+      {/* Horizontal Carousel */}
       <ScrollView
         ref={scrollRef}
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
         onMomentumScrollEnd={handleScroll}
-        style={styles.slider}
+        style={styles.carousel}
       >
         {SLIDES.map(slide => (
-          <View key={slide.id} style={styles.slide}>
+          <View key={slide.id} style={[styles.slideContainer, { width }]}>
+            {/* Glowing Icon Circle */}
             <View
-              style={[styles.visualCircle, { borderColor: slide.accentColor }]}
+              style={[
+                styles.iconGlowCircle,
+                {
+                  backgroundColor: isDark
+                    ? 'rgba(139, 137, 255, 0.17)'
+                    : '#ECE9FA',
+                  shadowColor: colors.primary,
+                },
+              ]}
             >
-              <Text style={styles.slideEmoji}>{slide.emoji}</Text>
+              <Feather
+                name={slide.iconName}
+                size={58}
+                color={isDark ? '#B4B2FF' : colors.primaryDark}
+              />
             </View>
 
-            <View style={styles.badgeBox}>
-              <View
+            {/* Category Subtitle Badge */}
+            <View
+              style={[
+                styles.categoryBadge,
+                {
+                  backgroundColor: isDark
+                    ? 'rgba(139, 137, 255, 0.18)'
+                    : '#ECE9FA',
+                },
+              ]}
+            >
+              <Text
                 style={[
-                  styles.badgeDot,
-                  { backgroundColor: slide.accentColor },
+                  styles.categoryBadgeText,
+                  { color: isDark ? '#C3C1FF' : colors.primaryDark },
                 ]}
-              />
-              <Text style={[styles.badgeText, { color: slide.accentColor }]}>
+              >
                 {slide.badge}
               </Text>
             </View>
 
-            <Text style={styles.slideTitle}>{slide.title}</Text>
-            <Text style={styles.slideSubtitle}>{slide.subtitle}</Text>
-            <Text style={styles.slideDesc}>{slide.description}</Text>
+            {/* Slide Title */}
+            <Text style={[styles.slideTitle, { color: colors.textPrimary }]}>
+              {slide.title}
+            </Text>
+
+            {/* Slide Subtitle */}
+            <Text
+              style={[
+                styles.slideSubtitle,
+                { color: isDark ? '#B4B2FF' : colors.primary },
+              ]}
+            >
+              {slide.subtitle}
+            </Text>
+
+            {/* Slide Description */}
+            <Text
+              style={[
+                styles.slideDesc,
+                { color: isDark ? '#A3A7C8' : colors.textSecondary },
+              ]}
+            >
+              {slide.description}
+            </Text>
           </View>
         ))}
       </ScrollView>
 
-      {/* Bottom Controls */}
-      <View style={styles.bottomBar}>
-        {/* Pagination Dots */}
-        <View style={styles.dotsContainer}>
-          {SLIDES.map((_, index) => (
+      {/* Bottom Liquid Glass Controls */}
+      <View
+        style={[
+          styles.bottomControls,
+          { paddingBottom: Math.max(insets.bottom, 24) + 8 },
+        ]}
+      >
+        {/* Step Indicator Pills */}
+        <View style={styles.indicatorRow}>
+          {SLIDES.map((_, i) => (
             <View
-              key={index}
+              key={i}
               style={[
-                styles.dot,
-                currentIndex === index ? styles.activeDot : styles.inactiveDot,
+                styles.indicatorDot,
+                i === currentIndex
+                  ? [
+                      styles.indicatorActive,
+                      { backgroundColor: colors.primaryDark },
+                    ]
+                  : [
+                      styles.indicatorInactive,
+                      {
+                        backgroundColor: isDark
+                          ? 'rgba(255, 255, 255, 0.22)'
+                          : 'rgba(110, 100, 225, 0.25)',
+                      },
+                    ],
               ]}
             />
           ))}
         </View>
 
-        {/* Action Button */}
-        <TouchableOpacity
-          style={styles.actionBtn}
-          activeOpacity={0.85}
-          onPress={handleNext}
-        >
-          <Text style={styles.actionBtnText}>
-            {currentIndex === SLIDES.length - 1
-              ? 'Get Started →'
-              : 'Continue →'}
-          </Text>
-        </TouchableOpacity>
+        {/* Primary CTA */}
+        <View style={styles.buttonWrap}>
+          <GlassButton
+            title={
+              currentIndex === SLIDES.length - 1
+                ? 'Get started →'
+                : 'Continue →'
+            }
+            variant="primary"
+            size="lg"
+            onPress={handleNext}
+          />
+        </View>
       </View>
     </View>
   );
@@ -233,153 +285,115 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
-    justifyContent: 'space-between',
-    paddingVertical: 36,
   },
-  topBar: {
+  topHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 16,
+    paddingHorizontal: 22,
+    paddingBottom: 10,
   },
-  brandGroup: {
+  brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
   },
-  miniLogo: {
+  brandIconBox: {
     width: 32,
     height: 32,
-    borderRadius: 8,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  brandTitle: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: colors.textPrimary,
+  brandText: {
+    fontSize: 16,
+    fontWeight: '800',
     letterSpacing: 2,
   },
   skipButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    backgroundColor: colors.backgroundCard,
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: colors.border,
   },
   skipText: {
-    color: colors.textSecondary,
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
   },
-  slider: {
+  carousel: {
     flex: 1,
   },
-  slide: {
-    width,
+  slideContainer: {
+    flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
+    paddingHorizontal: 30,
+    paddingTop: 40,
   },
-  visualCircle: {
+  iconGlowCircle: {
     width: 140,
     height: 140,
     borderRadius: 70,
-    backgroundColor: colors.backgroundCard,
-    borderWidth: 2,
-    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 28,
-    shadowColor: colors.accent,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
+    justifyContent: 'center',
+    marginBottom: 26,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.35,
+    shadowRadius: 24,
     elevation: 8,
   },
-  slideEmoji: {
-    fontSize: 54,
-  },
-  badgeBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.backgroundCard,
-    paddingVertical: 6,
+  categoryBadge: {
     paddingHorizontal: 12,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: 16,
+    paddingVertical: 5,
+    borderRadius: 10,
+    marginBottom: 12,
   },
-  badgeDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    marginRight: 8,
-  },
-  badgeText: {
-    fontSize: 10,
+  categoryBadgeText: {
+    fontSize: 11,
     fontWeight: '800',
-    letterSpacing: 1.2,
+    letterSpacing: 0.8,
   },
   slideTitle: {
     fontSize: 28,
-    fontWeight: '900',
-    color: colors.textPrimary,
+    fontWeight: '800',
     textAlign: 'center',
+    letterSpacing: -0.5,
     marginBottom: 6,
   },
   slideSubtitle: {
     fontSize: 15,
-    fontWeight: '600',
-    color: colors.accent,
+    fontWeight: '700',
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   slideDesc: {
     fontSize: 14,
-    color: colors.textSecondary,
+    lineHeight: 21,
     textAlign: 'center',
-    lineHeight: 22,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
+    fontWeight: '500',
   },
-  bottomBar: {
-    paddingHorizontal: 24,
-    gap: 20,
+  bottomControls: {
+    paddingHorizontal: 22,
+    alignItems: 'center',
   },
-  dotsContainer: {
+  indicatorRow: {
     flexDirection: 'row',
+    gap: 6,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
+    marginBottom: 20,
   },
-  dot: {
-    height: 6,
-    borderRadius: 3,
+  indicatorDot: {
+    height: 8,
+    borderRadius: 4,
   },
-  activeDot: {
-    width: 24,
-    backgroundColor: colors.accent,
+  indicatorActive: {
+    width: 26,
   },
-  inactiveDot: {
-    width: 6,
-    backgroundColor: colors.border,
+  indicatorInactive: {
+    width: 8,
   },
-  actionBtn: {
-    backgroundColor: colors.primary,
-    paddingVertical: 16,
-    borderRadius: 16,
-    alignItems: 'center',
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-  actionBtnText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '800',
-    letterSpacing: 0.5,
+  buttonWrap: {
+    width: '100%',
   },
 });

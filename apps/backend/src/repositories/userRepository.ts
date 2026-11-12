@@ -81,6 +81,10 @@ export class UserRepository {
       age?: number | null;
       age_notice_ack?: boolean | null;
       terms_accepted_at?: Date | string | null;
+      allergies?: string | null;
+      show_medical_on_lock_screen?: boolean | null;
+      is_verified?: boolean | null;
+      has_completed_test_drill?: boolean | null;
     },
   ): Promise<UserRow | null> {
     const fields: string[] = [];
@@ -106,6 +110,22 @@ export class UserRepository {
     if (data.emergency_notes !== undefined) {
       fields.push(`emergency_notes = $${idx++}`);
       values.push(data.emergency_notes ? data.emergency_notes.trim() : null);
+    }
+    if (data.allergies !== undefined) {
+      fields.push(`allergies = $${idx++}`);
+      values.push(data.allergies ? data.allergies.trim() : null);
+    }
+    if (data.show_medical_on_lock_screen !== undefined) {
+      fields.push(`show_medical_on_lock_screen = $${idx++}`);
+      values.push(Boolean(data.show_medical_on_lock_screen));
+    }
+    if (data.is_verified !== undefined) {
+      fields.push(`is_verified = $${idx++}`);
+      values.push(Boolean(data.is_verified));
+    }
+    if (data.has_completed_test_drill !== undefined) {
+      fields.push(`has_completed_test_drill = $${idx++}`);
+      values.push(Boolean(data.has_completed_test_drill));
     }
     if (data.fcm_token !== undefined) {
       fields.push(`fcm_token = $${idx++}`);

@@ -343,6 +343,11 @@ export class SosService {
       }).catch((e) => console.log("[WARN] Test FCM error:", e));
     }
 
+    // Mark user safety checklist test drill as completed
+    await UserRepository.updateUser(senderId, {
+      has_completed_test_drill: true,
+    }).catch((e) => console.log("[WARN] Update test drill status error:", e));
+
     return {
       success: true,
       deliveredToApp: true,

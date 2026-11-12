@@ -97,6 +97,43 @@ export class CloudinaryService {
   }
 
   /**
+   * Uploads a user avatar image buffer directly to Cloudinary in the safora/avatars folder.
+   */
+  static async uploadAvatar(
+    buffer: Buffer,
+    userId: string | number,
+  ): Promise<{ url: string; publicId: string }> {
+    return new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: "safora/avatars",
+          public_id: `user-${userId}-${Date.now()}`,
+          transformation: [
+            { width: 400, height: 400, crop: "fill", gravity: "face" },
+            { quality: "auto:good", fetch_format: "auto" },
+          ],
+        },
+        (error, result) => {
+          if (error || !result) {
+            return reject(
+              new AppError(
+                `Cloudinary avatar upload failed: ${error?.message || "Unknown error"}`,
+                500,
+              ),
+            );
+          }
+          resolve({
+            url: result.secure_url,
+            publicId: result.public_id,
+          });
+        },
+      );
+
+      uploadStream.end(buffer);
+    });
+  }
+
+  /**
    * Uploads an audio buffer directly to Cloudinary in the safora/sos_audio folder
    * using an unguessable UUID and authenticated access type to prevent enumeration.
    */
