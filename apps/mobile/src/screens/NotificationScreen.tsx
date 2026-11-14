@@ -19,6 +19,7 @@ import { SosService } from '../services/sosService';
 import { SosNotification } from '@safora/shared-types';
 import { Sound } from 'react-native-nitro-sound';
 import { onSosAlert, onSosAudio } from '../services/socketService';
+import { Feather, FontAwesome5 } from '../components/common/Icon';
 
 export const NotificationScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -212,14 +213,32 @@ export const NotificationScreen: React.FC = () => {
                 },
               ]}
             >
-              <Text
-                style={[
-                  styles.badgeTypeText,
-                  { color: isEmergency ? '#EF4444' : '#38BDF8' },
-                ]}
-              >
-                {isEmergency ? '🚨 EMERGENCY SOS' : '🔔 TEST DRILL'}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                {isEmergency ? (
+                  <Feather
+                    name="alert-octagon"
+                    size={12}
+                    color="#EF4444"
+                    style={{ marginRight: 4 }}
+                  />
+                ) : (
+                  <FontAwesome5
+                    name="bell"
+                    regular
+                    size={12}
+                    color="#38BDF8"
+                    style={{ marginRight: 4 }}
+                  />
+                )}
+                <Text
+                  style={[
+                    styles.badgeTypeText,
+                    { color: isEmergency ? '#EF4444' : '#38BDF8' },
+                  ]}
+                >
+                  {isEmergency ? 'EMERGENCY SOS' : 'TEST DRILL'}
+                </Text>
+              </View>
             </View>
             {!item.isRead && <View style={styles.unreadDot} />}
           </View>
@@ -246,7 +265,12 @@ export const NotificationScreen: React.FC = () => {
               ]}
               onPress={() => openInMap(item.latitude, item.longitude)}
             >
-              <Text style={styles.metricEmoji}>📍</Text>
+              <Feather
+                name="map-pin"
+                size={12}
+                color="#94A3B8"
+                style={{ marginRight: 4 }}
+              />
               <Text style={[styles.metricText, { color: colors.textPrimary }]}>
                 {item.latitude.toFixed(4)}°N, {item.longitude.toFixed(4)}°E
               </Text>
@@ -260,9 +284,12 @@ export const NotificationScreen: React.FC = () => {
                 { backgroundColor: colors.backgroundInput },
               ]}
             >
-              <Text style={styles.metricEmoji}>
-                {item.batteryPercentage <= 20 ? '🪫' : '🔋'}
-              </Text>
+              <Feather
+                name="battery"
+                size={13}
+                color={item.batteryPercentage <= 20 ? '#EF4444' : '#10B981'}
+                style={{ marginRight: 4 }}
+              />
               <Text
                 style={[
                   styles.metricText,
@@ -295,7 +322,12 @@ export const NotificationScreen: React.FC = () => {
           >
             <View style={styles.audioTopRow}>
               <View style={styles.audioLabelGroup}>
-                <Text style={styles.micEmoji}>🎙️</Text>
+                <Feather
+                  name="mic"
+                  size={14}
+                  color="#EF4444"
+                  style={{ marginRight: 6 }}
+                />
                 <Text
                   style={[styles.audioLabel, { color: colors.textPrimary }]}
                 >
@@ -371,9 +403,17 @@ export const NotificationScreen: React.FC = () => {
               ]}
               onPress={() => openInMap(item.latitude, item.longitude)}
             >
-              <Text style={[styles.actionBtnText, { color: '#38BDF8' }]}>
-                🗺️ Live Map
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Feather
+                  name="map"
+                  size={13}
+                  color="#38BDF8"
+                  style={{ marginRight: 4 }}
+                />
+                <Text style={[styles.actionBtnText, { color: '#38BDF8' }]}>
+                  Live Map
+                </Text>
+              </View>
             </TouchableOpacity>
           )}
 
@@ -388,9 +428,17 @@ export const NotificationScreen: React.FC = () => {
               ]}
               onPress={() => callSender(item.senderPhone)}
             >
-              <Text style={[styles.actionBtnText, { color: '#10B981' }]}>
-                📞 Call {item.senderName.split(' ')[0]}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Feather
+                  name="phone"
+                  size={13}
+                  color="#10B981"
+                  style={{ marginRight: 4 }}
+                />
+                <Text style={[styles.actionBtnText, { color: '#10B981' }]}>
+                  Call {item.senderName.split(' ')[0]}
+                </Text>
+              </View>
             </TouchableOpacity>
           )}
         </View>
@@ -468,7 +516,12 @@ export const NotificationScreen: React.FC = () => {
           }
           ListEmptyComponent={
             <View style={styles.emptyState}>
-              <Text style={styles.emptyEmoji}>🛡️</Text>
+              <Feather
+                name="shield"
+                size={44}
+                color="#94A3B8"
+                style={{ marginBottom: 12 }}
+              />
               <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
                 All Safe & Clear
               </Text>

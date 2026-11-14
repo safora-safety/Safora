@@ -22,6 +22,7 @@ import {
   BatteryOptimizationService,
   DeviceInfo,
 } from '../services/batteryOptimizationService';
+import { Feather, FontAwesome5 } from '../components/common/Icon';
 
 interface SettingsScreenProps {
   navigation: any;
@@ -47,7 +48,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const [reachedNotification, setReachedNotification] = useState(true);
   const [micGranted, setMicGranted] = useState(false);
 
-  // Phase 4: OEM Battery Optimization Status & Guide
+  // OEM Battery Optimization Status & Guide
   const [isBatteryUnrestricted, setIsBatteryUnrestricted] = useState(false);
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
   const [showBatteryGuideModal, setShowBatteryGuideModal] = useState(false);
@@ -265,7 +266,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
           </View>
         </View>
 
-        {/* Section 2: OEM Battery & Lock-Screen Protection (Phase 4) */}
+        {/* Section 2: OEM Battery & Lock-Screen Protection */}
         <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
           LOCK-SCREEN & BATTERY PROTECTION
         </Text>
@@ -289,17 +290,27 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 marginBottom: 8,
               }}
             >
-              <Text
-                style={{
-                  fontSize: 13,
-                  fontWeight: '800',
-                  color: colors.textPrimary,
-                }}
-              >
-                {isBatteryUnrestricted
-                  ? '🛡️ Background Protection Active'
-                  : '⚡ Background Limits Detected'}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Feather
+                  name={isBatteryUnrestricted ? 'shield' : 'zap'}
+                  size={14}
+                  color={
+                    isBatteryUnrestricted ? colors.brandEmerald : colors.warning
+                  }
+                  style={{ marginRight: 6 }}
+                />
+                <Text
+                  style={{
+                    fontSize: 13,
+                    fontWeight: '800',
+                    color: colors.textPrimary,
+                  }}
+                >
+                  {isBatteryUnrestricted
+                    ? 'Background Protection Active'
+                    : 'Background Limits Detected'}
+                </Text>
+              </View>
               <View
                 style={{
                   backgroundColor: isBatteryUnrestricted
@@ -357,15 +368,23 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   onPress={handleRequestBatteryExemption}
                   activeOpacity={0.8}
                 >
-                  <Text
-                    style={{
-                      color: '#FFFFFF',
-                      fontSize: 12,
-                      fontWeight: '700',
-                    }}
-                  >
-                    ⚡ Remove Limits
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Feather
+                      name="zap"
+                      size={13}
+                      color="#FFFFFF"
+                      style={{ marginRight: 5 }}
+                    />
+                    <Text
+                      style={{
+                        color: '#FFFFFF',
+                        fontSize: 12,
+                        fontWeight: '700',
+                      }}
+                    >
+                      Remove Limits
+                    </Text>
+                  </View>
                 </TouchableOpacity>
               )}
 
@@ -390,7 +409,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                     fontWeight: '700',
                   }}
                 >
-                  📱 Setup Guide ›
+                  Setup Guide ›
                 </Text>
               </TouchableOpacity>
             </View>
@@ -499,9 +518,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         >
           <View style={styles.themeRow}>
             {[
-              { id: 'light', label: '☀️ Light' },
-              { id: 'dark', label: '🌙 Dark' },
-              { id: 'system', label: '⚙️ Auto' },
+              { id: 'light', label: 'Light', icon: 'sun' },
+              { id: 'dark', label: 'Dark', icon: 'moon' },
+              { id: 'system', label: 'Auto', icon: 'settings' },
             ].map(item => {
               const isSelected = themeMode === item.id;
               return (
@@ -516,11 +535,20 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       borderColor: isSelected
                         ? colors.primaryLight
                         : colors.border,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'center',
                     },
                   ]}
                   onPress={() => setThemeMode(item.id as any)}
                   activeOpacity={0.8}
                 >
+                  <Feather
+                    name={item.icon}
+                    size={13}
+                    color={isSelected ? '#FFFFFF' : colors.textSecondary}
+                    style={{ marginRight: 5 }}
+                  />
                   <Text
                     style={[
                       styles.themeBtnText,
@@ -554,7 +582,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             onPress={() => {
               if (isGuest) {
                 Alert.alert(
-                  '🔒 Feature Locked in Guest Mode',
+                  'Feature Locked in Guest Mode',
                   'Guest explorers do not have an account password. Would you like to sign in or create a verified citizen account?',
                   [
                     { text: 'Cancel', style: 'cancel' },
@@ -576,14 +604,22 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 alignItems: 'center',
               }}
             >
-              <Text
-                style={[
-                  styles.actionItemText,
-                  { color: isGuest ? colors.textMuted : colors.textPrimary },
-                ]}
-              >
-                🔐 Change Account Password
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Feather
+                  name="key"
+                  size={14}
+                  color={isGuest ? colors.textMuted : colors.textPrimary}
+                  style={{ marginRight: 8 }}
+                />
+                <Text
+                  style={[
+                    styles.actionItemText,
+                    { color: isGuest ? colors.textMuted : colors.textPrimary },
+                  ]}
+                >
+                  Change Account Password
+                </Text>
+              </View>
               <Text
                 style={{
                   color: isGuest ? colors.textMuted : colors.primary,
@@ -591,7 +627,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   fontWeight: '700',
                 }}
               >
-                {isGuest ? '🔒 Locked (Guest)' : 'Update ›'}
+                {isGuest ? 'Locked (Guest)' : 'Update ›'}
               </Text>
             </View>
           </TouchableOpacity>
@@ -607,11 +643,22 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               }}
             >
               <View style={{ flex: 1, paddingRight: 10 }}>
-                <Text
-                  style={[styles.actionItemText, { color: colors.textPrimary }]}
-                >
-                  🎙️ Microphone Evidence Permission
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Feather
+                    name="mic"
+                    size={14}
+                    color={colors.textPrimary}
+                    style={{ marginRight: 8 }}
+                  />
+                  <Text
+                    style={[
+                      styles.actionItemText,
+                      { color: colors.textPrimary },
+                    ]}
+                  >
+                    Microphone Evidence Permission
+                  </Text>
+                </View>
                 <Text
                   style={{
                     color: colors.textMuted,
@@ -639,7 +686,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                     fontWeight: '700',
                   }}
                 >
-                  {micGranted ? '✓ Allowed' : 'Enable ›'}
+                  {micGranted ? 'Allowed' : 'Enable ›'}
                 </Text>
               </View>
             </View>
@@ -670,11 +717,19 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 alignItems: 'center',
               }}
             >
-              <Text
-                style={[styles.actionItemText, { color: colors.textPrimary }]}
-              >
-                🛡️ Safety Terms & Privacy Policy
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Feather
+                  name="shield"
+                  size={14}
+                  color={colors.textPrimary}
+                  style={{ marginRight: 8 }}
+                />
+                <Text
+                  style={[styles.actionItemText, { color: colors.textPrimary }]}
+                >
+                  Safety Terms & Privacy Policy
+                </Text>
+              </View>
               <Text
                 style={{
                   color: colors.primary,
@@ -705,11 +760,19 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             style={styles.actionItem}
             onPress={handleClearCache}
           >
-            <Text
-              style={[styles.actionItemText, { color: colors.textPrimary }]}
-            >
-              🧹 Clear Local Map Cache & Routes
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Feather
+                name="trash-2"
+                size={14}
+                color={colors.textPrimary}
+                style={{ marginRight: 8 }}
+              />
+              <Text
+                style={[styles.actionItemText, { color: colors.textPrimary }]}
+              >
+                Clear Local Map Cache & Routes
+              </Text>
+            </View>
           </TouchableOpacity>
         </View>
 
@@ -731,7 +794,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         onClose={() => setShowPasswordModal(false)}
       />
 
-      {/* OEM Battery Optimization Guide Modal (Phase 4) */}
+      {/* OEM Battery Optimization Guide Modal */}
       <Modal
         visible={showBatteryGuideModal}
         transparent
@@ -794,15 +857,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       onPress={() => setShowBatteryGuideModal(false)}
                       style={{ padding: 6 }}
                     >
-                      <Text
-                        style={{
-                          fontSize: 18,
-                          color: colors.textMuted,
-                          fontWeight: '700',
-                        }}
-                      >
-                        ✕
-                      </Text>
+                      <Feather name="x" size={18} color={colors.textMuted} />
                     </TouchableOpacity>
                   </View>
 
@@ -814,16 +869,25 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       borderRadius: 12,
                       padding: 12,
                       marginBottom: 16,
+                      flexDirection: 'row',
+                      alignItems: 'center',
                     }}
                   >
+                    <Feather
+                      name="alert-triangle"
+                      size={14}
+                      color="#F59E0B"
+                      style={{ marginRight: 8 }}
+                    />
                     <Text
                       style={{
                         fontSize: 12,
                         color: '#F59E0B',
                         lineHeight: 18,
+                        flex: 1,
                       }}
                     >
-                      ⚠️ {guide.description}
+                      {guide.description}
                     </Text>
                   </View>
 
@@ -897,15 +961,29 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                     onPress={handleOpenManufacturerSettings}
                     activeOpacity={0.8}
                   >
-                    <Text
+                    <View
                       style={{
-                        color: '#FFFFFF',
-                        fontSize: 14,
-                        fontWeight: '800',
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'center',
                       }}
                     >
-                      ⚙️ Open Device Power Settings
-                    </Text>
+                      <Feather
+                        name="settings"
+                        size={14}
+                        color="#FFFFFF"
+                        style={{ marginRight: 6 }}
+                      />
+                      <Text
+                        style={{
+                          color: '#FFFFFF',
+                          fontSize: 14,
+                          fontWeight: '800',
+                        }}
+                      >
+                        Open Device Power Settings
+                      </Text>
+                    </View>
                   </TouchableOpacity>
 
                   <TouchableOpacity

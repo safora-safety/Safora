@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
+import { Feather } from '../common/Icon';
 
 interface MicrophoneConsentModalProps {
   visible: boolean;
@@ -44,7 +45,7 @@ export const MicrophoneConsentModal: React.FC<MicrophoneConsentModalProps> = ({
                 },
               ]}
             >
-              <Text style={styles.iconEmoji}>🎙️</Text>
+              <Feather name="mic" size={28} color="#6366F1" />
             </View>
             <View style={styles.badge}>
               <Text style={styles.badgeText}>EMERGENCY AUDIO CONSENT</Text>
@@ -64,7 +65,9 @@ export const MicrophoneConsentModal: React.FC<MicrophoneConsentModalProps> = ({
           {/* Key Privacy Highlights */}
           <View style={styles.features}>
             <View style={styles.featureRow}>
-              <Text style={styles.featureBullet}>🚨</Text>
+              <View style={styles.featureBulletWrap}>
+                <Feather name="alert-triangle" size={16} color="#EF4444" />
+              </View>
               <View style={styles.featureTextCol}>
                 <Text
                   style={[styles.featureTitle, { color: colors.textPrimary }]}
@@ -81,7 +84,9 @@ export const MicrophoneConsentModal: React.FC<MicrophoneConsentModalProps> = ({
             </View>
 
             <View style={styles.featureRow}>
-              <Text style={styles.featureBullet}>🔐</Text>
+              <View style={styles.featureBulletWrap}>
+                <Feather name="lock" size={16} color="#6366F1" />
+              </View>
               <View style={styles.featureTextCol}>
                 <Text
                   style={[styles.featureTitle, { color: colors.textPrimary }]}
@@ -98,7 +103,9 @@ export const MicrophoneConsentModal: React.FC<MicrophoneConsentModalProps> = ({
             </View>
 
             <View style={styles.featureRow}>
-              <Text style={styles.featureBullet}>⚙️</Text>
+              <View style={styles.featureBulletWrap}>
+                <Feather name="settings" size={16} color="#94A3B8" />
+              </View>
               <View style={styles.featureTextCol}>
                 <Text
                   style={[styles.featureTitle, { color: colors.textPrimary }]}
@@ -214,9 +221,10 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 12,
   },
-  featureBullet: {
-    fontSize: 16,
+  featureBulletWrap: {
     marginTop: 2,
+    width: 20,
+    alignItems: 'center',
   },
   featureTextCol: {
     flex: 1,

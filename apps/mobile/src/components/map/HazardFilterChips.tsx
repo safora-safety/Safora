@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
 import { typography } from '../../theme/typography';
+import { Icon, IconFamily } from '../common/Icon';
 
 export type FilterCategory =
   'all' | 'lighting' | 'crowd' | 'police' | 'hazard' | 'high_risk';
@@ -15,16 +16,49 @@ export type FilterCategory =
 export interface FilterChipOption {
   key: FilterCategory;
   label: string;
-  icon: string;
+  iconName: string;
+  iconFamily: IconFamily;
+  regular?: boolean;
 }
 
 const FILTER_OPTIONS: FilterChipOption[] = [
-  { key: 'all', label: 'All Hazards', icon: '✨' },
-  { key: 'lighting', label: 'Well-Lit', icon: '💡' },
-  { key: 'crowd', label: 'Crowded Areas', icon: '👥' },
-  { key: 'police', label: 'Police & Desks', icon: '🛡️' },
-  { key: 'hazard', label: 'Reported', icon: '⚠️' },
-  { key: 'high_risk', label: 'High Risk (3+)', icon: '⚡' },
+  {
+    key: 'all',
+    label: 'All Hazards',
+    iconName: 'layers',
+    iconFamily: 'feather',
+  },
+  {
+    key: 'lighting',
+    label: 'Well-Lit',
+    iconName: 'lightbulb',
+    iconFamily: 'fa',
+    regular: true,
+  },
+  {
+    key: 'crowd',
+    label: 'Crowded Areas',
+    iconName: 'users',
+    iconFamily: 'feather',
+  },
+  {
+    key: 'police',
+    label: 'Police & Desks',
+    iconName: 'shield',
+    iconFamily: 'feather',
+  },
+  {
+    key: 'hazard',
+    label: 'Reported',
+    iconName: 'alert-triangle',
+    iconFamily: 'feather',
+  },
+  {
+    key: 'high_risk',
+    label: 'High Risk (3+)',
+    iconName: 'zap',
+    iconFamily: 'feather',
+  },
 ];
 
 interface HazardFilterChipsProps {
@@ -75,7 +109,14 @@ export const HazardFilterChips: React.FC<HazardFilterChipsProps> = ({
               accessibilityState={{ selected: isSelected }}
               accessibilityLabel={`${item.label} filter chip`}
             >
-              <Text style={styles.chipIcon}>{item.icon}</Text>
+              <Icon
+                name={item.iconName}
+                family={item.iconFamily}
+                regular={item.regular}
+                size={13}
+                color={isSelected ? '#FFFFFF' : colors.textPrimary}
+                style={{ marginRight: 5 }}
+              />
               <Text
                 style={[
                   styles.chipLabel,

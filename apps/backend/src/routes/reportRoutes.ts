@@ -24,7 +24,7 @@ import { AppError } from "../errors/AppError";
 
 const router = Router();
 
-// Public / Authenticated read routes (SEC-2: Identity stripped unless staff)
+// Public / Authenticated read routes (Identity stripped unless staff)
 router.get("/", optionalAuth as any, getReports);
 router.get("/clusters", getDbscanClusters);
 router.get(

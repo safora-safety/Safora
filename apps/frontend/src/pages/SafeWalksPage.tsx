@@ -655,9 +655,10 @@ export const SafeWalksPage: React.FC = () => {
                 {selectedJourney.userPhone && (
                   <a
                     href={`tel:${selectedJourney.userPhone}`}
-                    className="inline-block mt-1 text-[11px] text-emerald-400 hover:underline"
+                    className="inline-flex items-center gap-1 mt-1 text-[11px] text-emerald-400 hover:underline"
                   >
-                    📞 Click to dial
+                    <Phone className="w-3 h-3 text-emerald-400" />
+                    <span>Click to dial</span>
                   </a>
                 )}
               </div>

@@ -71,7 +71,7 @@ let currentBufferSource: AudioBufferSourceNode | null = null;
 let currentGainNode: GainNode | null = null;
 let currentHtml5Audio: HTMLAudioElement | null = null;
 
-// Phase 1: Admin Jitter Buffer & Out-of-Order Sequencer Engine
+// Admin Jitter Buffer & Out-of-Order Sequencer Engine
 interface AlertSequenceState {
   lastPlayedSeq: number;
   expectedSeq: number;
@@ -209,7 +209,7 @@ if (typeof window !== 'undefined') {
   window.addEventListener('touchstart', handleUserGesture, { passive: true });
 }
 
-// Phase 2: Web Audio Voice Clarity & Noise Suppression DSP Chain
+// Web Audio Voice Clarity & Noise Suppression DSP Chain
 let isVoiceClarityGlobalEnabled = typeof window !== 'undefined'
   ? localStorage.getItem('safora_voice_clarity') !== 'false'
   : true;

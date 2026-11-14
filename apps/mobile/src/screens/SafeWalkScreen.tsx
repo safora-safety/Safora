@@ -58,7 +58,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { joinJourneyRoom } from '../services/socketService';
 import { useAuthStore } from '../store/authStore';
 import { useJourneyStore } from '../store/journeyStore';
+import { Feather, FontAwesome5 } from '../components/common/Icon';
 import { navigationRef } from '../navigation/RootNavigator';
+import { formatDistance, formatDuration as formatWalkDuration } from '../utils';
 import {
   BatteryOptimizationService,
   DeviceInfo,
@@ -193,6 +195,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
   const [isBatteryUnrestricted, setIsBatteryUnrestricted] = useState(true);
   const [dismissedBatteryBanner, setDismissedBatteryBanner] = useState(false);
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
+  const deviationSnoozedUntilRef = useRef<number>(0);
 
   useEffect(() => {
     BatteryOptimizationService.isIgnoringBatteryOptimizations().then(
@@ -272,7 +275,12 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
           longitude: updatedCoords.longitude,
         })
           .then(res => {
-            if (res && res.isDeviated && !isDeviated) {
+            if (
+              res &&
+              res.isDeviated &&
+              !isDeviated &&
+              Date.now() > deviationSnoozedUntilRef.current
+            ) {
               triggerDeviationPrompt(
                 'Corridor Deviation Detected',
                 'You have moved away from the planned safe pedestrian route.',
@@ -403,8 +411,8 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
       })
         .then(res => {
           Alert.alert(
-            '🚨 Auto-Escalation: Emergency SOS Dispatched',
-            `No response received within 60 seconds of route deviation. Emergency alerts transmitted to ${res.contactsNotified} emergency contacts with live GPS coordinates (${userPos.latitude.toFixed(4)}, ${userPos.longitude.toFixed(4)}).\n\n🎙️ 30s ambient audio evidence is recording.`,
+            'Auto-Escalation: Emergency SOS Dispatched',
+            `No response received within 60 seconds of route deviation. Emergency alerts transmitted to ${res.contactsNotified} emergency contacts with live GPS coordinates (${userPos.latitude.toFixed(4)}, ${userPos.longitude.toFixed(4)}).\n\n30s ambient audio evidence is recording.`,
           );
 
           if (res?.alert?.id) {
@@ -413,21 +421,21 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
         })
         .catch(() => {
           Alert.alert(
-            '🚨 Emergency Dispatch Offline',
+            'Emergency Dispatch Offline',
             `60s deviation window expired. Network unreachable.\n\nCoordinates: ${userPos.latitude.toFixed(4)}, ${userPos.longitude.toFixed(4)}\n\nLaunch emergency dialer or carrier SMS now?`,
             [
               { text: 'Cancel', style: 'cancel' },
               {
-                text: '📞 Call 112',
+                text: 'Call 112',
                 style: 'destructive',
                 onPress: () => Linking.openURL('tel:112'),
               },
               {
-                text: '📱 Send SMS',
+                text: 'Send SMS',
                 onPress: () => {
                   const mapsLink = `https://maps.google.com/?q=${userPos.latitude.toFixed(5)},${userPos.longitude.toFixed(5)}`;
                   const body = encodeURIComponent(
-                    `🚨 EMERGENCY SOS! I need immediate help. My live GPS coordinates: ${mapsLink} - Sent via SAFORA Safe Walk`,
+                    `EMERGENCY SOS! I need immediate help. My live GPS coordinates: ${mapsLink} - Sent via SAFORA Safe Walk`,
                   );
                   Linking.openURL(`sms:?body=${body}`).catch(() => {});
                 },
@@ -472,7 +480,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
       return;
     }
 
-    // Android Battery Optimization Whitelist Check (V1 Upgrade)
+    // Android Battery Optimization Check
     if (Platform.OS === 'android') {
       try {
         const batPrompted = await AsyncStorage.getItem(
@@ -480,7 +488,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
         );
         if (batPrompted !== 'true') {
           Alert.alert(
-            '🔋 Ensure Reliable Background GPS',
+            'Ensure Reliable Background GPS',
             'To prevent phone battery savers (Samsung, Xiaomi, OnePlus) from interrupting Safe Walk GPS when your screen is locked, please allow SAFORA in unrestricted battery settings.',
             [
               {
@@ -547,9 +555,25 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
     setIsStartingWalk(true);
     const etaMins = Math.ceil(routeDurationSeconds / 60) || 10;
     try {
+      // Refresh current coordinates before journey creation so origin is accurate
+      let startCoords = userPos;
+      try {
+        const fresh = await getCurrentCoordinates();
+        if (fresh && fresh.isLive) {
+          startCoords = fresh;
+          setUserPos(fresh);
+        }
+      } catch {}
+
+      // 60-second initial departure grace period for satellite lock & building exit
+      deviationSnoozedUntilRef.current = Date.now() + 60 * 1000;
+
       const plannedRoute = downsampleRouteCoords(routeCoords);
       const journey = await JourneyService.startJourney({
-        origin: { latitude: userPos.latitude, longitude: userPos.longitude },
+        origin: {
+          latitude: startCoords.latitude,
+          longitude: startCoords.longitude,
+        },
         destination: {
           latitude: destPos.latitude,
           longitude: destPos.longitude,
@@ -561,7 +585,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
 
       joinJourneyRoom(journey.id);
 
-      // Start native foreground service (TRG-2-lite / NAV-1 with Google Maps notification)
+      // Start native foreground service with notification
       if (Platform.OS === 'android' && NativeModules.SafeWalkService) {
         if (NativeModules.SafeWalkService.startWithDetails) {
           NativeModules.SafeWalkService.startWithDetails(
@@ -593,7 +617,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
       setShowPreWalkModal(false);
 
       Alert.alert(
-        '🚶‍♀️ Safe Walk Activated',
+        'Safe Walk Activated',
         `Virtual guardian active along road route to ${destPos.name}.\nEstimated walk: ${formatDistance(routeDistanceMeters)} (${etaMins} mins).`,
       );
     } catch {
@@ -613,6 +637,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
     if (Platform.OS === 'android' && NativeModules.SafeWalkService) {
       NativeModules.SafeWalkService.stop().catch(() => {});
     }
+    deviationSnoozedUntilRef.current = 0;
     stopSession();
     setShowArrivalModal(true);
   };
@@ -634,6 +659,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
             if (Platform.OS === 'android' && NativeModules.SafeWalkService) {
               NativeModules.SafeWalkService.stop().catch(() => {});
             }
+            deviationSnoozedUntilRef.current = 0;
             stopSession();
             setShowPreWalkModal(false);
           },
@@ -645,7 +671,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
   const shareArrivalWhatsApp = () => {
     const destination = destPos?.name || 'my destination';
     const text = encodeURIComponent(
-      `✅ Hey! I have reached ${destination} safely. My SAFORA Safe Walk companion escort session is completed.`,
+      `Hey! I have reached ${destination} safely. My SAFORA Safe Walk companion escort session is completed.`,
     );
     Linking.openURL(`whatsapp://send?text=${text}`).catch(() => {
       Linking.openURL(`sms:?body=${text}`).catch(() => {
@@ -659,6 +685,8 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
   };
 
   const handleDisarmDeviation = () => {
+    // Snooze corridor deviation alerts for 3 minutes upon confirming safe
+    deviationSnoozedUntilRef.current = Date.now() + 3 * 60 * 1000;
     setDeviation(false, null);
     SirenService.stopSiren().catch(() => {});
     if (journeyId) {
@@ -666,7 +694,18 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
     }
     Alert.alert(
       'Route Safe',
-      'Corridor deviation alert disarmed. Safe Walk resumed.',
+      'Corridor deviation alert disarmed. Snoozed for 3 minutes.',
+      [
+        { text: 'OK' },
+        {
+          text: 'Reroute From Here',
+          onPress: () => {
+            if (destPos) {
+              updateStreetRoute();
+            }
+          },
+        },
+      ],
     );
   };
 
@@ -692,8 +731,8 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
         journeyId: journeyId,
       });
       Alert.alert(
-        '🚨 Emergency SOS Dispatched',
-        `Alert transmitted to ${res.contactsNotified} emergency contacts with live GPS coordinates (${userPos.latitude.toFixed(4)}, ${userPos.longitude.toFixed(4)}).\n\n🎙️ 30s ambient audio evidence is recording.`,
+        'Emergency SOS Dispatched',
+        `Alert transmitted to ${res.contactsNotified} emergency contacts with live GPS coordinates (${userPos.latitude.toFixed(4)}, ${userPos.longitude.toFixed(4)}).\n\n30s ambient audio evidence is recording.`,
       );
 
       if (res?.alert?.id) {
@@ -701,21 +740,21 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
       }
     } catch {
       Alert.alert(
-        '🚨 Emergency Dispatch Offline',
+        'Emergency Dispatch Offline',
         `Network unavailable to transmit online alert.\n\nCoordinates: ${userPos.latitude.toFixed(4)}, ${userPos.longitude.toFixed(4)}\n\nLaunch emergency dialer or carrier SMS now?`,
         [
           { text: 'Cancel', style: 'cancel' },
           {
-            text: '📞 Call 112',
+            text: 'Call 112',
             style: 'destructive',
             onPress: () => Linking.openURL('tel:112'),
           },
           {
-            text: '📱 Send SMS',
+            text: 'Send SMS',
             onPress: () => {
               const mapsLink = `https://maps.google.com/?q=${userPos.latitude.toFixed(5)},${userPos.longitude.toFixed(5)}`;
               const body = encodeURIComponent(
-                `🚨 EMERGENCY SOS! I need immediate help. My live GPS coordinates: ${mapsLink} - Sent via SAFORA Safe Walk`,
+                `EMERGENCY SOS! I need immediate help. My live GPS coordinates: ${mapsLink} - Sent via SAFORA Safe Walk`,
               );
               Linking.openURL(`sms:?body=${body}`).catch(() => {});
             },
@@ -733,7 +772,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
 
   const handleManualSosTrigger = () => {
     Alert.alert(
-      '🚨 Dispatch Emergency SOS?',
+      'Dispatch Emergency SOS?',
       `Broadcast immediate emergency distress signal with live GPS location (${userPos.latitude.toFixed(4)}, ${userPos.longitude.toFixed(4)}) and stream live ambient audio to all guardians and emergency CAD dashboard?`,
       [
         { text: 'Cancel', style: 'cancel' },
@@ -762,8 +801,8 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
               });
 
               Alert.alert(
-                '🚨 Emergency SOS Dispatched',
-                `Distress beacon dispatched to ${res.contactsNotified} emergency contacts with live GPS coordinates (${userPos.latitude.toFixed(4)}, ${userPos.longitude.toFixed(4)}).\n\nJourney ID #${journeyId || 'Active'}\n🎙️ 30s live ambient audio is streaming.`,
+                'Emergency SOS Dispatched',
+                `Distress beacon dispatched to ${res.contactsNotified} emergency contacts with live GPS coordinates (${userPos.latitude.toFixed(4)}, ${userPos.longitude.toFixed(4)}).\n\nJourney ID #${journeyId || 'Active'}\n30s live ambient audio is streaming.`,
               );
 
               if (res?.alert?.id) {
@@ -771,21 +810,21 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
               }
             } catch {
               Alert.alert(
-                '🚨 Emergency Dispatch Offline',
+                'Emergency Dispatch Offline',
                 `Network unavailable to transmit online alert.\n\nCoordinates: ${userPos.latitude.toFixed(4)}, ${userPos.longitude.toFixed(4)}\n\nLaunch emergency dialer or carrier SMS now?`,
                 [
                   { text: 'Cancel', style: 'cancel' },
                   {
-                    text: '📞 Call 112',
+                    text: 'Call 112',
                     style: 'destructive',
                     onPress: () => Linking.openURL('tel:112'),
                   },
                   {
-                    text: '📱 Send SMS',
+                    text: 'Send SMS',
                     onPress: () => {
                       const mapsLink = `https://maps.google.com/?q=${userPos.latitude.toFixed(5)},${userPos.longitude.toFixed(5)}`;
                       const body = encodeURIComponent(
-                        `🚨 EMERGENCY SOS! I need immediate help. My live GPS coordinates: ${mapsLink} - Sent via SAFORA Safe Walk (Journey #${journeyId || 'Active'})`,
+                        `EMERGENCY SOS! I need immediate help. My live GPS coordinates: ${mapsLink} - Sent via SAFORA Safe Walk (Journey #${journeyId || 'Active'})`,
                       );
                       Linking.openURL(`sms:?body=${body}`).catch(() => {});
                     },
@@ -829,30 +868,13 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  const formatDistance = (meters: number) => {
-    if (meters >= 1000) {
-      return `${(meters / 1000).toFixed(1)} km`;
-    }
-    return `${meters} m`;
-  };
-
-  const formatWalkDuration = (seconds: number) => {
-    const mins = Math.ceil(seconds / 60);
-    if (mins >= 60) {
-      const hrs = Math.floor(mins / 60);
-      const rem = mins % 60;
-      return rem > 0 ? `${hrs}h ${rem}m walk` : `${hrs}h walk`;
-    }
-    return `${mins} min walk`;
-  };
-
   const mapMarkers: MapMarkerItem[] = [
     {
       id: 'walker',
       latitude: userPos.latitude,
       longitude: userPos.longitude,
       title: 'Your Location',
-      icon: '🚶‍♀️',
+      icon: 'walking',
       color: colors.primary,
     },
     ...(destPos
@@ -862,7 +884,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
             latitude: destPos.latitude,
             longitude: destPos.longitude,
             title: destPos.name,
-            icon: '📍',
+            icon: 'pin',
             color: '#EF4444',
           },
         ]
@@ -909,7 +931,12 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
             },
           ]}
         >
-          <Text style={styles.batteryBannerIcon}>⚠️</Text>
+          <Feather
+            name="alert-triangle"
+            size={16}
+            color={isDark ? '#FBBF24' : '#92400E'}
+            style={{ marginRight: 6 }}
+          />
           <View style={styles.batteryBannerTextContainer}>
             <Text
               style={[
@@ -945,14 +972,11 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
             activeOpacity={0.8}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Text
-              style={[
-                styles.batteryDismissText,
-                { color: isDark ? '#FDE68A' : '#92400E' },
-              ]}
-            >
-              ✕
-            </Text>
+            <Feather
+              name="x"
+              size={14}
+              color={isDark ? '#FDE68A' : '#92400E'}
+            />
           </TouchableOpacity>
         </View>
       )}
@@ -1007,7 +1031,12 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
                 },
               ]}
             >
-              <Text style={styles.searchIcon}>🔍</Text>
+              <Feather
+                name="search"
+                size={16}
+                color={colors.textSecondary}
+                style={{ marginRight: 8 }}
+              />
               <TextInput
                 style={[styles.searchInput, { color: colors.textPrimary }]}
                 placeholder={
@@ -1036,9 +1065,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
                   }}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                  <Text style={{ color: colors.textMuted, fontSize: 16 }}>
-                    ✕
-                  </Text>
+                  <Feather name="x" size={16} color={colors.textMuted} />
                 </TouchableOpacity>
               )}
             </View>
@@ -1069,7 +1096,12 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
                       ]}
                       onPress={() => handleSelectPlace(item)}
                     >
-                      <Text style={styles.resultIcon}>📍</Text>
+                      <Feather
+                        name="map-pin"
+                        size={15}
+                        color="#EF4444"
+                        style={{ marginRight: 10, marginTop: 2 }}
+                      />
                       <View style={{ flex: 1 }}>
                         <Text
                           style={[
@@ -1112,9 +1144,12 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
               <ActivityIndicator size="small" color={colors.primary} />
             ) : (
               <>
-                <Text style={styles.routeBadgeIcon}>
-                  {selectedStrategy === 'safest' ? '🛡️' : '⚡'}
-                </Text>
+                <Feather
+                  name={selectedStrategy === 'safest' ? 'shield' : 'zap'}
+                  size={14}
+                  color={colors.primary}
+                  style={{ marginRight: 4 }}
+                />
                 <Text
                   style={[styles.routeBadgeText, { color: colors.textPrimary }]}
                 >
@@ -1125,9 +1160,13 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
                 <TouchableOpacity
                   onPress={handleClearRoute}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  style={styles.routeBadgeClearBtn}
+                  style={[
+                    styles.routeBadgeClearBtn,
+                    { flexDirection: 'row', alignItems: 'center', gap: 3 },
+                  ]}
                 >
-                  <Text style={styles.routeBadgeClearText}>✕ Clear</Text>
+                  <Feather name="x" size={11} color={colors.textSecondary} />
+                  <Text style={styles.routeBadgeClearText}>Clear</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -1147,7 +1186,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
           onPress={recenterMap}
           activeOpacity={0.85}
         >
-          <Text style={styles.recenterIcon}>🎯</Text>
+          <Feather name="crosshair" size={18} color={colors.primary} />
         </TouchableOpacity>
       </View>
 
@@ -1192,7 +1231,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
                   },
                 ]}
               >
-                <Text style={styles.idlePromptIcon}>📍</Text>
+                <Feather name="map-pin" size={22} color={colors.primary} />
               </View>
               <View style={styles.idlePromptTextCol}>
                 <Text
@@ -1235,7 +1274,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
               activeOpacity={0.8}
               accessibilityLabel="Trigger Emergency SOS"
             >
-              <Text style={styles.activeSosTriggerBtnIcon}>🚨</Text>
+              <Feather name="bell" size={20} color="#FFFFFF" />
               <Text style={styles.activeSosTriggerBtnText}>SOS</Text>
             </TouchableOpacity>
 
@@ -1243,25 +1282,40 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
               <HoldToConfirmButton
                 onConfirmed={handleCompleteWalk}
                 label="Hold to Complete"
-                confirmedLabel="Reached Safely! ✅"
+                confirmedLabel="Reached Safely!"
               />
             </View>
 
             <TouchableOpacity
-              style={styles.cancelWalkBtnSmall}
+              style={[
+                styles.cancelWalkBtnSmall,
+                { flexDirection: 'row', alignItems: 'center', gap: 4 },
+              ]}
               onPress={handleCancelWalk}
               activeOpacity={0.85}
               accessibilityLabel="Cancel safe walk escort"
             >
-              <Text style={styles.cancelWalkBtnSmallText}>✕ Cancel</Text>
+              <Feather name="x" size={13} color="#EF4444" />
+              <Text style={styles.cancelWalkBtnSmallText}>Cancel</Text>
             </TouchableOpacity>
           </View>
 
-          <View style={styles.activeNoticeRow}>
+          <View
+            style={[
+              styles.activeNoticeRow,
+              {
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+              },
+            ]}
+          >
+            <Feather name="shield" size={12} color={colors.textMuted} />
             <Text
               style={[styles.activeNoticeText, { color: colors.textMuted }]}
             >
-              🛡️ 150m Safety Buffer active. Live guardian GPS tracking is on.
+              150m Safety Buffer active. Live guardian GPS tracking is on.
             </Text>
           </View>
         </View>
@@ -1288,11 +1342,21 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
             <View style={styles.preWalkDragHandle} />
 
             <View style={styles.preWalkHeader}>
-              <Text
-                style={[styles.preWalkTitle, { color: colors.textPrimary }]}
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 6,
+                  marginBottom: 4,
+                }}
               >
-                🛡️ Confirm Safe Walk Escort
-              </Text>
+                <Feather name="shield" size={18} color="#10B981" />
+                <Text
+                  style={[styles.preWalkTitle, { color: colors.textPrimary }]}
+                >
+                  Confirm Safe Walk Escort
+                </Text>
+              </View>
               <Text
                 style={[
                   styles.preWalkSubtitle,
@@ -1384,7 +1448,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
                         ]}
                       >
                         {isSelected && (
-                          <Text style={styles.checkmarkIcon}>✓</Text>
+                          <Feather name="check" size={13} color="#FFFFFF" />
                         )}
                       </View>
                     </TouchableOpacity>
@@ -1426,12 +1490,22 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
                 {isStartingWalk ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
-                  <Text style={styles.preWalkStartBtnText}>
-                    🚀 Start Walk{' '}
-                    {selectedGuardianIds.length > 0
-                      ? `(${selectedGuardianIds.length} Alerted)`
-                      : ''}
-                  </Text>
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                    }}
+                  >
+                    <Feather name="navigation" size={14} color="#FFFFFF" />
+                    <Text style={styles.preWalkStartBtnText}>
+                      Start Walk{' '}
+                      {selectedGuardianIds.length > 0
+                        ? `(${selectedGuardianIds.length} Alerted)`
+                        : ''}
+                    </Text>
+                  </View>
                 )}
               </TouchableOpacity>
             </View>
@@ -1439,7 +1513,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
         </View>
       </Modal>
 
-      {/* "I Reached Safely" Broadcast & Celebration Modal (Phase 5) */}
+      {/* "I Reached Safely" Broadcast & Celebration Modal */}
       <ArrivalCelebrationModal
         visible={showArrivalModal}
         destinationName={destPos?.name || 'Destination'}
@@ -1448,7 +1522,7 @@ export const SafeWalkScreen: React.FC<SafeWalkScreenProps> = ({
         onClose={() => setShowArrivalModal(false)}
       />
 
-      {/* Confirm-Before-Escalate 60s Route Corridor Deviation Modal (Phase 4) */}
+      {/* Confirm-Before-Escalate 60s Route Corridor Deviation Modal */}
       <DeviationCountdownModal
         visible={Boolean(
           isDeviated && deviationCountdown !== null && deviationCountdown > 0,

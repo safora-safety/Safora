@@ -16,6 +16,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/authStore';
 import { colors } from '../theme/colors';
+import { Feather } from '../components/common/Icon';
 
 interface TermsScreenProps {
   navigation: any;
@@ -136,7 +137,12 @@ export const TermsScreen: React.FC<TermsScreenProps> = ({
       >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.shieldEmoji}>🛡️</Text>
+          <Feather
+            name="shield"
+            size={28}
+            color="#10B981"
+            style={{ marginBottom: 8 }}
+          />
           <Text style={styles.title}>Safety Terms & Privacy</Text>
           <Text style={styles.subtitle}>
             Please review how SAFORA protects you and handles data.
@@ -145,7 +151,21 @@ export const TermsScreen: React.FC<TermsScreenProps> = ({
 
         {/* Plain-Language Terms Content */}
         <View style={styles.card}>
-          <Text style={styles.sectionHeader}>📍 What We Collect</Text>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              marginBottom: 6,
+            }}
+          >
+            <Feather
+              name="map-pin"
+              size={14}
+              color="#38BDF8"
+              style={{ marginRight: 6 }}
+            />
+            <Text style={styles.sectionHeader}>What We Collect</Text>
+          </View>
           <Text style={styles.bodyText}>
             • <Text style={styles.bold}>Live Location:</Text> Collected only
             during active Safe Walk sessions or when you press SOS, used to
@@ -164,7 +184,21 @@ export const TermsScreen: React.FC<TermsScreenProps> = ({
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.sectionHeader}>🎯 Why We Collect It</Text>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              marginBottom: 6,
+            }}
+          >
+            <Feather
+              name="target"
+              size={14}
+              color="#10B981"
+              style={{ marginRight: 6 }}
+            />
+            <Text style={styles.sectionHeader}>Why We Collect It</Text>
+          </View>
           <Text style={styles.bodyText}>
             To calculate route deviation warnings, dispatch alerts to your
             designated trusted contacts, and power the real-time community
@@ -173,9 +207,23 @@ export const TermsScreen: React.FC<TermsScreenProps> = ({
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.sectionHeader}>
-            🚨 Emergency SOS & Guardian Protocol
-          </Text>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              marginBottom: 6,
+            }}
+          >
+            <Feather
+              name="alert-octagon"
+              size={14}
+              color="#EF4444"
+              style={{ marginRight: 6 }}
+            />
+            <Text style={styles.sectionHeader}>
+              Emergency SOS & Guardian Protocol
+            </Text>
+          </View>
           <Text style={styles.bodyText}>
             • <Text style={styles.bold}>Designated Guardians:</Text> When you
             trigger SOS, emergency SMS notifications with your live GPS location
@@ -191,9 +239,21 @@ export const TermsScreen: React.FC<TermsScreenProps> = ({
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.sectionHeader}>
-            🎓 Project & Emergency Notice
-          </Text>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              marginBottom: 6,
+            }}
+          >
+            <Feather
+              name="info"
+              size={14}
+              color="#F59E0B"
+              style={{ marginRight: 6 }}
+            />
+            <Text style={styles.sectionHeader}>Project & Emergency Notice</Text>
+          </View>
           <Text style={styles.bodyText}>
             SAFORA is an academic / beta college project. It provides companion
             and escort assistance but is{' '}
@@ -209,9 +269,21 @@ export const TermsScreen: React.FC<TermsScreenProps> = ({
 
         {/* Age & Guardian Section (AGE-lite) */}
         <View style={styles.card}>
-          <Text style={styles.sectionHeader}>
-            👤 Your Age & Guardian Notice
-          </Text>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              marginBottom: 6,
+            }}
+          >
+            <Feather
+              name="user"
+              size={14}
+              color="#6366F1"
+              style={{ marginRight: 6 }}
+            />
+            <Text style={styles.sectionHeader}>Your Age & Guardian Notice</Text>
+          </View>
           <Text style={styles.label}>Please confirm your age:</Text>
           <TextInput
             style={styles.input}
@@ -224,10 +296,21 @@ export const TermsScreen: React.FC<TermsScreenProps> = ({
           />
 
           {isUnder18 && (
-            <View style={styles.under18Banner}>
-              <Text style={styles.under18Text}>
-                ⚠️ If you're under 18, please make sure a parent or guardian
-                knows you're using SAFORA.
+            <View
+              style={[
+                styles.under18Banner,
+                { flexDirection: 'row', alignItems: 'center' },
+              ]}
+            >
+              <Feather
+                name="alert-triangle"
+                size={14}
+                color="#F59E0B"
+                style={{ marginRight: 6 }}
+              />
+              <Text style={[styles.under18Text, { flex: 1 }]}>
+                If you're under 18, please make sure a parent or guardian knows
+                you're using SAFORA.
               </Text>
             </View>
           )}
@@ -241,7 +324,9 @@ export const TermsScreen: React.FC<TermsScreenProps> = ({
             <View
               style={[styles.checkbox, guardianAck && styles.checkboxActive]}
             >
-              {guardianAck && <Text style={styles.checkmark}>✓</Text>}
+              {guardianAck && (
+                <Feather name="check" size={13} color="#FFFFFF" />
+              )}
             </View>
             <Text style={styles.checkboxLabel}>
               I confirm my age and that a guardian is informed of my use of
@@ -258,7 +343,9 @@ export const TermsScreen: React.FC<TermsScreenProps> = ({
             <View
               style={[styles.checkbox, termsAccepted && styles.checkboxActive]}
             >
-              {termsAccepted && <Text style={styles.checkmark}>✓</Text>}
+              {termsAccepted && (
+                <Feather name="check" size={13} color="#FFFFFF" />
+              )}
             </View>
             <Text style={styles.checkboxLabel}>
               I have read and agree to the Safety Terms & Privacy Policy.
@@ -267,8 +354,19 @@ export const TermsScreen: React.FC<TermsScreenProps> = ({
         </View>
 
         {errorMsg && (
-          <View style={styles.errorBox}>
-            <Text style={styles.errorText}>⚠️ {errorMsg}</Text>
+          <View
+            style={[
+              styles.errorBox,
+              { flexDirection: 'row', alignItems: 'center' },
+            ]}
+          >
+            <Feather
+              name="alert-triangle"
+              size={14}
+              color="#EF4444"
+              style={{ marginRight: 6 }}
+            />
+            <Text style={styles.errorText}>{errorMsg}</Text>
           </View>
         )}
 

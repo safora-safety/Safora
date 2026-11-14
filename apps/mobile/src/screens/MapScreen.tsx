@@ -47,6 +47,8 @@ import {
   MultiModalTravelTimes,
   RouteCoord,
 } from '../services/routingService';
+import { Feather, FontAwesome5 } from '../components/common/Icon';
+import { formatDistance, formatDuration as formatDurationText } from '../utils';
 
 export interface MapScreenProps {
   onNavigateTab?: (
@@ -195,7 +197,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
       const data = await ReportService.getAll(500);
       setHazards(data);
 
-      // Fetch DBSCAN density clusters for heatmap (SYN-2)
+      // Fetch DBSCAN density clusters for heatmap
       ReportService.getClusters(0.003, 2)
         .then(setClusters)
         .catch(() => {});
@@ -233,7 +235,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
       setPendingSyncCount(res.remaining);
       if (res.synced > 0) {
         Alert.alert(
-          '✅ Offline Reports Synced',
+          'Offline Reports Synced',
           `Successfully uploaded ${res.synced} offline hazard report${res.synced > 1 ? 's' : ''} to community safety map.`,
         );
         loadMapData();
@@ -333,23 +335,6 @@ export const MapScreen: React.FC<MapScreenProps> = ({
     }
   };
 
-  const formatDistance = (meters: number) => {
-    if (meters >= 1000) {
-      return `${(meters / 1000).toFixed(1)} km`;
-    }
-    return `${meters} m`;
-  };
-
-  const formatDurationText = (seconds: number) => {
-    const mins = Math.ceil(seconds / 60);
-    if (mins >= 60) {
-      const hrs = Math.floor(mins / 60);
-      const rem = mins % 60;
-      return rem > 0 ? `${hrs}h ${rem}m` : `${hrs}h`;
-    }
-    return `${mins} min`;
-  };
-
   const handlePinHazardPress = () => {
     if (isGuest) {
       setShowGuestGuardModal(true);
@@ -420,17 +405,17 @@ export const MapScreen: React.FC<MapScreenProps> = ({
   const getCategoryIcon = (category: string) => {
     switch (category) {
       case 'lighting':
-        return '💡';
+        return 'sun';
       case 'road_hazard':
-        return '🚧';
+        return 'alert-triangle';
       case 'waterlogging':
-        return '🌊';
+        return 'droplet';
       case 'isolated_area':
-        return '🌲';
+        return 'eye-off';
       case 'traffic':
-        return '🚗';
+        return 'navigation';
       default:
-        return '⚠️';
+        return 'alert-circle';
     }
   };
 
@@ -450,7 +435,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
             latitude: activeRoute.destinationCoord.latitude,
             longitude: activeRoute.destinationCoord.longitude,
             title: activeRoute.destinationName,
-            icon: '📍',
+            icon: 'pin',
             color: '#EF4444',
           },
         ]
@@ -538,7 +523,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
 
   const handleCall112 = () => {
     Alert.alert(
-      '🚨 Dial Emergency 112',
+      'Dial Emergency 112',
       'Connect directly to national police and emergency response services?',
       [
         { text: 'Cancel', style: 'cancel' },
@@ -595,7 +580,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
             onScorePress={() => {
               if (safetyScore !== null) {
                 Alert.alert(
-                  `🛡️ Area Safety Score: ${safetyScore}/100`,
+                  `Area Safety Score: ${safetyScore}/100`,
                   `Real-time rating for ${coords.areaName || 'current location'} based on active street lighting, police presence, and community reports.`,
                   [{ text: 'Got It' }],
                 );
@@ -636,7 +621,12 @@ export const MapScreen: React.FC<MapScreenProps> = ({
                     ]}
                     onPress={() => handleSelectSearchResult(item)}
                   >
-                    <Text style={styles.resultIcon}>📍</Text>
+                    <Feather
+                      name="map-pin"
+                      size={15}
+                      color="#EF4444"
+                      style={{ marginRight: 10, marginTop: 2 }}
+                    />
                     <View style={{ flex: 1 }}>
                       <Text
                         style={[
@@ -681,7 +671,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
                 flex: 1,
               }}
             >
-              <Text style={styles.offlineSyncIcon}>⚠️</Text>
+              <Feather name="alert-triangle" size={14} color="#F59E0B" />
               <Text style={styles.offlineSyncText} numberOfLines={1}>
                 {pendingSyncCount} hazard report
                 {pendingSyncCount > 1 ? 's' : ''} queued offline
@@ -702,7 +692,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
           </View>
         )}
 
-        {/* Heatmap Toggle Floating Button (SYN-2) */}
+        {/* Heatmap Toggle Floating Button */}
         <TouchableOpacity
           style={[
             styles.heatmapFab,
@@ -715,7 +705,11 @@ export const MapScreen: React.FC<MapScreenProps> = ({
           onPress={() => setShowHeatmap(prev => !prev)}
           activeOpacity={0.85}
         >
-          <Text style={styles.heatmapFabIcon}>🔥</Text>
+          <Feather
+            name="activity"
+            size={16}
+            color={showHeatmap ? '#FFFFFF' : '#EF4444'}
+          />
           <Text
             style={[
               styles.heatmapFabText,
@@ -739,7 +733,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
           onPress={recenterMap}
           activeOpacity={0.85}
         >
-          <Text style={styles.recenterIcon}>🎯</Text>
+          <Feather name="crosshair" size={18} color={colors.primary} />
         </TouchableOpacity>
 
         {/* Loading Pill */}
@@ -793,23 +787,26 @@ export const MapScreen: React.FC<MapScreenProps> = ({
                   SEVERITY {selectedHazard.severity}/5
                 </Text>
               </View>
-              <Text
-                style={[
-                  styles.confirmationsText,
-                  { color: colors.textSecondary },
-                ]}
+              <View
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
               >
-                👍 {selectedHazard.confirmationsCount || 0} verifications
-              </Text>
+                <Feather name="check" size={12} color={colors.textSecondary} />
+                <Text
+                  style={[
+                    styles.confirmationsText,
+                    { color: colors.textSecondary },
+                  ]}
+                >
+                  {selectedHazard.confirmationsCount || 0} verifications
+                </Text>
+              </View>
             </View>
 
             <TouchableOpacity
               onPress={() => setSelectedHazard(null)}
               style={styles.cardCloseBtn}
             >
-              <Text style={[styles.cardCloseText, { color: colors.textMuted }]}>
-                ✕
-              </Text>
+              <Feather name="x" size={18} color={colors.textMuted} />
             </TouchableOpacity>
           </View>
 
@@ -837,9 +834,15 @@ export const MapScreen: React.FC<MapScreenProps> = ({
                 style={styles.hazardPhoto}
                 resizeMode="cover"
               />
-              <View style={styles.hazardPhotoBadge}>
+              <View
+                style={[
+                  styles.hazardPhotoBadge,
+                  { flexDirection: 'row', alignItems: 'center', gap: 4 },
+                ]}
+              >
+                <Feather name="camera" size={11} color="#FFFFFF" />
                 <Text style={styles.hazardPhotoBadgeText}>
-                  📷 Cloudinary Evidence
+                  Cloudinary Evidence
                 </Text>
               </View>
             </View>
@@ -848,21 +851,50 @@ export const MapScreen: React.FC<MapScreenProps> = ({
           {/* Voting Action Row: Still Present vs Resolved + Show Route */}
           <View style={styles.cardActionRow}>
             <TouchableOpacity
-              style={[styles.confirmBtn, { backgroundColor: colors.primary }]}
+              style={[
+                styles.confirmBtn,
+                {
+                  backgroundColor: colors.primary,
+                  flexDirection: 'row',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  gap: 5,
+                },
+              ]}
               onPress={() => handleConfirmHazard(selectedHazard.id)}
             >
-              <Text style={styles.confirmBtnText}>⚠️ Still Present (+1)</Text>
+              <Feather name="alert-triangle" size={12} color="#FFFFFF" />
+              <Text style={styles.confirmBtnText}>Still Present (+1)</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.resolveBtn, { borderColor: '#10B981' }]}
+              style={[
+                styles.resolveBtn,
+                {
+                  borderColor: '#10B981',
+                  flexDirection: 'row',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  gap: 5,
+                },
+              ]}
               onPress={() => handleResolveHazard(selectedHazard.id)}
             >
-              <Text style={styles.resolveBtnText}>✅ Resolved</Text>
+              <Feather name="check-circle" size={12} color="#10B981" />
+              <Text style={styles.resolveBtnText}>Resolved</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.routeHazardBtn, { borderColor: colors.primary }]}
+              style={[
+                styles.routeHazardBtn,
+                {
+                  borderColor: colors.primary,
+                  flexDirection: 'row',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  gap: 5,
+                },
+              ]}
               onPress={() => {
                 plotRouteTo({
                   latitude: selectedHazard.latitude,
@@ -872,10 +904,11 @@ export const MapScreen: React.FC<MapScreenProps> = ({
                 setSelectedHazard(null);
               }}
             >
+              <Feather name="navigation" size={12} color={colors.primary} />
               <Text
                 style={[styles.routeHazardBtnText, { color: colors.primary }]}
               >
-                🧭 Route
+                Route
               </Text>
             </TouchableOpacity>
           </View>
@@ -895,12 +928,20 @@ export const MapScreen: React.FC<MapScreenProps> = ({
         >
           <View style={styles.routeHeader}>
             <View style={{ flex: 1 }}>
-              <Text
-                style={[styles.routeDestTitle, { color: colors.textPrimary }]}
-                numberOfLines={1}
+              <View
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
               >
-                📍 {activeRoute.destinationName}
-              </Text>
+                <Feather name="map-pin" size={15} color="#EF4444" />
+                <Text
+                  style={[
+                    styles.routeDestTitle,
+                    { color: colors.textPrimary, flex: 1 },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {activeRoute.destinationName}
+                </Text>
+              </View>
               <Text
                 style={[
                   styles.routeDistanceSub,
@@ -912,10 +953,14 @@ export const MapScreen: React.FC<MapScreenProps> = ({
               </Text>
             </View>
             <TouchableOpacity
-              style={styles.closeRouteBtn}
+              style={[
+                styles.closeRouteBtn,
+                { flexDirection: 'row', alignItems: 'center', gap: 4 },
+              ]}
               onPress={() => setActiveRoute(null)}
             >
-              <Text style={styles.closeRouteBtnText}>✕ Clear</Text>
+              <Feather name="x" size={12} color={colors.textSecondary} />
+              <Text style={styles.closeRouteBtnText}>Clear</Text>
             </TouchableOpacity>
           </View>
 
@@ -930,7 +975,11 @@ export const MapScreen: React.FC<MapScreenProps> = ({
               onPress={() => setTravelMode('car')}
               activeOpacity={0.8}
             >
-              <Text style={styles.modeTabEmoji}>🚗</Text>
+              <FontAwesome5
+                name="car"
+                size={18}
+                color={travelMode === 'car' ? '#3B82F6' : '#94A3B8'}
+              />
               <Text
                 style={[
                   styles.modeTabTitle,
@@ -958,7 +1007,11 @@ export const MapScreen: React.FC<MapScreenProps> = ({
               onPress={() => setTravelMode('bike')}
               activeOpacity={0.8}
             >
-              <Text style={styles.modeTabEmoji}>🛵</Text>
+              <FontAwesome5
+                name="motorcycle"
+                size={18}
+                color={travelMode === 'bike' ? '#10B981' : '#94A3B8'}
+              />
               <Text
                 style={[
                   styles.modeTabTitle,
@@ -986,7 +1039,11 @@ export const MapScreen: React.FC<MapScreenProps> = ({
               onPress={() => setTravelMode('walk')}
               activeOpacity={0.8}
             >
-              <Text style={styles.modeTabEmoji}>🚶</Text>
+              <FontAwesome5
+                name="walking"
+                size={18}
+                color={travelMode === 'walk' ? '#6366F1' : '#94A3B8'}
+              />
               <Text
                 style={[
                   styles.modeTabTitle,
@@ -1011,7 +1068,13 @@ export const MapScreen: React.FC<MapScreenProps> = ({
             <TouchableOpacity
               style={[
                 styles.startSafeWalkBtn,
-                { backgroundColor: colors.primary },
+                {
+                  backgroundColor: colors.primary,
+                  flexDirection: 'row',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  gap: 8,
+                },
               ]}
               onPress={() => {
                 onNavigateTab?.('SafeWalk', {
@@ -1024,8 +1087,9 @@ export const MapScreen: React.FC<MapScreenProps> = ({
               }}
               activeOpacity={0.85}
             >
+              <Feather name="shield" size={16} color="#FFFFFF" />
               <Text style={styles.startSafeWalkBtnText}>
-                🛡️ Start Safe Walk Escort
+                Start Safe Walk Escort
               </Text>
             </TouchableOpacity>
           ) : (
@@ -1037,8 +1101,8 @@ export const MapScreen: React.FC<MapScreenProps> = ({
                 ]}
               >
                 {travelMode === 'car'
-                  ? '🚦 Realistic urban driving speed with traffic & intersection buffers'
-                  : '⚡ Optimized for 2-wheelers with agile traffic maneuverability'}
+                  ? 'Realistic urban driving speed with traffic & intersection buffers'
+                  : 'Optimized for 2-wheelers with agile traffic maneuverability'}
               </Text>
             </View>
           )}
@@ -1077,7 +1141,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
             ]}
           >
             <View style={styles.guestIconCircle}>
-              <Text style={styles.guestIconEmoji}>🛡️</Text>
+              <Feather name="shield" size={24} color="#10B981" />
             </View>
 
             <Text

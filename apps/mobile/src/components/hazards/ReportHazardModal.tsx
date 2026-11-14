@@ -28,6 +28,7 @@ import { useAuthStore } from '../../store/authStore';
 import { navigationRef } from '../../navigation/RootNavigator';
 import { OpenMapView, OpenMapViewRef } from '../map/OpenMapView';
 import { HazardCategoryChips } from './HazardCategoryChips';
+import { Feather, FontAwesome5 } from '../common/Icon';
 
 interface ReportHazardModalProps {
   visible: boolean;
@@ -375,9 +376,7 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
               </Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Text style={[styles.closeText, { color: colors.textMuted }]}>
-                ✕
-              </Text>
+              <Feather name="x" size={20} color={colors.textMuted} />
             </TouchableOpacity>
           </View>
 
@@ -389,7 +388,12 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
             {/* Early Guest Mode Guard */}
             {isGuest ? (
               <View style={styles.guestGuardBox}>
-                <Text style={styles.guestGuardIcon}>🔒</Text>
+                <Feather
+                  name="lock"
+                  size={22}
+                  color="#F59E0B"
+                  style={{ marginBottom: 6 }}
+                />
                 <Text
                   style={[
                     styles.guestGuardTitle,
@@ -431,8 +435,19 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
             ) : (
               <>
                 {formError && (
-                  <View style={styles.errorBox}>
-                    <Text style={styles.errorText}>⚠️ {formError}</Text>
+                  <View
+                    style={[
+                      styles.errorBox,
+                      { flexDirection: 'row', alignItems: 'center' },
+                    ]}
+                  >
+                    <Feather
+                      name="alert-triangle"
+                      size={14}
+                      color="#EF4444"
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text style={styles.errorText}>{formError}</Text>
                   </View>
                 )}
 
@@ -455,11 +470,30 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
                       style={styles.adjustPinBtn}
                       activeOpacity={0.8}
                     >
-                      <Text style={styles.adjustPinBtnText}>
-                        {isEditingPin
-                          ? '✓ Done Adjusting'
-                          : '📍 Adjust Pin on Map'}
-                      </Text>
+                      <View
+                        style={{ flexDirection: 'row', alignItems: 'center' }}
+                      >
+                        {isEditingPin ? (
+                          <Feather
+                            name="check"
+                            size={13}
+                            color="#38BDF8"
+                            style={{ marginRight: 4 }}
+                          />
+                        ) : (
+                          <Feather
+                            name="map-pin"
+                            size={13}
+                            color="#38BDF8"
+                            style={{ marginRight: 4 }}
+                          />
+                        )}
+                        <Text style={styles.adjustPinBtnText}>
+                          {isEditingPin
+                            ? 'Done Adjusting'
+                            : 'Adjust Pin on Map'}
+                        </Text>
+                      </View>
                     </TouchableOpacity>
                   </View>
 
@@ -474,7 +508,12 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
                       },
                     ]}
                   >
-                    <Text style={styles.locationIcon}>📍</Text>
+                    <Feather
+                      name="map-pin"
+                      size={16}
+                      color="#EF4444"
+                      style={{ marginRight: 10 }}
+                    />
                     <View style={{ flex: 1 }}>
                       <Text
                         style={[
@@ -514,7 +553,7 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
                             { color: colors.textSecondary },
                           ]}
                         >
-                          🗺️ Drag or tap to position hazard pin precisely:
+                          Drag or tap to position hazard pin precisely:
                         </Text>
                       </View>
 
@@ -538,7 +577,6 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
                               id: 'hazard-pin',
                               latitude: reportLat,
                               longitude: reportLng,
-                              icon: '⚠️',
                               title: 'Hazard Pin',
                               color: '#EF4444',
                             },
@@ -619,14 +657,27 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
                               color={colors.brandEmerald}
                             />
                           ) : (
-                            <Text
-                              style={[
-                                styles.resetGpsText,
-                                { color: colors.brandEmerald },
-                              ]}
+                            <View
+                              style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                              }}
                             >
-                              🎯 Use My Live GPS
-                            </Text>
+                              <Feather
+                                name="crosshair"
+                                size={13}
+                                color={colors.brandEmerald}
+                                style={{ marginRight: 4 }}
+                              />
+                              <Text
+                                style={[
+                                  styles.resetGpsText,
+                                  { color: colors.brandEmerald },
+                                ]}
+                              >
+                                Use My Live GPS
+                              </Text>
+                            </View>
                           )}
                         </TouchableOpacity>
 
@@ -638,9 +689,22 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
                           onPress={() => setIsEditingPin(false)}
                           activeOpacity={0.8}
                         >
-                          <Text style={styles.confirmPinBtnText}>
-                            ✓ Confirm Pin
-                          </Text>
+                          <View
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                            }}
+                          >
+                            <Feather
+                              name="check"
+                              size={13}
+                              color="#FFFFFF"
+                              style={{ marginRight: 4 }}
+                            />
+                            <Text style={styles.confirmPinBtnText}>
+                              Confirm Pin
+                            </Text>
+                          </View>
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -758,7 +822,7 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
                             style={styles.photoThumbRemoveBtn}
                             activeOpacity={0.8}
                           >
-                            <Text style={styles.photoThumbRemoveText}>✕</Text>
+                            <Feather name="x" size={14} color="#FFFFFF" />
                           </TouchableOpacity>
                         </View>
                       ))}
@@ -778,7 +842,12 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
                         ]}
                         onPress={() => setShowPhotoInput(!showPhotoInput)}
                       >
-                        <Text style={styles.addPhotoBtnIcon}>📸</Text>
+                        <Feather
+                          name="camera"
+                          size={16}
+                          color="#38BDF8"
+                          style={{ marginRight: 6 }}
+                        />
                         <Text
                           style={[
                             styles.addPhotoBtnText,
@@ -841,7 +910,12 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
                                 ]}
                                 onPress={handleTakePhoto}
                               >
-                                <Text style={styles.pickerActionIcon}>📷</Text>
+                                <Feather
+                                  name="camera"
+                                  size={20}
+                                  color="#38BDF8"
+                                  style={{ marginBottom: 4 }}
+                                />
                                 <Text
                                   style={[
                                     styles.pickerActionText,
@@ -862,7 +936,12 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
                                 ]}
                                 onPress={handlePickGallery}
                               >
-                                <Text style={styles.pickerActionIcon}>🖼️</Text>
+                                <Feather
+                                  name="image"
+                                  size={20}
+                                  color="#38BDF8"
+                                  style={{ marginBottom: 4 }}
+                                />
                                 <Text
                                   style={[
                                     styles.pickerActionText,
@@ -977,11 +1056,24 @@ export const ReportHazardModal: React.FC<ReportHazardModalProps> = ({
                   ]}
                 >
                   <View style={{ flex: 1, marginRight: 12 }}>
-                    <Text
-                      style={[styles.anonTitle, { color: colors.textPrimary }]}
+                    <View
+                      style={{ flexDirection: 'row', alignItems: 'center' }}
                     >
-                      🕵️ Report Anonymously
-                    </Text>
+                      <Feather
+                        name="eye-off"
+                        size={14}
+                        color="#94A3B8"
+                        style={{ marginRight: 6 }}
+                      />
+                      <Text
+                        style={[
+                          styles.anonTitle,
+                          { color: colors.textPrimary },
+                        ]}
+                      >
+                        Report Anonymously
+                      </Text>
+                    </View>
                     <Text
                       style={[styles.anonDesc, { color: colors.textSecondary }]}
                     >

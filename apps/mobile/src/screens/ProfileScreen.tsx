@@ -24,6 +24,7 @@ import { MedicalNotesCard } from '../components/profile/MedicalNotesCard';
 import { HelplinesSection } from '../components/profile/HelplinesSection';
 import { useTheme } from '../theme/ThemeContext';
 import { SosService } from '../services/sosService';
+import { Feather, FontAwesome5 } from '../components/common/Icon';
 
 interface Contact {
   id: string;
@@ -221,7 +222,7 @@ export const ProfileScreen: React.FC = () => {
       if (success) {
         Alert.alert(
           action === 'accept'
-            ? '🛡️ Guardian Request Accepted'
+            ? 'Guardian Request Accepted'
             : 'Request Declined',
           action === 'accept'
             ? `You are now an active Safety Guardian for ${wardName}. You will receive their live Safe Walk escorts and emergency alerts.`
@@ -242,7 +243,7 @@ export const ProfileScreen: React.FC = () => {
   const handleOpenAddModal = () => {
     if (isGuest) {
       Alert.alert(
-        '🔒 Sign In Required',
+        'Sign In Required',
         'To save personal emergency guardians and activate family tracking loops, please sign in or register an account.',
         [
           { text: 'Cancel', style: 'cancel' },
@@ -261,7 +262,7 @@ export const ProfileScreen: React.FC = () => {
   const handleOpenEditModal = (contact: Contact) => {
     if (isGuest) {
       Alert.alert(
-        '🔒 Sign In Required',
+        'Sign In Required',
         'Emergency guardian settings are available for registered accounts.',
         [
           { text: 'Cancel', style: 'cancel' },
@@ -396,8 +397,8 @@ export const ProfileScreen: React.FC = () => {
         'Contact Updated',
         `${savedData.name}'s details have been saved.${
           hasAccount
-            ? '\n\n🟢 Guardian is registered on Safora! High-priority in-app push notifications enabled.'
-            : '\n\n📱 Guardian will receive direct cellular SMS alerts.'
+            ? '\n\nGuardian is registered on Safora! High-priority in-app push notifications enabled.'
+            : '\n\nGuardian will receive direct cellular SMS alerts.'
         }`,
       );
     } else {
@@ -437,8 +438,8 @@ export const ProfileScreen: React.FC = () => {
         'Guardian Added',
         `${savedData.name} has been added to your emergency network.${
           hasAccount
-            ? '\n\n🟢 Guardian is registered on Safora! High-priority in-app push notifications enabled.'
-            : '\n\n📱 Guardian will receive direct cellular SMS alerts.'
+            ? '\n\nGuardian is registered on Safora! High-priority in-app push notifications enabled.'
+            : '\n\nGuardian will receive direct cellular SMS alerts.'
         }`,
       );
     }
@@ -464,7 +465,7 @@ export const ProfileScreen: React.FC = () => {
       ? contact.phone.replace(/[^\d+]/g, '')
       : '';
     const mapsLink = 'https://maps.google.com/?q=30.3165,78.0322';
-    const drillMsg = `[SAFORA SAFETY DRILL] 🚨 Test SOS alert from your emergency contact. All safe! Test GPS: ${mapsLink} - Sent via SAFORA`;
+    const drillMsg = `[SAFORA SAFETY DRILL] Test SOS alert from your emergency contact. All safe! Test GPS: ${mapsLink} - Sent via SAFORA`;
 
     // If contact has a registered Safora account/email, dispatch in-app push drill first
     if (contact.hasSaforaAccount || contact.email) {
@@ -475,12 +476,12 @@ export const ProfileScreen: React.FC = () => {
 
         if (res.deliveredToApp) {
           Alert.alert(
-            '🔔 Safety Drill Dispatched',
+            'Safety Drill Dispatched',
             `${res.message}\n\nWould you also like to test direct cellular SMS to ${contact.name} (${contact.phone})?`,
             [
               { text: 'Done', style: 'cancel' },
               {
-                text: '📱 Test SMS Too',
+                text: 'Test SMS Too',
                 onPress: () => {
                   if (cleanPhone) {
                     Linking.openURL(
@@ -504,7 +505,7 @@ export const ProfileScreen: React.FC = () => {
 
     // Direct Cellular SMS Test for personal contacts
     Alert.alert(
-      '📱 Send Test SOS SMS',
+      'Send Test SOS SMS',
       `Ready to test SOS delivery to ${contact.name} (${contact.phone}).\n\nThis will open your SMS messaging app with a pre-filled safety drill alert with live coordinates.`,
       [
         { text: 'Cancel', style: 'cancel' },
@@ -585,7 +586,7 @@ export const ProfileScreen: React.FC = () => {
             onPress={() => navigation.navigate('Notifications')}
             activeOpacity={0.8}
           >
-            <Text style={styles.settingsIconEmoji}>🔔</Text>
+            <Feather name="bell" size={18} color={colors.textPrimary} />
             {unreadNotifications > 0 && (
               <View style={styles.bellBadge}>
                 <Text style={styles.bellBadgeText}>
@@ -607,7 +608,7 @@ export const ProfileScreen: React.FC = () => {
             onPress={() => navigation.navigate('Settings')}
             activeOpacity={0.8}
           >
-            <Text style={styles.settingsIconEmoji}>⚙️</Text>
+            <Feather name="settings" size={18} color={colors.textPrimary} />
           </TouchableOpacity>
         </View>
       </View>
@@ -642,9 +643,13 @@ export const ProfileScreen: React.FC = () => {
               { backgroundColor: isGuest ? '#F59E0B' : colors.primary },
             ]}
           >
-            <Text style={styles.avatarText}>
-              {isGuest ? '👤' : user?.name?.charAt(0) || 'U'}
-            </Text>
+            {isGuest ? (
+              <Feather name="user" size={24} color="#FFFFFF" />
+            ) : (
+              <Text style={styles.avatarText}>
+                {user?.name?.charAt(0) || 'U'}
+              </Text>
+            )}
           </View>
 
           <View style={styles.profileInfo}>
@@ -655,9 +660,19 @@ export const ProfileScreen: React.FC = () => {
               {user?.email || 'guest@safora.app'}
             </Text>
             {user?.phone ? (
-              <Text style={[styles.userPhoneText, { color: colors.primary }]}>
-                📞 {user.phone}
-              </Text>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 4,
+                  marginTop: 2,
+                }}
+              >
+                <Feather name="phone" size={11} color={colors.primary} />
+                <Text style={[styles.userPhoneText, { color: colors.primary }]}>
+                  {user.phone}
+                </Text>
+              </View>
             ) : null}
 
             <View
@@ -678,12 +693,16 @@ export const ProfileScreen: React.FC = () => {
               {
                 backgroundColor: colors.backgroundInput,
                 borderColor: colors.border,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 4,
               },
             ]}
             onPress={() => setShowEditModal(true)}
           >
+            <Feather name="edit-2" size={12} color={colors.textPrimary} />
             <Text style={[styles.editBtnText, { color: colors.textPrimary }]}>
-              ✏️ Edit
+              Edit
             </Text>
           </TouchableOpacity>
         </View>
@@ -706,9 +725,19 @@ export const ProfileScreen: React.FC = () => {
               },
             ]}
           >
-            <Text style={styles.guestWarningTitle}>
-              👤 You are currently in Guest Mode
-            </Text>
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 6,
+                marginBottom: 4,
+              }}
+            >
+              <Feather name="user" size={14} color="#F59E0B" />
+              <Text style={styles.guestWarningTitle}>
+                You are currently in Guest Mode
+              </Text>
+            </View>
             <Text
               style={[styles.guestWarningDesc, { color: colors.textSecondary }]}
             >
@@ -805,7 +834,9 @@ export const ProfileScreen: React.FC = () => {
                   },
                 ]}
               >
-                <Text style={styles.emptyEmoji}>👥</Text>
+                <View style={{ alignItems: 'center', marginBottom: 12 }}>
+                  <Feather name="users" size={36} color="#64748B" />
+                </View>
                 <Text
                   style={[styles.emptyTitle, { color: colors.textPrimary }]}
                 >
@@ -848,7 +879,7 @@ export const ProfileScreen: React.FC = () => {
                         { backgroundColor: 'rgba(56, 189, 248, 0.12)' },
                       ]}
                     >
-                      <Text style={styles.contactIcon}>👥</Text>
+                      <Feather name="user" size={18} color="#38BDF8" />
                     </View>
 
                     <View style={styles.contactDetails}>
@@ -871,34 +902,86 @@ export const ProfileScreen: React.FC = () => {
                         {contact.phone}
                       </Text>
                       {contact.email ? (
-                        <Text
-                          style={[
-                            styles.contactEmail,
-                            { color: colors.textSecondary },
-                          ]}
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 4,
+                            marginTop: 1,
+                          }}
                         >
-                          ✉️ {contact.email}
-                        </Text>
+                          <Feather
+                            name="mail"
+                            size={11}
+                            color={colors.textSecondary}
+                          />
+                          <Text
+                            style={[
+                              styles.contactEmail,
+                              { color: colors.textSecondary },
+                            ]}
+                          >
+                            {contact.email}
+                          </Text>
+                        </View>
                       ) : null}
 
                       {/* Safora App Registration & Acceptance Status Badge */}
                       <View style={styles.badgeRow}>
                         {contact.status === 'pending' ? (
-                          <View style={styles.badgePending}>
+                          <View
+                            style={[
+                              styles.badgePending,
+                              {
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                gap: 4,
+                              },
+                            ]}
+                          >
+                            <Feather name="clock" size={10} color="#F59E0B" />
                             <Text style={styles.badgePendingText}>
-                              ⏳ Request Pending Guardian Acceptance
+                              Request Pending Guardian Acceptance
                             </Text>
                           </View>
                         ) : contact.hasSaforaAccount ? (
-                          <View style={styles.badgeSaforaActive}>
+                          <View
+                            style={[
+                              styles.badgeSaforaActive,
+                              {
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                gap: 4,
+                              },
+                            ]}
+                          >
+                            <Feather
+                              name="check-circle"
+                              size={10}
+                              color="#10B981"
+                            />
                             <Text style={styles.badgeSaforaActiveText}>
-                              🟢 Accepted Guardian (Live Escort Active)
+                              Accepted Guardian (Live Escort Active)
                             </Text>
                           </View>
                         ) : (
-                          <View style={styles.badgeSmsOnly}>
+                          <View
+                            style={[
+                              styles.badgeSmsOnly,
+                              {
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                gap: 4,
+                              },
+                            ]}
+                          >
+                            <Feather
+                              name="message-square"
+                              size={10}
+                              color="#38BDF8"
+                            />
                             <Text style={styles.badgeSmsOnlyText}>
-                              📱 Direct Cellular SMS
+                              Direct Cellular SMS
                             </Text>
                           </View>
                         )}
@@ -908,20 +991,41 @@ export const ProfileScreen: React.FC = () => {
                     {/* Edit, Delete & Test Actions */}
                     <View style={styles.contactActionsCol}>
                       <TouchableOpacity
-                        style={styles.actionPill}
+                        style={[
+                          styles.actionPill,
+                          {
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 3,
+                          },
+                        ]}
                         onPress={() => handleOpenEditModal(contact)}
                       >
-                        <Text style={styles.actionPillText}>✏️ Edit</Text>
+                        <Feather
+                          name="edit-2"
+                          size={11}
+                          color={colors.textPrimary}
+                        />
+                        <Text style={styles.actionPillText}>Edit</Text>
                       </TouchableOpacity>
 
                       <TouchableOpacity
-                        style={[styles.actionPill, styles.deletePill]}
+                        style={[
+                          styles.actionPill,
+                          styles.deletePill,
+                          {
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 3,
+                          },
+                        ]}
                         onPress={() => handleDeleteContact(contact)}
                       >
+                        <Feather name="trash-2" size={11} color="#EF4444" />
                         <Text
                           style={[styles.actionPillText, { color: '#EF4444' }]}
                         >
-                          🗑️ Delete
+                          Delete
                         </Text>
                       </TouchableOpacity>
 
@@ -939,9 +1043,7 @@ export const ProfileScreen: React.FC = () => {
                               styles.testBtnSaforaText,
                           ]}
                         >
-                          {contact.hasSaforaAccount
-                            ? '🔔 Test Drill'
-                            : 'Test SOS'}
+                          {contact.hasSaforaAccount ? 'Test Drill' : 'Test SOS'}
                         </Text>
                       </TouchableOpacity>
                     </View>
@@ -1012,6 +1114,12 @@ export const ProfileScreen: React.FC = () => {
                         style={[
                           styles.respondBtn,
                           styles.acceptBtn,
+                          {
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 4,
+                          },
                           isRespondingRequest === req.id && { opacity: 0.5 },
                         ]}
                         onPress={() =>
@@ -1019,13 +1127,20 @@ export const ProfileScreen: React.FC = () => {
                         }
                         disabled={isRespondingRequest === req.id}
                       >
-                        <Text style={styles.acceptBtnText}>✓ Accept</Text>
+                        <Feather name="check" size={13} color="#FFFFFF" />
+                        <Text style={styles.acceptBtnText}>Accept</Text>
                       </TouchableOpacity>
 
                       <TouchableOpacity
                         style={[
                           styles.respondBtn,
                           styles.declineBtn,
+                          {
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 4,
+                          },
                           isRespondingRequest === req.id && { opacity: 0.5 },
                         ]}
                         onPress={() =>
@@ -1033,7 +1148,12 @@ export const ProfileScreen: React.FC = () => {
                         }
                         disabled={isRespondingRequest === req.id}
                       >
-                        <Text style={styles.declineBtnText}>✕ Decline</Text>
+                        <Feather
+                          name="x"
+                          size={13}
+                          color={colors.textSecondary}
+                        />
+                        <Text style={styles.declineBtnText}>Decline</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -1071,7 +1191,7 @@ export const ProfileScreen: React.FC = () => {
                         { backgroundColor: 'rgba(16, 185, 129, 0.12)' },
                       ]}
                     >
-                      <Text style={styles.contactIcon}>🛡️</Text>
+                      <Feather name="shield" size={18} color="#10B981" />
                     </View>
 
                     <View style={styles.contactDetails}>
@@ -1094,9 +1214,19 @@ export const ProfileScreen: React.FC = () => {
                         {ward.ward_phone || ward.ward_email}
                       </Text>
                       <View style={styles.badgeRow}>
-                        <View style={styles.badgeSaforaActive}>
+                        <View
+                          style={[
+                            styles.badgeSaforaActive,
+                            {
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              gap: 4,
+                            },
+                          ]}
+                        >
+                          <Feather name="shield" size={10} color="#10B981" />
                           <Text style={styles.badgeSaforaActiveText}>
-                            🟢 Active (You Receive Their Live Escorts)
+                            Active (You Receive Their Live Escorts)
                           </Text>
                         </View>
                       </View>
@@ -1115,7 +1245,9 @@ export const ProfileScreen: React.FC = () => {
                     },
                   ]}
                 >
-                  <Text style={styles.emptyEmoji}>🛡️</Text>
+                  <View style={{ alignItems: 'center', marginBottom: 12 }}>
+                    <Feather name="shield" size={36} color="#64748B" />
+                  </View>
                   <Text
                     style={[styles.emptyTitle, { color: colors.textPrimary }]}
                   >
@@ -1149,7 +1281,18 @@ export const ProfileScreen: React.FC = () => {
           onPress={() => navigation.navigate('Settings')}
           activeOpacity={0.8}
         >
-          <Text style={styles.settingsShortcutEmoji}>⚙️</Text>
+          <View
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 18,
+              backgroundColor: 'rgba(255, 255, 255, 0.06)',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Feather name="settings" size={18} color={colors.textPrimary} />
+          </View>
           <View style={{ flex: 1 }}>
             <Text
               style={[
@@ -1183,13 +1326,18 @@ export const ProfileScreen: React.FC = () => {
               {
                 borderColor: colors.primary,
                 backgroundColor: colors.backgroundCard,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
               },
             ]}
             onPress={() => (navigation as any).navigate('AccountSelect')}
             activeOpacity={0.8}
           >
+            <Feather name="log-in" size={15} color={colors.primary} />
             <Text style={[styles.logoutBtnText, { color: colors.primary }]}>
-              🚀 Sign In / Switch Account
+              Sign In / Switch Account
             </Text>
           </TouchableOpacity>
         ) : (
@@ -1199,12 +1347,17 @@ export const ProfileScreen: React.FC = () => {
               {
                 borderColor: colors.border,
                 backgroundColor: colors.backgroundCard,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
               },
             ]}
             onPress={handleLogout}
             activeOpacity={0.8}
           >
-            <Text style={styles.logoutBtnText}>🚪 Sign Out</Text>
+            <Feather name="log-out" size={15} color="#EF4444" />
+            <Text style={styles.logoutBtnText}>Sign Out</Text>
           </TouchableOpacity>
         )}
       </ScrollView>

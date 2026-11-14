@@ -309,7 +309,7 @@ export class ReportService {
   }
 
   /**
-   * Calculate real-time safety score at coordinates (V1 SYN-1: No hardcoded fallback)
+   * Calculate real-time safety score at coordinates
    */
   static async getSafetyScore(
     lat = 30.3165,
@@ -357,7 +357,7 @@ export class ReportService {
   }
 
   /**
-   * Fetch DBSCAN density clusters for heatmap visualization (SYN-2)
+   * Fetch DBSCAN density clusters for heatmap visualization
    */
   static async getClusters(eps = 0.003, minPoints = 2): Promise<any[]> {
     try {

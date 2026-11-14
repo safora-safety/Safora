@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { typography } from '../../theme/typography';
 import { useTheme } from '../../theme/ThemeContext';
+import { Feather, FontAwesome5 } from '../common/Icon';
 
 export interface ArrivalCelebrationModalProps {
   visible: boolean;
@@ -72,7 +73,7 @@ export const ArrivalCelebrationModal: React.FC<
 
   const getShareText = () => {
     return encodeURIComponent(
-      `✅ Hey! I have reached ${destinationName} safely.\nMy SAFORA Safe Walk escort session is completed.\nDistance: ${formatDistance(distanceMeters)} • Duration: ${formatDuration(durationSeconds)}`,
+      `Hey! I have reached ${destinationName} safely.\nMy SAFORA Safe Walk escort session is completed.\nDistance: ${formatDistance(distanceMeters)} • Duration: ${formatDuration(durationSeconds)}`,
     );
   };
 
@@ -123,7 +124,7 @@ export const ArrivalCelebrationModal: React.FC<
           {/* Top Emerald Shield / Celebration Badge */}
           <View style={styles.badgeRingOuter}>
             <View style={styles.badgeRingInner}>
-              <Text style={styles.badgeEmoji}>🎉</Text>
+              <FontAwesome5 name="award" size={32} color="#10B981" />
             </View>
           </View>
 
@@ -219,7 +220,12 @@ export const ArrivalCelebrationModal: React.FC<
               accessibilityRole="button"
               accessibilityLabel="Share arrival on WhatsApp"
             >
-              <Text style={styles.btnIcon}>💬</Text>
+              <Feather
+                name="message-circle"
+                size={16}
+                color="#FFFFFF"
+                style={{ marginRight: 6 }}
+              />
               <Text style={styles.whatsAppButtonText}>Share via WhatsApp</Text>
             </TouchableOpacity>
 
@@ -239,7 +245,12 @@ export const ArrivalCelebrationModal: React.FC<
               accessibilityRole="button"
               accessibilityLabel="Send SMS arrival confirmation"
             >
-              <Text style={styles.btnIcon}>📱</Text>
+              <Feather
+                name="share-2"
+                size={16}
+                color="#10B981"
+                style={{ marginRight: 6 }}
+              />
               <Text
                 style={[styles.smsButtonText, { color: colors.textPrimary }]}
               >

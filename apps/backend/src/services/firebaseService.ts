@@ -62,7 +62,7 @@ export class FirebaseService {
       const response = await getMessaging().sendEachForMulticast({
         tokens: fcmTokens,
         notification: {
-          title: `🚨 EMERGENCY SOS: ${data.userName}`,
+          title: `EMERGENCY SOS: ${data.userName}`,
           body: `Emergency triggered at live coordinates (${data.latitude.toFixed(4)}, ${data.longitude.toFixed(4)}). Open SAFORA immediately.`,
         },
         data: {
@@ -121,7 +121,7 @@ export class FirebaseService {
       await getMessaging().sendEachForMulticast({
         tokens: fcmTokens,
         notification: {
-          title: `⚠️ Safe Walk Deviation Warning`,
+          title: `Safe Walk Deviation Warning`,
           body: `${data.userName} has deviated ${Math.round(data.deviationMeters)}m from their planned route and timed out.`,
         },
         data: {
@@ -164,7 +164,7 @@ export class FirebaseService {
       await getMessaging().sendEachForMulticast({
         tokens: fcmTokens,
         notification: {
-          title: `🛡️ Safe Walk Started`,
+          title: `Safe Walk Started`,
           body: `${data.userName} has started a Safe Walk${data.destinationName ? ` to ${data.destinationName}` : ""}. Open SAFORA to track live.`,
         },
         data: {
@@ -206,7 +206,7 @@ export class FirebaseService {
       await getMessaging().sendEachForMulticast({
         tokens: fcmTokens,
         notification: {
-          title: `✅ Safe Arrival Confirmed`,
+          title: `Safe Arrival Confirmed`,
           body: `${data.userName} has arrived safely${data.destinationName ? ` at ${data.destinationName}` : ""}! Safe Walk session completed.`,
         },
         data: {
@@ -247,7 +247,7 @@ export class FirebaseService {
       await getMessaging().sendEachForMulticast({
         tokens: fcmTokens,
         notification: {
-          title: `ℹ️ Safe Walk Ended`,
+          title: `Safe Walk Ended`,
           body: `${data.userName} has ended their Safe Walk session.`,
         },
         data: {

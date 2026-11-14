@@ -9,6 +9,7 @@ import {
   Platform,
 } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
+import { Feather, FontAwesome5 } from '../common/Icon';
 
 interface SafetyFabDrawerProps {
   onTriggerFakeCall: () => void;
@@ -60,7 +61,11 @@ export const SafetyFabDrawer: React.FC<SafetyFabDrawerProps> = ({
           accessibilityLabel="Open Emergency Safety Tools Drawer"
         >
           <View style={styles.fabPulseRing} />
-          <Text style={styles.fabEmoji}>{isSirenActive ? '🔊' : '🛡️'}</Text>
+          <Feather
+            name={isSirenActive ? 'volume-2' : 'shield'}
+            size={22}
+            color="#FFFFFF"
+          />
           <Text style={styles.fabLabel}>
             {isSirenActive ? 'SIREN' : 'SAFETY'}
           </Text>
@@ -124,11 +129,7 @@ export const SafetyFabDrawer: React.FC<SafetyFabDrawerProps> = ({
                       },
                     ]}
                   >
-                    <Text
-                      style={{ color: colors.textSecondary, fontWeight: '700' }}
-                    >
-                      ✕
-                    </Text>
+                    <Feather name="x" size={18} color={colors.textSecondary} />
                   </TouchableOpacity>
                 </View>
 
@@ -153,9 +154,12 @@ export const SafetyFabDrawer: React.FC<SafetyFabDrawerProps> = ({
                       },
                     ]}
                   >
-                    <Text style={styles.toolEmoji}>
-                      {isSirenActive ? '🔕' : '🔊'}
-                    </Text>
+                    <Feather
+                      name={isSirenActive ? 'volume-x' : 'volume-2'}
+                      size={22}
+                      color={isSirenActive ? colors.danger : colors.textPrimary}
+                      style={{ marginBottom: 4 }}
+                    />
                     <Text
                       style={[
                         styles.toolTitle,
@@ -188,7 +192,12 @@ export const SafetyFabDrawer: React.FC<SafetyFabDrawerProps> = ({
                       },
                     ]}
                   >
-                    <Text style={styles.toolEmoji}>📞</Text>
+                    <Feather
+                      name="phone"
+                      size={22}
+                      color={colors.textPrimary}
+                      style={{ marginBottom: 4 }}
+                    />
                     <Text
                       style={[styles.toolTitle, { color: colors.textPrimary }]}
                     >
@@ -214,7 +223,12 @@ export const SafetyFabDrawer: React.FC<SafetyFabDrawerProps> = ({
                       },
                     ]}
                   >
-                    <Text style={styles.toolEmoji}>🚶‍♀️</Text>
+                    <FontAwesome5
+                      name="walking"
+                      size={22}
+                      color={colors.textPrimary}
+                      style={{ marginBottom: 4 }}
+                    />
                     <Text
                       style={[styles.toolTitle, { color: colors.textPrimary }]}
                     >
@@ -240,7 +254,12 @@ export const SafetyFabDrawer: React.FC<SafetyFabDrawerProps> = ({
                       },
                     ]}
                   >
-                    <Text style={styles.toolEmoji}>⚠️</Text>
+                    <Feather
+                      name="alert-triangle"
+                      size={22}
+                      color={colors.textPrimary}
+                      style={{ marginBottom: 4 }}
+                    />
                     <Text
                       style={[styles.toolTitle, { color: colors.textPrimary }]}
                     >
@@ -266,7 +285,12 @@ export const SafetyFabDrawer: React.FC<SafetyFabDrawerProps> = ({
                       },
                     ]}
                   >
-                    <Text style={styles.toolEmoji}>🧮</Text>
+                    <Feather
+                      name="grid"
+                      size={22}
+                      color={colors.textPrimary}
+                      style={{ marginBottom: 4 }}
+                    />
                     <Text
                       style={[styles.toolTitle, { color: colors.textPrimary }]}
                     >
@@ -291,7 +315,12 @@ export const SafetyFabDrawer: React.FC<SafetyFabDrawerProps> = ({
                         },
                       ]}
                     >
-                      <Text style={styles.toolEmoji}>🚨</Text>
+                      <Feather
+                        name="alert-octagon"
+                        size={22}
+                        color={colors.danger}
+                        style={{ marginBottom: 4 }}
+                      />
                       <Text
                         style={[styles.toolTitle, { color: colors.danger }]}
                       >

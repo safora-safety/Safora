@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
+import { Icon, IconFamily } from '../components/common/Icon';
 import { HomeScreen } from '../screens/HomeScreen';
 import { MapScreen } from '../screens/MapScreen';
 import { SafeWalkScreen } from '../screens/SafeWalkScreen';
@@ -21,13 +22,14 @@ interface TabItem {
   key: TabKey;
   label: string;
   icon: string;
+  family?: IconFamily;
 }
 
 const TABS: TabItem[] = [
-  { key: 'Home', label: 'Home', icon: '🏠' },
-  { key: 'Map', label: 'Map Radar', icon: '🗺️' },
-  { key: 'SafeWalk', label: 'Safe Walk', icon: '🚶‍♀️' },
-  { key: 'Profile', label: 'Profile', icon: '👤' },
+  { key: 'Home', label: 'Home', icon: 'home', family: 'feather' },
+  { key: 'Map', label: 'Map Radar', icon: 'map', family: 'feather' },
+  { key: 'SafeWalk', label: 'Safe Walk', icon: 'walking', family: 'fa' },
+  { key: 'Profile', label: 'Profile', icon: 'user', family: 'feather' },
 ];
 
 export const MainTabNavigator: React.FC = () => {
@@ -190,7 +192,14 @@ export const MainTabNavigator: React.FC = () => {
               onPress={() => handleNavigateTab(tab.key)}
             >
               {isActive && <View style={styles.activeGlowLine} />}
-              <Text style={styles.tabIcon}>{tab.icon}</Text>
+              <View style={styles.tabIconContainer}>
+                <Icon
+                  name={tab.icon}
+                  family={tab.family}
+                  size={20}
+                  color={isActive ? colors.accent : colors.textMuted}
+                />
+              </View>
               <Text
                 style={[styles.tabLabel, isActive && styles.tabLabelActive]}
               >
@@ -256,9 +265,11 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: colors.accent,
   },
-  tabIcon: {
-    fontSize: 20,
+  tabIconContainer: {
     marginBottom: 4,
+    height: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tabLabel: {
     fontSize: 11,

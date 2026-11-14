@@ -148,7 +148,7 @@ export class SosRepository {
         senderName,
         senderPhone: sender?.phone,
         type: "guardian_request" as any,
-        title: "🛡️ Safety Guardian Request",
+        title: "Safety Guardian Request",
         body: `${senderName} added you as their trusted Safety Guardian for Safe Walk escorts.`,
       }).catch(() => {});
     }

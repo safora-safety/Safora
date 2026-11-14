@@ -9,6 +9,7 @@ import {
 import { useTheme } from '../../theme/ThemeContext';
 import { typography } from '../../theme/typography';
 import { MultiModalTravelTimes } from '../../services/routingService';
+import { Feather, FontAwesome5 } from '../common/Icon';
 
 export type TransportMode = 'walk' | 'bike' | 'car';
 export type RouteStrategy = 'safest' | 'fastest';
@@ -132,12 +133,25 @@ export const MultiModalRouteSheet: React.FC<MultiModalRouteSheetProps> = ({
           >
             SELECTED DESTINATION
           </Text>
-          <Text
-            style={[styles.sheetHeaderDest, { color: colors.textPrimary }]}
-            numberOfLines={1}
+          <View
+            style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}
           >
-            📍 {destinationName}
-          </Text>
+            <Feather
+              name="map-pin"
+              size={14}
+              color="#EF4444"
+              style={{ marginRight: 6 }}
+            />
+            <Text
+              style={[
+                styles.sheetHeaderDest,
+                { color: colors.textPrimary, flex: 1 },
+              ]}
+              numberOfLines={1}
+            >
+              {destinationName}
+            </Text>
+          </View>
         </View>
         {handleClear && (
           <TouchableOpacity
@@ -154,7 +168,15 @@ export const MultiModalRouteSheet: React.FC<MultiModalRouteSheetProps> = ({
             accessibilityRole="button"
             accessibilityLabel="Clear Route"
           >
-            <Text style={styles.clearRouteText}>✕ Clear Route</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Feather
+                name="x"
+                size={12}
+                color="#EF4444"
+                style={{ marginRight: 4 }}
+              />
+              <Text style={styles.clearRouteText}>Clear Route</Text>
+            </View>
           </TouchableOpacity>
         )}
       </View>
@@ -164,8 +186,19 @@ export const MultiModalRouteSheet: React.FC<MultiModalRouteSheetProps> = ({
         <Text style={[styles.walkHeaderTitle, { color: colors.textSecondary }]}>
           SELECT WALKING ROUTE
         </Text>
-        <View style={styles.walkDedicatedPill}>
-          <Text style={styles.walkDedicatedText}>🚶 DEDICATED WALK</Text>
+        <View
+          style={[
+            styles.walkDedicatedPill,
+            { flexDirection: 'row', alignItems: 'center' },
+          ]}
+        >
+          <FontAwesome5
+            name="walking"
+            size={11}
+            color="#3B82F6"
+            style={{ marginRight: 5 }}
+          />
+          <Text style={styles.walkDedicatedText}>DEDICATED WALK</Text>
         </View>
       </View>
 
@@ -196,7 +229,7 @@ export const MultiModalRouteSheet: React.FC<MultiModalRouteSheetProps> = ({
           accessibilityLabel="Main Road Well-Lit Corridor"
         >
           <View style={styles.strategyCardHeader}>
-            <Text style={styles.strategyEmoji}>🛡️</Text>
+            <Feather name="shield" size={18} color="#10B981" />
             <View style={styles.recommendedBadge}>
               <Text style={styles.recommendedText}>SAFEST • MAIN ROAD</Text>
             </View>
@@ -245,7 +278,7 @@ export const MultiModalRouteSheet: React.FC<MultiModalRouteSheetProps> = ({
           accessibilityLabel="Direct Shortcut Path"
         >
           <View style={styles.strategyCardHeader}>
-            <Text style={styles.strategyEmoji}>⚡</Text>
+            <Feather name="zap" size={18} color="#6366F1" />
             <View
               style={[
                 styles.recommendedBadge,
@@ -297,13 +330,37 @@ export const MultiModalRouteSheet: React.FC<MultiModalRouteSheetProps> = ({
         accessibilityRole="button"
         accessibilityLabel={`Start Safe Walk escort to ${destinationName}`}
       >
-        <Text style={styles.startBtnText}>
-          {isStarting
-            ? 'Activating Guardian Network...'
-            : selectedStrategy === 'safest'
-              ? `🛡️ Start Main Road Walk (${Math.ceil(mainRoadSecs / 60)} min)`
-              : `⚡ Start Shortcut Walk (${Math.ceil(shortcutSecs / 60)} min)`}
-        </Text>
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          {!isStarting &&
+            (selectedStrategy === 'safest' ? (
+              <Feather
+                name="shield"
+                size={16}
+                color="#FFFFFF"
+                style={{ marginRight: 8 }}
+              />
+            ) : (
+              <Feather
+                name="zap"
+                size={16}
+                color="#FFFFFF"
+                style={{ marginRight: 8 }}
+              />
+            ))}
+          <Text style={styles.startBtnText}>
+            {isStarting
+              ? 'Activating Guardian Network...'
+              : selectedStrategy === 'safest'
+                ? `Start Main Road Walk (${Math.ceil(mainRoadSecs / 60)} min)`
+                : `Start Shortcut Walk (${Math.ceil(shortcutSecs / 60)} min)`}
+          </Text>
+        </View>
       </TouchableOpacity>
     </View>
   );

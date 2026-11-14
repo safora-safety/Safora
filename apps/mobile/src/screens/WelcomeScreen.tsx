@@ -11,6 +11,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
 import { useAuthStore } from '../store/authStore';
+import { Feather, FontAwesome5 } from '../components/common/Icon';
 
 interface WelcomeScreenProps {
   navigation: any;
@@ -67,14 +68,47 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ navigation }) => {
 
         {/* Feature Pills */}
         <View style={styles.pillsContainer}>
-          <View style={styles.pill}>
-            <Text style={styles.pillText}>🛡️ Real-time SOS</Text>
+          <View
+            style={[
+              styles.pill,
+              { flexDirection: 'row', alignItems: 'center' },
+            ]}
+          >
+            <Feather
+              name="shield"
+              size={12}
+              color="#10B981"
+              style={{ marginRight: 5 }}
+            />
+            <Text style={styles.pillText}>Real-time SOS</Text>
           </View>
-          <View style={styles.pill}>
-            <Text style={styles.pillText}>🗺️ Safe Walk</Text>
+          <View
+            style={[
+              styles.pill,
+              { flexDirection: 'row', alignItems: 'center' },
+            ]}
+          >
+            <FontAwesome5
+              name="walking"
+              size={12}
+              color="#3B82F6"
+              style={{ marginRight: 5 }}
+            />
+            <Text style={styles.pillText}>Safe Walk</Text>
           </View>
-          <View style={styles.pill}>
-            <Text style={styles.pillText}>⚠️ Hazard Alerts</Text>
+          <View
+            style={[
+              styles.pill,
+              { flexDirection: 'row', alignItems: 'center' },
+            ]}
+          >
+            <Feather
+              name="alert-triangle"
+              size={12}
+              color="#F59E0B"
+              style={{ marginRight: 5 }}
+            />
+            <Text style={styles.pillText}>Hazard Alerts</Text>
           </View>
         </View>
       </View>

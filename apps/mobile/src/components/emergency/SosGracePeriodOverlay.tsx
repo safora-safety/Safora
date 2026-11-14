@@ -11,6 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { typography } from '../../theme/typography';
+import { Feather } from '../common/Icon';
 
 export interface SosGracePeriodOverlayProps {
   visible: boolean;
@@ -138,7 +139,12 @@ export const SosGracePeriodOverlay: React.FC<SosGracePeriodOverlayProps> = ({
               accessibilityLabel="Cancel SOS, I am safe"
               accessibilityHint="Immediately aborts the emergency broadcast"
             >
-              <Text style={styles.cancelButtonIcon}>🛡️</Text>
+              <Feather
+                name="shield"
+                size={28}
+                color="#FFFFFF"
+                style={{ marginRight: 12 }}
+              />
               <View style={styles.cancelButtonTextCol}>
                 <Text style={styles.cancelButtonMainText}>
                   CANCEL SOS (I AM SAFE)
@@ -152,13 +158,26 @@ export const SosGracePeriodOverlay: React.FC<SosGracePeriodOverlayProps> = ({
             {/* Instant Trigger Bypass Option */}
             {onTriggerImmediately && (
               <TouchableOpacity
-                style={styles.instantTriggerButton}
+                style={[
+                  styles.instantTriggerButton,
+                  {
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  },
+                ]}
                 activeOpacity={0.7}
                 onPress={onTriggerImmediately}
               >
                 <Text style={styles.instantTriggerText}>
-                  Need Help Now? Send Alert Immediately ⚡
+                  Need Help Now? Send Alert Immediately
                 </Text>
+                <Feather
+                  name="zap"
+                  size={14}
+                  color="#F87171"
+                  style={{ marginLeft: 6 }}
+                />
               </TouchableOpacity>
             )}
           </View>

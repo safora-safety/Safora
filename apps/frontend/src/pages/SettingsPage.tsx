@@ -647,7 +647,10 @@ export const SettingsPage: React.FC = () => {
               {watchdogScanResult && (
                 <div className="p-3 rounded-xl bg-obsidian-900 border border-emerald-500/30 text-[11px] text-emerald-300 space-y-1">
                   <div className="flex items-center justify-between font-bold">
-                    <span>✓ Scan Completed</span>
+                    <span className="flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Scan Completed</span>
+                    </span>
                     <span className="text-gray-400">{watchdogScanResult.timestamp}</span>
                   </div>
                   <div className="text-gray-400">

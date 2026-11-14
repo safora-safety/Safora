@@ -8,6 +8,7 @@ import {
   Alert,
 } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
+import { Feather } from '../common/Icon';
 
 export interface HelplineItem {
   id: string;
@@ -99,7 +100,7 @@ export const HelplinesSection: React.FC<HelplinesSectionProps> = ({
                 { backgroundColor: 'rgba(239, 68, 68, 0.12)' },
               ]}
             >
-              <Text style={styles.contactIcon}>🚨</Text>
+              <Feather name="shield" size={18} color="#EF4444" />
             </View>
 
             <View style={styles.contactDetails}>
@@ -119,9 +120,17 @@ export const HelplinesSection: React.FC<HelplinesSectionProps> = ({
               onPress={() => handleDial(helpline)}
               activeOpacity={0.8}
             >
-              <Text style={[styles.testBtnText, { color: '#EF4444' }]}>
-                📞 Call
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Feather
+                  name="phone"
+                  size={12}
+                  color="#EF4444"
+                  style={{ marginRight: 4 }}
+                />
+                <Text style={[styles.testBtnText, { color: '#EF4444' }]}>
+                  Call
+                </Text>
+              </View>
             </TouchableOpacity>
           </View>
         ))}

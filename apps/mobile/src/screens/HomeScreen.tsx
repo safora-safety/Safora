@@ -39,6 +39,8 @@ import {
   ensureSocketConnected,
 } from '../services/socketService';
 import { navigationRef } from '../navigation/RootNavigator';
+import { Icon, Feather, FontAwesome5 } from '../components/common/Icon';
+import { getSafetyScoreColor } from '../utils';
 
 interface HomeScreenProps {
   onNavigateTab?: (
@@ -92,7 +94,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
           Vibration.vibrate([0, 400, 200, 400]);
           const walker = escort.walkerName || `Walker #${escort.userId}`;
           Alert.alert(
-            '🚶‍♀️ Live Safe Walk Detected',
+            'Live Safe Walk Detected',
             `${walker} is currently on an active Safe Walk escort session. Live GPS tracking is active!`,
             [
               { text: 'Later', style: 'cancel' },
@@ -129,7 +131,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
     }
   };
 
-  // Realtime guardian tracking listener (SYN-4)
+  // Realtime guardian tracking listener
   useEffect(() => {
     checkActiveEscort();
 
@@ -157,7 +159,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
       Vibration.vibrate([0, 300, 100, 300]);
       const walker = payload?.walkerName || 'Your contact';
       Alert.alert(
-        '🚶‍♀️ Live Safe Walk Started',
+        'Live Safe Walk Started',
         `${walker} has started a Safe Walk escort session. Live GPS tracking is active!`,
         [
           { text: 'Later', style: 'cancel' },
@@ -189,13 +191,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
           if (status === 'completed') {
             Vibration.vibrate(500);
             Alert.alert(
-              '✅ Safe Arrival Confirmed',
+              'Safe Arrival Confirmed',
               `${wName} has reached their destination safely! Safe Walk escort session completed.`,
             );
           } else if (status === 'cancelled') {
             Vibration.vibrate([0, 200, 100, 200]);
             Alert.alert(
-              '🛑 Safe Walk Cancelled',
+              'Safe Walk Cancelled',
               `${wName} has cancelled their Safe Walk session.`,
             );
           }
@@ -312,7 +314,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
   const handleSosPress = () => {
     if (isGuest) {
       Alert.alert(
-        '🔒 SOS Locked in Guest Mode',
+        'SOS Locked in Guest Mode',
         'Emergency SOS broadcasts live GPS, audio evidence, and notifies your emergency guardians.\n\nTo activate Emergency SOS and configure emergency contacts, please sign in or create an account.',
         [
           { text: 'Cancel', style: 'cancel' },
@@ -411,19 +413,19 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
 
     const mapsLink = `https://maps.google.com/?q=${coords.latitude.toFixed(5)},${coords.longitude.toFixed(5)}`;
     const body = encodeURIComponent(
-      `🚨 EMERGENCY SOS! I need immediate help. My live GPS coordinates: ${mapsLink} (${coords.areaName}) - Sent via SAFORA`,
+      `EMERGENCY SOS! I need immediate help. My live GPS coordinates: ${mapsLink} (${coords.areaName}) - Sent via SAFORA`,
     );
 
     // Dual Dispatch Dialog: Confirms online dispatch and offers direct carrier SMS
     Alert.alert(
-      '🚨 EMERGENCY SOS BROADCAST',
+      'EMERGENCY SOS BROADCAST',
       onlineSuccess
-        ? `Emergency broadcast transmitted!\n\n• 📍 GPS: ${coords.latitude.toFixed(4)}°N, ${coords.longitude.toFixed(4)}°E (${coords.areaName})\n• 🔔 ${contactsCount} guardian(s) alerted via push notification.\n• 🎙️ 30s ambient audio evidence is recording.\n\nOpen SMS now to send direct carrier text to ${contactName} (${targetPhone})?`
+        ? `Emergency broadcast transmitted!\n\n• GPS: ${coords.latitude.toFixed(4)}°N, ${coords.longitude.toFixed(4)}°E (${coords.areaName})\n• ${contactsCount} guardian(s) alerted via push notification.\n• 30s ambient audio evidence is recording.\n\nOpen SMS now to send direct carrier text to ${contactName} (${targetPhone})?`
         : `Network offline or server unreachable.\n\nImmediate cellular failover: Send emergency SMS to ${contactName} (${targetPhone}) now with live GPS coordinates?`,
       [
         { text: 'Dismiss', style: 'cancel' },
         {
-          text: '📱 Send Emergency SMS',
+          text: 'Send Emergency SMS',
           style: 'destructive',
           onPress: () => {
             Linking.openURL(`sms:${targetPhone}?body=${body}`).catch(() => {
@@ -445,7 +447,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
   const dispatchOfflineSmsSos = async () => {
     if (isGuest) {
       Alert.alert(
-        '🔒 Offline SOS Locked in Guest Mode',
+        'Offline SOS Locked in Guest Mode',
         'Offline SMS SOS broadcasts emergency coordinates to your registered emergency contacts.\n\nPlease sign in or create an account to configure contacts.',
         [
           { text: 'Cancel', style: 'cancel' },
@@ -481,7 +483,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
 
     const mapsLink = `https://maps.google.com/?q=${coords.latitude.toFixed(5)},${coords.longitude.toFixed(5)}`;
     const body = encodeURIComponent(
-      `🚨 EMERGENCY SOS! I need immediate help. My live GPS coordinates: ${mapsLink} (${coords.areaName}) - Sent via SAFORA`,
+      `EMERGENCY SOS! I need immediate help. My live GPS coordinates: ${mapsLink} (${coords.areaName}) - Sent via SAFORA`,
     );
     Linking.openURL(`sms:${targetPhone}?body=${body}`).catch(() => {
       Linking.openURL(`sms:?body=${body}`).catch(() => {
@@ -500,16 +502,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
   const triggerFakeCallWithDelay = (seconds: number) => {
     setFakeCallDelay(seconds);
     Alert.alert(
-      '⏱️ Escape Call Scheduled',
+      'Escape Call Scheduled',
       `Your phone will ring in ${seconds} seconds with a realistic incoming call. Place it in your pocket or hold it naturally.`,
       [{ text: 'OK' }],
     );
   };
 
   const getScoreColor = (score: number) => {
-    if (score >= 80) return colors.success;
-    if (score >= 50) return colors.warning;
-    return colors.danger;
+    return getSafetyScoreColor(score, colors);
   };
 
   return (
@@ -542,12 +542,18 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
             style={[
               styles.badge,
               isGuest ? styles.guestBadge : styles.memberBadge,
+              { flexDirection: 'row', alignItems: 'center', gap: 5 },
             ]}
           >
+            {isGuest ? (
+              <Feather name="user" size={11} color="#94A3B8" />
+            ) : (
+              <Feather name="shield" size={11} color="#10B981" />
+            )}
             <Text style={styles.badgeText}>
               {isGuest
-                ? '👤 GUEST MODE'
-                : `🛡️ ${user?.name?.split(' ')[0] || 'MEMBER'}`}
+                ? 'GUEST MODE'
+                : (user?.name?.split(' ')[0] || 'MEMBER').toUpperCase()}
             </Text>
           </View>
         </TouchableOpacity>
@@ -563,7 +569,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
           },
         ]}
       >
-        <Text style={styles.gpsIcon}>📍</Text>
+        <Feather
+          name="map-pin"
+          size={12}
+          color="#94A3B8"
+          style={{ marginRight: 6 }}
+        />
         <Text
           style={[styles.gpsText, { color: colors.textSecondary }]}
           numberOfLines={1}
@@ -578,7 +589,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
         </View>
       </View>
 
-      {/* Live Audio Streaming Status Banner with Waveform Equalizer (Phase 4) */}
+      {/* Live Audio Streaming Status Banner with Waveform Equalizer */}
       {isAudioRecording && (
         <View style={styles.audioBanner}>
           <AudioWaveformBars
@@ -624,7 +635,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
           />
         }
       >
-        {/* Active Guardian Live Escort Banner (SYN-4) */}
+        {/* Active Guardian Live Escort Banner */}
         {activeTrackedWalker && (
           <TouchableOpacity
             style={[
@@ -653,7 +664,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
             }}
           >
             <View style={styles.guardianLiveIconCircle}>
-              <Text style={{ fontSize: 20 }}>🚶‍♀️</Text>
+              <FontAwesome5 name="walking" size={18} color="#10B981" />
             </View>
             <View style={{ flex: 1, marginLeft: 12 }}>
               <View
@@ -686,7 +697,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
                 ]}
               >
                 {activeTrackedWalker.deviated
-                  ? '⚠️ Off safe route — Tap to track live'
+                  ? 'Off safe route — Tap to track live'
                   : 'Live GPS escort active — Tap to view map'}
               </Text>
             </View>
@@ -696,7 +707,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
           </TouchableOpacity>
         )}
 
-        {/* Live Community Safety Index Widget — 3 Render States (V1 SYN-1) */}
+        {/* Live Community Safety Index Widget */}
         {scoreStatus === 'loading' && (
           <View
             style={[
@@ -753,9 +764,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
                   loadSafetyScore(coords.latitude, coords.longitude)
                 }
               >
-                <Text style={[styles.retryBtnText, { color: colors.primary }]}>
-                  🔄 Retry
-                </Text>
+                <View
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}
+                >
+                  <Feather name="refresh-cw" size={12} color={colors.primary} />
+                  <Text
+                    style={[styles.retryBtnText, { color: colors.primary }]}
+                  >
+                    Retry
+                  </Text>
+                </View>
               </TouchableOpacity>
             </View>
           </View>
@@ -855,8 +873,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
           >
             <Text style={styles.sosHeading}>INSTANT EMERGENCY SOS</Text>
             {isGuest && (
-              <View style={styles.guestLockedBadge}>
-                <Text style={styles.guestLockedBadgeText}>🔒 GUEST LOCKED</Text>
+              <View
+                style={[
+                  styles.guestLockedBadge,
+                  { flexDirection: 'row', alignItems: 'center', gap: 4 },
+                ]}
+              >
+                <Feather name="lock" size={10} color="#F59E0B" />
+                <Text style={styles.guestLockedBadgeText}>GUEST LOCKED</Text>
               </View>
             )}
           </View>
@@ -882,11 +906,23 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
                 activeOpacity={0.85}
                 onPress={handleSosPress}
               >
-                <Text
-                  style={[styles.sosButtonText, isGuest && { fontSize: 26 }]}
+                <View
+                  style={{ alignItems: 'center', justifyContent: 'center' }}
                 >
-                  {isGuest ? '🔒 SOS' : 'SOS'}
-                </Text>
+                  {isGuest && (
+                    <Feather
+                      name="lock"
+                      size={18}
+                      color="#FFFFFF"
+                      style={{ marginBottom: 2 }}
+                    />
+                  )}
+                  <Text
+                    style={[styles.sosButtonText, isGuest && { fontSize: 24 }]}
+                  >
+                    SOS
+                  </Text>
+                </View>
                 <Text style={styles.sosButtonSubtext}>
                   {isGuest ? 'TAP TO UNLOCK' : 'PRESS FOR HELP'}
                 </Text>
@@ -909,10 +945,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
             onPress={dispatchOfflineSmsSos}
             activeOpacity={0.8}
           >
-            <Text style={styles.offlineSmsBtnIcon}>📡</Text>
+            <Feather name="radio" size={14} color="#38BDF8" />
             <Text style={styles.offlineSmsBtnText}>
               {isGuest
-                ? 'Offline SMS SOS 🔒 (Requires Account)'
+                ? 'Offline SMS SOS (Requires Account)'
                 : 'Offline SMS SOS (No Internet / Basements)'}
             </Text>
           </TouchableOpacity>
@@ -936,7 +972,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
         >
           <View style={styles.escapeHeaderRow}>
             <View style={styles.escapeIconCircle}>
-              <Text style={styles.escapeEmoji}>🛡️</Text>
+              <Feather name="shield" size={20} color="#38BDF8" />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[styles.escapeTitle, { color: colors.textPrimary }]}>
@@ -953,27 +989,39 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
 
           <View style={styles.escapeActionsRow}>
             <TouchableOpacity
-              style={styles.escapeBtnNow}
+              style={[
+                styles.escapeBtnNow,
+                { flexDirection: 'row', justifyContent: 'center', gap: 6 },
+              ]}
               onPress={triggerFakeCallNow}
               activeOpacity={0.8}
             >
-              <Text style={styles.escapeBtnNowText}>📞 Ring Call Now</Text>
+              <Feather name="phone-call" size={13} color="#070A11" />
+              <Text style={styles.escapeBtnNowText}>Ring Call Now</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.escapeBtnDelay}
+              style={[
+                styles.escapeBtnDelay,
+                { flexDirection: 'row', justifyContent: 'center', gap: 6 },
+              ]}
               onPress={() => triggerFakeCallWithDelay(15)}
               activeOpacity={0.8}
             >
-              <Text style={styles.escapeBtnDelayText}>⏱️ In 15s</Text>
+              <Feather name="clock" size={13} color="#F8FAFC" />
+              <Text style={styles.escapeBtnDelayText}>In 15s</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.decoyBtn}
+              style={[
+                styles.decoyBtn,
+                { flexDirection: 'row', justifyContent: 'center', gap: 6 },
+              ]}
               onPress={() => setShowDecoyCalculator(true)}
               activeOpacity={0.8}
             >
-              <Text style={styles.decoyBtnText}>🎭 Calculator Decoy</Text>
+              <Feather name="grid" size={13} color="#F59E0B" />
+              <Text style={styles.decoyBtnText}>Calculator Decoy</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -993,9 +1041,24 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
           onPress={togglePanicSiren}
           activeOpacity={0.8}
         >
-          <Text style={styles.panicSirenEmoji}>
-            {isSirenActive ? '🛑' : '📢'}
-          </Text>
+          <View
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              backgroundColor: isSirenActive
+                ? 'rgba(239, 68, 68, 0.25)'
+                : 'rgba(255, 255, 255, 0.08)',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Feather
+              name={isSirenActive ? 'stop-circle' : 'volume-2'}
+              size={22}
+              color={isSirenActive ? '#EF4444' : colors.primary}
+            />
+          </View>
           <View style={{ flex: 1 }}>
             <Text
               style={[
@@ -1046,28 +1109,36 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
         <View style={styles.gridContainer}>
           {[
             {
-              emoji: '🚶‍♀️',
+              iconName: 'walking',
+              iconFamily: 'fa' as const,
+              iconColor: '#10B981',
               title: 'Safe Walk',
               desc: 'Turn-by-turn road escort with arrival alert',
               action: 'Start Route →',
               tab: 'SafeWalk' as const,
             },
             {
-              emoji: '⚠️',
+              iconName: 'alert-triangle',
+              iconFamily: 'feather' as const,
+              iconColor: '#F59E0B',
               title: 'Report Hazard',
               desc: 'Pin broken lights with photo proof',
               action: 'Pin Hazard →',
               tab: 'Map' as const,
             },
             {
-              emoji: '🗺️',
+              iconName: 'map',
+              iconFamily: 'feather' as const,
+              iconColor: '#38BDF8',
               title: 'Live Heatmap',
               desc: 'Verified street safety scores & search bar',
               action: 'View Map →',
               tab: 'Map' as const,
             },
             {
-              emoji: '👥',
+              iconName: 'users',
+              iconFamily: 'feather' as const,
+              iconColor: '#A855F7',
               title: 'Guardian Network',
               desc: 'Emergency contacts & family notification loop',
               action: 'Manage →',
@@ -1086,7 +1157,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
               onPress={() => {
                 if (item.title === 'Report Hazard' && isGuest) {
                   Alert.alert(
-                    '🔒 Citizen Account Required',
+                    'Citizen Account Required',
                     'To maintain safety radar integrity and prevent false alarms, hazard reporting requires a registered citizen account.',
                     [
                       { text: 'Cancel', style: 'cancel' },
@@ -1108,7 +1179,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
                 );
               }}
             >
-              <Text style={styles.cardEmoji}>{item.emoji}</Text>
+              <View style={{ marginBottom: 8 }}>
+                <Icon
+                  family={item.iconFamily}
+                  name={item.iconName}
+                  size={24}
+                  color={item.iconColor}
+                />
+              </View>
               <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
                 {item.title}
               </Text>
@@ -1122,20 +1200,30 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
           ))}
         </View>
 
-        {/* Persistent Legal & Safety Disclaimer (SEC-4) */}
+        {/* Persistent Legal & Safety Disclaimer */}
         <View style={styles.persistentSafetyNote}>
-          <Text
-            style={[
-              styles.persistentSafetyNoteText,
-              { color: colors.textMuted },
-            ]}
+          <View
+            style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}
           >
-            ℹ️ Safora is a companion safety and virtual escort network.{' '}
-            <Text style={{ fontWeight: '700', color: colors.textSecondary }}>
-              Safora does not replace calling 112.
-            </Text>{' '}
-            In any immediate emergency, always dial 112 directly.
-          </Text>
+            <Feather
+              name="info"
+              size={14}
+              color={colors.textMuted}
+              style={{ marginTop: 2 }}
+            />
+            <Text
+              style={[
+                styles.persistentSafetyNoteText,
+                { color: colors.textMuted, flex: 1, textAlign: 'left' },
+              ]}
+            >
+              Safora is a companion safety and virtual escort network.{' '}
+              <Text style={{ fontWeight: '700', color: colors.textSecondary }}>
+                Safora does not replace calling 112.
+              </Text>{' '}
+              In any immediate emergency, always dial 112 directly.
+            </Text>
+          </View>
         </View>
       </ScrollView>
 
@@ -1143,7 +1231,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
       <FakeCallModal
         visible={showFakeCall}
         onClose={() => setShowFakeCall(false)}
-        callerName="Mom 🏠"
+        callerName="Mom"
         callerNumber="+91 98765 43210"
       />
 
@@ -1154,7 +1242,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateTab }) => {
         duressPin="9999"
       />
 
-      {/* Phase 4: 5-Second Emergency SOS Grace-Period Abort Overlay */}
+      {/* 5-Second Emergency SOS Grace-Period Abort Overlay */}
       <SosGracePeriodOverlay
         visible={sosCountdown !== null && sosCountdown > 0}
         countdown={sosCountdown || 0}

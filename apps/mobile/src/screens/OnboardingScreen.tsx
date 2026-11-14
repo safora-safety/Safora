@@ -17,13 +17,16 @@ import { colors } from '../theme/colors';
 import { useAuthStore } from '../store/authStore';
 import { AudioRecorderService } from '../services/audioRecorderService';
 import { MicrophoneConsentModal } from '../components/emergency/MicrophoneConsentModal';
+import { Icon, IconFamily } from '../components/common/Icon';
 
 const { width } = Dimensions.get('window');
 
 interface Slide {
   id: string;
   badge: string;
-  emoji: string;
+  iconName: string;
+  iconFamily: IconFamily;
+  regular?: boolean;
   title: string;
   subtitle: string;
   description: string;
@@ -34,7 +37,8 @@ const SLIDES: Slide[] = [
   {
     id: '1',
     badge: 'COMMUNITY SAFETY SHIELD',
-    emoji: '🛡️',
+    iconName: 'shield',
+    iconFamily: 'feather',
     title: 'Welcome to SAFORA',
     subtitle: 'Your Personal Safety Companion',
     description:
@@ -44,7 +48,8 @@ const SLIDES: Slide[] = [
   {
     id: '2',
     badge: 'SAFETY RADAR & 10KM CACHE',
-    emoji: '🗺️',
+    iconName: 'map',
+    iconFamily: 'feather',
     title: 'Live Radar & Maps',
     subtitle: 'Satellite, Street & Offline Views',
     description:
@@ -54,7 +59,8 @@ const SLIDES: Slide[] = [
   {
     id: '3',
     badge: 'VIRTUAL ESCORT',
-    emoji: '🚶‍♀️',
+    iconName: 'walking',
+    iconFamily: 'fa',
     title: 'Safe Walk Escort',
     subtitle: 'Never Walk Alone',
     description:
@@ -64,7 +70,9 @@ const SLIDES: Slide[] = [
   {
     id: '4',
     badge: 'LOW-INTERNET RESILIENT',
-    emoji: '🚨',
+    iconName: 'bell',
+    iconFamily: 'fa',
+    regular: true,
     title: 'Instant SOS & Decoy',
     subtitle: 'Zero-Internet Safety Fallbacks',
     description:
@@ -176,7 +184,13 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
             <View
               style={[styles.visualCircle, { borderColor: slide.accentColor }]}
             >
-              <Text style={styles.slideEmoji}>{slide.emoji}</Text>
+              <Icon
+                name={slide.iconName}
+                family={slide.iconFamily}
+                regular={slide.regular}
+                size={54}
+                color={slide.accentColor}
+              />
             </View>
 
             <View style={styles.badgeBox}>

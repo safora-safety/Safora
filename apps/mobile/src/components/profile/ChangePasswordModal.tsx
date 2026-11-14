@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
 import { AuthService } from '../../services/authService';
+import { Feather } from '../common/Icon';
 
 interface ChangePasswordModalProps {
   visible: boolean;
@@ -81,7 +82,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
       resetForm();
       onClose();
       Alert.alert(
-        '🔐 Password Updated',
+        'Password Updated',
         res.message || 'Your account password has been successfully changed.',
         [{ text: 'OK' }],
       );
@@ -119,7 +120,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
           <View style={[styles.header, { borderBottomColor: colors.border }]}>
             <View style={styles.headerTitleRow}>
               <View style={styles.iconCircle}>
-                <Text style={styles.keyEmoji}>🔐</Text>
+                <Feather name="key" size={18} color="#6366F1" />
               </View>
               <View>
                 <Text style={[styles.title, { color: colors.textPrimary }]}>
@@ -133,19 +134,25 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
               </View>
             </View>
             <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
-              <Text
-                style={[styles.closeBtnText, { color: colors.textSecondary }]}
-              >
-                ✕
-              </Text>
+              <Feather name="x" size={18} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
           {/* Form */}
           <View style={styles.formContainer}>
             {formError && (
-              <View style={styles.errorBanner}>
-                <Text style={styles.errorIcon}>⚠️</Text>
+              <View
+                style={[
+                  styles.errorBanner,
+                  { flexDirection: 'row', alignItems: 'center' },
+                ]}
+              >
+                <Feather
+                  name="alert-triangle"
+                  size={14}
+                  color="#EF4444"
+                  style={{ marginRight: 6 }}
+                />
                 <Text style={styles.errorText}>{formError}</Text>
               </View>
             )}
@@ -177,7 +184,11 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
                   onPress={() => setShowOld(!showOld)}
                   style={styles.eyeBtn}
                 >
-                  <Text style={styles.eyeIcon}>{showOld ? '👁️' : '🔒'}</Text>
+                  <Feather
+                    name={showOld ? 'eye' : 'eye-off'}
+                    size={16}
+                    color="#94A3B8"
+                  />
                 </TouchableOpacity>
               </View>
             </View>
@@ -209,7 +220,11 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
                   onPress={() => setShowNew(!showNew)}
                   style={styles.eyeBtn}
                 >
-                  <Text style={styles.eyeIcon}>{showNew ? '👁️' : '🔒'}</Text>
+                  <Feather
+                    name={showNew ? 'eye' : 'eye-off'}
+                    size={16}
+                    color="#94A3B8"
+                  />
                 </TouchableOpacity>
               </View>
             </View>
@@ -241,9 +256,11 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
                   onPress={() => setShowConfirm(!showConfirm)}
                   style={styles.eyeBtn}
                 >
-                  <Text style={styles.eyeIcon}>
-                    {showConfirm ? '👁️' : '🔒'}
-                  </Text>
+                  <Feather
+                    name={showConfirm ? 'eye' : 'eye-off'}
+                    size={16}
+                    color="#94A3B8"
+                  />
                 </TouchableOpacity>
               </View>
             </View>

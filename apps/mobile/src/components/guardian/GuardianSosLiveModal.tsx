@@ -15,6 +15,7 @@ import {
   guardianSosService,
   GuardianSosState,
 } from '../../services/guardianSosService';
+import { Feather } from '../common/Icon';
 
 export const GuardianSosLiveModal: React.FC = () => {
   const insets = useSafeAreaInsets();
@@ -167,9 +168,17 @@ export const GuardianSosLiveModal: React.FC = () => {
           style={[styles.miniBeacon, { transform: [{ scale: pulseAnim }] }]}
         />
         <View style={styles.miniTextCol}>
-          <Text style={styles.miniTitle} numberOfLines={1}>
-            🚨 SOS: {activeEmergency.userName || 'Companion'}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Feather
+              name="alert-triangle"
+              size={13}
+              color="#EF4444"
+              style={{ marginRight: 5 }}
+            />
+            <Text style={styles.miniTitle} numberOfLines={1}>
+              SOS: {activeEmergency.userName || 'Companion'}
+            </Text>
+          </View>
           <Text style={styles.miniSub}>
             {activeEmergency.audioUrl
               ? '30s Recording Ready • Tap to Expand'
@@ -180,7 +189,11 @@ export const GuardianSosLiveModal: React.FC = () => {
           onPress={() => guardianSosService.toggleMute()}
           style={styles.miniMuteBtn}
         >
-          <Text style={styles.miniMuteText}>{isMuted ? '🔇' : '🔊'}</Text>
+          <Feather
+            name={isMuted ? 'volume-x' : 'volume-2'}
+            size={14}
+            color="#FFFFFF"
+          />
         </TouchableOpacity>
       </TouchableOpacity>
     );
@@ -221,7 +234,12 @@ export const GuardianSosLiveModal: React.FC = () => {
 
           {/* Ward Name & Status */}
           <View style={styles.wardCard}>
-            <Text style={styles.wardEmoji}>🛡️</Text>
+            <Feather
+              name="shield"
+              size={18}
+              color="#10B981"
+              style={{ marginRight: 10 }}
+            />
             <View style={styles.wardInfoCol}>
               <Text style={styles.wardName} numberOfLines={1}>
                 {activeEmergency.userName || 'Person You Protect'}
@@ -229,7 +247,7 @@ export const GuardianSosLiveModal: React.FC = () => {
               <Text style={styles.wardStatus}>
                 Needs immediate assistance &bull;{' '}
                 {activeEmergency.batteryPercentage !== undefined
-                  ? `⚡ ${activeEmergency.batteryPercentage}% Battery`
+                  ? `${activeEmergency.batteryPercentage}% Battery`
                   : 'Safety Signal Active'}
               </Text>
             </View>
@@ -260,9 +278,11 @@ export const GuardianSosLiveModal: React.FC = () => {
                 ]}
                 onPress={() => guardianSosService.toggleMute()}
               >
-                <Text style={styles.muteToggleIcon}>
-                  {isMuted ? '🔇' : '🔊'}
-                </Text>
+                <Feather
+                  name={isMuted ? 'volume-x' : 'volume-2'}
+                  size={16}
+                  color="#FFFFFF"
+                />
                 <Text style={styles.muteToggleText}>
                   {isMuted ? 'Unmute' : 'Mute'}
                 </Text>
@@ -352,9 +372,12 @@ export const GuardianSosLiveModal: React.FC = () => {
                   }
                 }}
               >
-                <Text style={styles.masterPlayIcon}>
-                  {isMasterPlaying ? '⏸️' : '▶️'}
-                </Text>
+                <Feather
+                  name={isMasterPlaying ? 'pause' : 'play'}
+                  size={15}
+                  color="#FFFFFF"
+                  style={{ marginRight: 6 }}
+                />
                 <Text style={styles.masterPlayText}>
                   {isMasterPlaying
                     ? `Pause Master Audio (${masterPlaybackSeconds}s / 30s)`
@@ -371,7 +394,12 @@ export const GuardianSosLiveModal: React.FC = () => {
               onPress={openNavigation}
               activeOpacity={0.85}
             >
-              <Text style={styles.actionBtnIcon}>📍</Text>
+              <Feather
+                name="navigation"
+                size={18}
+                color="#FFFFFF"
+                style={{ marginRight: 8 }}
+              />
               <View style={styles.actionBtnTextCol}>
                 <Text style={styles.primaryActionText}>
                   Navigate to Live Location
@@ -391,7 +419,12 @@ export const GuardianSosLiveModal: React.FC = () => {
                   onPress={callCompanion}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.secondaryBtnIcon}>📞</Text>
+                  <Feather
+                    name="phone"
+                    size={15}
+                    color="#10B981"
+                    style={{ marginRight: 6 }}
+                  />
                   <Text style={styles.secondaryBtnText}>Call Companion</Text>
                 </TouchableOpacity>
               )}
@@ -401,7 +434,12 @@ export const GuardianSosLiveModal: React.FC = () => {
                 onPress={callPolice}
                 activeOpacity={0.8}
               >
-                <Text style={styles.secondaryBtnIcon}>🚓</Text>
+                <Feather
+                  name="shield"
+                  size={15}
+                  color="#EF4444"
+                  style={{ marginRight: 6 }}
+                />
                 <Text style={styles.secondaryBtnText}>Call 112</Text>
               </TouchableOpacity>
             </View>

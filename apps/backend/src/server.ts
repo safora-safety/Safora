@@ -68,7 +68,7 @@ async function startServer(): Promise<void> {
       console.warn("[WARN] Background system diagnostics deferred:", diagErr);
     }
 
-    // Initialize server-side deviation watchdog (SYN-5)
+    // Initialize server-side deviation watchdog
     try {
       await WatchdogService.initialize();
       WatchdogService.startTick();

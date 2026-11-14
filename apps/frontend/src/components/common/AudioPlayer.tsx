@@ -8,6 +8,7 @@ import {
   RotateCcw,
   RotateCw,
   Sparkles,
+  AlertCircle,
 } from 'lucide-react';
 
 interface AudioPlayerProps {
@@ -28,7 +29,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
   const [isMuted, setIsMuted] = useState(false);
   const [loadError, setLoadError] = useState(false);
 
-  // Phase 2: Web Audio Voice Clarity & Noise Reduction DSP
+  // Web Audio Voice Clarity & Noise Reduction DSP
   const [isVoiceClarityEnabled, setIsVoiceClarityEnabled] = useState(() => {
     try {
       return localStorage.getItem('safora_voice_clarity') !== 'false';
@@ -412,8 +413,9 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
       />
 
       {loadError ? (
-        <div className="text-xs text-amber-400 py-1 font-mono">
-          ⚠️ Unable to stream audio directly. Use Direct Link above.
+        <div className="text-xs text-amber-400 py-1 font-mono flex items-center gap-1.5">
+          <AlertCircle className="w-3.5 h-3.5 inline text-amber-400" />
+          <span>Unable to stream audio directly. Use Direct Link above.</span>
         </div>
       ) : (
         <div className="space-y-2.5">

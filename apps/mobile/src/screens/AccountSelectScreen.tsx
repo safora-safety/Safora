@@ -12,6 +12,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore, SavedProfile } from '../store/authStore';
 import { colors } from '../theme/colors';
+import { Feather } from '../components/common/Icon';
 
 interface AccountSelectScreenProps {
   navigation: any;
@@ -72,7 +73,7 @@ export const AccountSelectScreen: React.FC<AccountSelectScreenProps> = ({
       {/* Ambient Top Glow Header */}
       <View style={styles.header}>
         <View style={styles.shieldGlow}>
-          <Text style={styles.shieldEmoji}>🛡️</Text>
+          <Feather name="shield" size={26} color="#10B981" />
         </View>
         <Text style={styles.appTitle}>SAFORA</Text>
         <Text style={styles.tagline}>Who is using SAFORA?</Text>
@@ -104,7 +105,7 @@ export const AccountSelectScreen: React.FC<AccountSelectScreenProps> = ({
                     onPress={() => handleConfirmDelete(profile)}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
-                    <Text style={styles.removeBadgeText}>✕</Text>
+                    <Feather name="x" size={10} color="#FFFFFF" />
                   </TouchableOpacity>
                 </TouchableOpacity>
                 <Text style={styles.profileName} numberOfLines={1}>
@@ -124,7 +125,7 @@ export const AccountSelectScreen: React.FC<AccountSelectScreenProps> = ({
               activeOpacity={0.8}
               onPress={handleEnterGuest}
             >
-              <Text style={styles.guestIcon}>👤</Text>
+              <Feather name="user" size={24} color="#94A3B8" />
             </TouchableOpacity>
             <Text style={styles.profileName}>Guest</Text>
             <Text style={styles.profileSub}>Explore Mode</Text>
@@ -154,12 +155,25 @@ export const AccountSelectScreen: React.FC<AccountSelectScreenProps> = ({
       {/* Bottom Actions & Tour Option */}
       <View style={styles.footer}>
         <TouchableOpacity
-          style={styles.tourButton}
+          style={[
+            styles.tourButton,
+            {
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+            },
+          ]}
           onPress={() => navigation.navigate('Onboarding')}
           activeOpacity={0.8}
         >
+          <Feather
+            name="compass"
+            size={14}
+            color="#60A5FA"
+            style={{ marginRight: 6 }}
+          />
           <Text style={styles.tourButtonText}>
-            ✨ View App Tour & Safety Features →
+            View App Tour & Safety Features →
           </Text>
         </TouchableOpacity>
 

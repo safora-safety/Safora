@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
 import { typography } from '../../theme/typography';
+import { Feather } from '../common/Icon';
 
 interface FloatingSearchCapsuleProps {
   searchQuery: string;
@@ -55,7 +56,7 @@ export const FloatingSearchCapsule: React.FC<FloatingSearchCapsuleProps> = ({
     >
       {/* Search Pin / Icon */}
       <View style={styles.iconContainer}>
-        <Text style={styles.iconEmoji}>📍</Text>
+        <Feather name="map-pin" size={16} color={colors.primary} />
       </View>
 
       {/* Input Field */}
@@ -90,9 +91,7 @@ export const FloatingSearchCapsule: React.FC<FloatingSearchCapsuleProps> = ({
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           accessibilityLabel="Clear search text"
         >
-          <Text style={[styles.clearIcon, { color: colors.textSecondary }]}>
-            ✕
-          </Text>
+          <Feather name="x" size={16} color={colors.textSecondary} />
         </TouchableOpacity>
       ) : safetyScore !== null ? (
         /* Integrated Safety Score Ring Meter */

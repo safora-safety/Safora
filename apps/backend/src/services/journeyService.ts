@@ -13,9 +13,12 @@ import {
   broadcastJourneyEnded,
 } from "../sockets/journeySocket";
 
-// Default corridor deviation sensitivity is 100m (configurable dynamically via Admin Panel)
+// Default corridor deviation sensitivity is 150m (matches Cockpit HUD '150m SAFE CORRIDOR ACTIVE')
 let dynamicCorridorThresholdMeters =
-  Number(process.env.CORRIDOR_THRESHOLD_METERS) || 100;
+  Number(process.env.CORRIDOR_THRESHOLD_METERS) || 150;
+
+// In-memory deviation snooze map: journeyId -> snoozeUntilTimestamp (ms)
+const journeyDeviationSnooze = new Map<number, number>();
 
 /**
  * Compute metric distance from point P to line segment AB using Equirectangular projection
@@ -223,8 +226,8 @@ export class JourneyService {
 
     const jId = Number(journeyId);
 
-    // TRK-1: Persist live breadcrumb record with optional telemetry
-    // TODO(V2): order by recorded_at, not arrival order
+    // Persist live breadcrumb record with optional telemetry
+    // Future optimization: order breadcrumbs by recorded_at timestamp
     await JourneyRepository.insertBreadcrumb(
       jId,
       coords.latitude,
@@ -256,6 +259,25 @@ export class JourneyService {
         Math.sin(deltaLambda / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     const distToDest = Math.round(R * c);
+
+    // Haversine distance from origin (for departure grace zone)
+    let distFromOrigin = Infinity;
+    if (row.origin_lat != null && row.origin_lng != null) {
+      const origPhi1 = (coords.latitude * Math.PI) / 180;
+      const origPhi2 = (Number(row.origin_lat) * Math.PI) / 180;
+      const origDeltaPhi =
+        ((Number(row.origin_lat) - coords.latitude) * Math.PI) / 180;
+      const origDeltaLambda =
+        ((Number(row.origin_lng) - coords.longitude) * Math.PI) / 180;
+      const origA =
+        Math.sin(origDeltaPhi / 2) * Math.sin(origDeltaPhi / 2) +
+        Math.cos(origPhi1) *
+          Math.cos(origPhi2) *
+          Math.sin(origDeltaLambda / 2) *
+          Math.sin(origDeltaLambda / 2);
+      const origC = 2 * Math.atan2(Math.sqrt(origA), Math.sqrt(1 - origA));
+      distFromOrigin = Math.round(R * origC);
+    }
 
     // Compute minimum perpendicular distance to the safe corridor
     const CORRIDOR_THRESHOLD_METERS = dynamicCorridorThresholdMeters;
@@ -309,11 +331,24 @@ export class JourneyService {
       minDistanceToCorridor = 0;
     }
 
-    const deviationMeters = Math.round(minDistanceToCorridor);
-    const isDeviated = deviationMeters > CORRIDOR_THRESHOLD_METERS;
+    // 1. Departure buffer (150m from origin) & Arrival buffer (80m from destination)
+    if (distFromOrigin <= 150 || distToDest <= 80) {
+      minDistanceToCorridor = 0;
+    }
+
+    // 2. Check if deviation alerts are snoozed by user confirmation
+    const snoozedUntil = journeyDeviationSnooze.get(jId) || 0;
+    const isSnoozed = Date.now() < snoozedUntil;
+
+    let deviationMeters = Math.round(minDistanceToCorridor);
+    let isDeviated = !isSnoozed && deviationMeters > CORRIDOR_THRESHOLD_METERS;
+    if (isSnoozed) {
+      deviationMeters = 0;
+      isDeviated = false;
+    }
     const status: "active" | "deviated" = isDeviated ? "deviated" : "active";
 
-    // Fetch walker name for guardian live view (SYN-4)
+    // Fetch walker name for guardian live view
     const walker = await UserRepository.findById(row.user_id);
 
     // Synchronize status and watchdog deviation state
@@ -356,7 +391,7 @@ export class JourneyService {
       }
     }
 
-    // Emit realtime socket event (TRK-2 / SYN-4)
+    // Emit realtime socket event
     broadcastJourneyLocation({
       journeyId: jId,
       userId: row.user_id,
@@ -404,6 +439,7 @@ export class JourneyService {
       true,
     );
 
+    journeyDeviationSnooze.delete(Number(journeyId));
     WatchdogService.unregisterJourney(Number(journeyId));
 
     broadcastJourneyEnded({
@@ -461,6 +497,7 @@ export class JourneyService {
       true,
     );
 
+    journeyDeviationSnooze.delete(Number(journeyId));
     WatchdogService.unregisterJourney(Number(journeyId));
 
     broadcastJourneyEnded({
@@ -512,6 +549,8 @@ export class JourneyService {
     }
 
     const jId = Number(journeyId);
+    // Snooze corridor deviation alerts for 3 minutes upon confirming safe
+    journeyDeviationSnooze.set(jId, Date.now() + 3 * 60 * 1000);
     await JourneyRepository.clearDeviatedAt(jId);
     if (row.status === "deviated") {
       await JourneyRepository.setStatus(jId, "active");

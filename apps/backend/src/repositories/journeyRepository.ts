@@ -92,7 +92,7 @@ export class JourneyRepository {
     return result.rows[0] || null;
   }
 
-  // --- V1: Breadcrumb persistence (TRK-1) ---
+  // --- Breadcrumb persistence ---
 
   static async insertBreadcrumb(
     journeyId: number,
@@ -122,7 +122,7 @@ export class JourneyRepository {
     );
   }
 
-  // --- V1: Watchdog state (SYN-5) ---
+  // --- Watchdog state ---
 
   static async setDeviatedAt(journeyId: number, date: Date): Promise<void> {
     await db.query(`UPDATE journeys SET deviated_at = $2 WHERE id = $1;`, [

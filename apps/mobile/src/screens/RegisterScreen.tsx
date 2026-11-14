@@ -14,6 +14,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useAuthStore } from '../store/authStore';
 import { GoogleLogo } from '../components/common/GoogleLogo';
+import { Feather } from '../components/common/Icon';
 
 interface RegisterScreenProps {
   navigation: any;
@@ -139,7 +140,12 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
         {/* Error Notification */}
         {displayError && (
           <View style={styles.errorBox}>
-            <Text style={styles.errorIcon}>⚠️</Text>
+            <Feather
+              name="alert-triangle"
+              size={14}
+              color="#EF4444"
+              style={{ marginRight: 6 }}
+            />
             <Text style={styles.errorText}>{displayError}</Text>
             <TouchableOpacity
               onPress={() => {
@@ -148,7 +154,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
               }}
               style={styles.errorDismiss}
             >
-              <Text style={styles.errorDismissText}>✕</Text>
+              <Feather name="x" size={14} color="#94A3B8" />
             </TouchableOpacity>
           </View>
         )}
@@ -190,7 +196,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
                     isEmailValid(email) ? styles.validText : styles.invalidText,
                   ]}
                 >
-                  {isEmailValid(email) ? '✓ Valid' : '✕ Invalid format'}
+                  {isEmailValid(email) ? 'Valid' : 'Invalid format'}
                 </Text>
               )}
             </View>
@@ -269,7 +275,11 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
                 style={styles.eyeBtn}
                 onPress={() => setShowPassword(p => !p)}
               >
-                <Text style={styles.eyeIcon}>{showPassword ? '🙈' : '👁️'}</Text>
+                <Feather
+                  name={showPassword ? 'eye-off' : 'eye'}
+                  size={18}
+                  color="#94A3B8"
+                />
               </TouchableOpacity>
             </View>
             {/* Strength Bar */}
@@ -306,7 +316,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
                     isMatch ? styles.validText : styles.invalidText,
                   ]}
                 >
-                  {isMatch ? '✓ Matches' : '✕ Passwords differ'}
+                  {isMatch ? 'Matches' : 'Passwords differ'}
                 </Text>
               )}
             </View>
@@ -332,9 +342,11 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
                 style={styles.eyeBtn}
                 onPress={() => setShowConfirmPassword(p => !p)}
               >
-                <Text style={styles.eyeIcon}>
-                  {showConfirmPassword ? '🙈' : '👁️'}
-                </Text>
+                <Feather
+                  name={showConfirmPassword ? 'eye-off' : 'eye'}
+                  size={18}
+                  color="#94A3B8"
+                />
               </TouchableOpacity>
             </View>
           </View>

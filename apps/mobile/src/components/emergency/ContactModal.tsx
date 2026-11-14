@@ -15,6 +15,7 @@ import {
 import { useTheme } from '../../theme/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SosService } from '../../services/sosService';
+import { Feather, FontAwesome5 } from '../common/Icon';
 
 export interface EditableContact {
   id?: string;
@@ -189,9 +190,7 @@ export const ContactModal: React.FC<ContactModalProps> = ({
               </Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Text style={[styles.closeText, { color: colors.textMuted }]}>
-                ✕
-              </Text>
+              <Feather name="x" size={20} color={colors.textMuted} />
             </TouchableOpacity>
           </View>
 
@@ -200,8 +199,19 @@ export const ContactModal: React.FC<ContactModalProps> = ({
             showsVerticalScrollIndicator={false}
           >
             {formError && (
-              <View style={styles.errorBox}>
-                <Text style={styles.errorText}>⚠️ {formError}</Text>
+              <View
+                style={[
+                  styles.errorBox,
+                  { flexDirection: 'row', alignItems: 'center' },
+                ]}
+              >
+                <Feather
+                  name="alert-triangle"
+                  size={14}
+                  color="#EF4444"
+                  style={{ marginRight: 6 }}
+                />
+                <Text style={styles.errorText}>{formError}</Text>
               </View>
             )}
 
@@ -282,18 +292,41 @@ export const ContactModal: React.FC<ContactModalProps> = ({
               />
               {/* Dynamic Safora Account Badge */}
               {hasAccount === true && (
-                <View style={styles.badgeSuccess}>
-                  <Text style={styles.badgeSuccessText}>
-                    🟢 Registered on Safora ({guardianName || 'Active Account'})
-                    • In-app push notifications enabled!
+                <View
+                  style={[
+                    styles.badgeSuccess,
+                    { flexDirection: 'row', alignItems: 'center' },
+                  ]}
+                >
+                  <FontAwesome5
+                    name="check-circle"
+                    regular
+                    size={13}
+                    color="#10B981"
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text style={[styles.badgeSuccessText, { flex: 1 }]}>
+                    Registered on Safora ({guardianName || 'Active Account'}) •
+                    In-app push notifications enabled!
                   </Text>
                 </View>
               )}
               {hasAccount === false && (
-                <View style={styles.badgeWarning}>
-                  <Text style={styles.badgeWarningText}>
-                    📱 Direct SMS Only • Guardian is not registered on Safora
-                    yet. They will receive cellular SMS text alerts.
+                <View
+                  style={[
+                    styles.badgeWarning,
+                    { flexDirection: 'row', alignItems: 'center' },
+                  ]}
+                >
+                  <Feather
+                    name="message-square"
+                    size={13}
+                    color="#F59E0B"
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text style={[styles.badgeWarningText, { flex: 1 }]}>
+                    Direct SMS Only • Guardian is not registered on Safora yet.
+                    They will receive cellular SMS text alerts.
                   </Text>
                 </View>
               )}

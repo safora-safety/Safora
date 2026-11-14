@@ -71,7 +71,7 @@ export async function seedRealAdminData(): Promise<void> {
     // ── 4. 50 REAL-WORLD VERIFIED HAZARDS WITH REAL TIMESTAMPS, PHOTOS & NOTES ──
     const hazards = [
       // ═════════════════════════════════════════════════════════════════════════
-      // 📍 DEHRADUN CITY & CAMPUS HUBS (PRIMARY HUB — 26 LOCATIONS)
+      // DEHRADUN CITY & CAMPUS HUBS (PRIMARY HUB — 26 LOCATIONS)
       // ═════════════════════════════════════════════════════════════════════════
       {
         category: "isolated_area",
@@ -473,7 +473,7 @@ export async function seedRealAdminData(): Promise<void> {
       },
 
       // ═════════════════════════════════════════════════════════════════════════
-      // 📍 UTTARAKHAND SATELLITES & HILL CORRIDORS (6 LOCATIONS)
+      // UTTARAKHAND SATELLITES & HILL CORRIDORS (6 LOCATIONS)
       // ═════════════════════════════════════════════════════════════════════════
       {
         category: "road_hazard",
@@ -567,7 +567,7 @@ export async function seedRealAdminData(): Promise<void> {
       },
 
       // ═════════════════════════════════════════════════════════════════════════
-      // 📍 MAJOR PAN-INDIA METRO SAFETY HOTSPOTS (18 LOCATIONS)
+      // MAJOR PAN-INDIA METRO SAFETY HOTSPOTS (18 LOCATIONS)
       // ═════════════════════════════════════════════════════════════════════════
       {
         category: "isolated_area",

@@ -20,6 +20,8 @@ import {
   PlusCircle,
   MapPin,
   Calendar,
+  Check,
+  X,
 } from 'lucide-react';
 
 export const HazardsPage: React.FC = () => {
@@ -573,9 +575,10 @@ export const HazardsPage: React.FC = () => {
                       handleModerateSingle(inspectedReport.id, 'active');
                       setInspectedReport(null);
                     }}
-                    className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors"
+                    className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors flex items-center gap-1.5"
                   >
-                    ✓ Approve
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Approve</span>
                   </button>
                 )}
                 {inspectedReport.status !== 'fake' && (
@@ -584,9 +587,10 @@ export const HazardsPage: React.FC = () => {
                       handleModerateSingle(inspectedReport.id, 'fake');
                       setInspectedReport(null);
                     }}
-                    className="px-3 py-1.5 rounded-lg bg-red-600/80 hover:bg-red-600 text-white text-xs font-semibold transition-colors"
+                    className="px-3 py-1.5 rounded-lg bg-red-600/80 hover:bg-red-600 text-white text-xs font-semibold transition-colors flex items-center gap-1.5"
                   >
-                    ✕ Dismiss Fake
+                    <X className="w-3.5 h-3.5" />
+                    <span>Dismiss Fake</span>
                   </button>
                 )}
                 {inspectedReport.status !== 'duplicate' && (

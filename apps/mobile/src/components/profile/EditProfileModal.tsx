@@ -15,6 +15,7 @@ import {
 import { useTheme } from '../../theme/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../store/authStore';
+import { Feather } from '../common/Icon';
 
 interface EditProfileModalProps {
   visible: boolean;
@@ -146,19 +147,21 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
               ]}
               accessibilityLabel="Close"
             >
-              <Text
-                style={[styles.closeBtnText, { color: colors.textSecondary }]}
-              >
-                ✕
-              </Text>
+              <Feather name="x" size={18} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
           {/* Guest Notice */}
           {isGuest && (
-            <View style={styles.guestNotice}>
+            <View
+              style={[
+                styles.guestNotice,
+                { flexDirection: 'row', alignItems: 'center', gap: 6 },
+              ]}
+            >
+              <Feather name="info" size={13} color="#F59E0B" />
               <Text style={styles.guestNoticeText}>
-                ℹ️ Guest Mode: Changes are saved locally on this device.
+                Guest Mode: Changes are saved locally on this device.
               </Text>
             </View>
           )}

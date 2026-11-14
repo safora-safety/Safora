@@ -1,6 +1,6 @@
 import React from 'react';
 import { Modal } from '../common/Modal';
-import { PlusCircle } from 'lucide-react';
+import { PlusCircle, MapPin, Crosshair } from 'lucide-react';
 
 interface HazardDispatchModalProps {
   isOpen: boolean;
@@ -134,9 +134,10 @@ export const HazardDispatchModal: React.FC<HazardDispatchModalProps> = ({
               onChangeLatitude('30.3165');
               onChangeLongitude('78.0322');
             }}
-            className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-[10px] text-indigo-300 font-mono border border-white/5"
+            className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-[10px] text-indigo-300 font-mono border border-white/5 flex items-center gap-1"
           >
-            📍 Dehradun City (30.3165, 78.0322)
+            <MapPin className="w-3 h-3 text-indigo-400" />
+            <span>Dehradun City (30.3165, 78.0322)</span>
           </button>
           <button
             type="button"
@@ -148,9 +149,10 @@ export const HazardDispatchModal: React.FC<HazardDispatchModalProps> = ({
                 });
               }
             }}
-            className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-[10px] text-emerald-300 font-mono border border-white/5"
+            className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-[10px] text-emerald-300 font-mono border border-white/5 flex items-center gap-1"
           >
-            🎯 My Location
+            <Crosshair className="w-3 h-3 text-emerald-400" />
+            <span>My Location</span>
           </button>
         </div>
 

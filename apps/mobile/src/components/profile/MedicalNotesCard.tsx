@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
+import { Feather } from '../common/Icon';
 
 interface MedicalNotesCardProps {
   bloodGroup?: string | null;
@@ -28,7 +29,10 @@ export const MedicalNotesCard: React.FC<MedicalNotesCardProps> = ({
       activeOpacity={0.8}
     >
       <View style={styles.medicalHeader}>
-        <Text style={styles.medicalTitle}>🩸 Emergency Medical Info</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Feather name="activity" size={15} color="#EF4444" />
+          <Text style={styles.medicalTitle}>Emergency Medical Info</Text>
+        </View>
         <Text style={[styles.medicalActionText, { color: colors.primary }]}>
           Update ›
         </Text>

@@ -33,7 +33,7 @@ export const OfflineFailoverBanner: React.FC<OfflineFailoverBannerProps> = ({
         <WifiOff className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />
         <div>
           <span className="font-bold text-amber-300">
-            ⚠️ Real-Time Dispatch Connection Interrupted:
+            Real-Time Dispatch Connection Interrupted:
           </span>{' '}
           Reconnecting to live WebSocket grid... Displaying verified local cache.
         </div>

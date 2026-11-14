@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/authStore';
 import { GoogleLogo } from '../components/common/GoogleLogo';
+import { Feather } from '../components/common/Icon';
 
 interface AuthScreenProps {
   navigation: any;
@@ -266,8 +267,19 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
         {/* Error Notification */}
         {displayError && (
-          <View style={styles.errorBox}>
-            <Text style={styles.errorText}>⚠️ {displayError}</Text>
+          <View
+            style={[
+              styles.errorBox,
+              { flexDirection: 'row', alignItems: 'center' },
+            ]}
+          >
+            <Feather
+              name="alert-triangle"
+              size={14}
+              color="#EF4444"
+              style={{ marginRight: 6 }}
+            />
+            <Text style={styles.errorText}>{displayError}</Text>
           </View>
         )}
 
@@ -299,7 +311,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                     isEmailValid(email) ? styles.tagValid : styles.tagInvalid,
                   ]}
                 >
-                  {isEmailValid(email) ? '✓ Valid' : '✕ Invalid'}
+                  {isEmailValid(email) ? 'Valid' : 'Invalid'}
                 </Text>
               )}
             </View>
@@ -401,14 +413,26 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
           {/* Low / No Internet Offline Emergency Entry */}
           <TouchableOpacity
-            style={styles.offlineEntryBtn}
+            style={[
+              styles.offlineEntryBtn,
+              {
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+              },
+            ]}
             onPress={async () => {
               await enterAsGuest();
               navigation.navigate('MainTabs');
             }}
             activeOpacity={0.8}
           >
-            <Text style={styles.offlineEntryIcon}>📶</Text>
+            <Feather
+              name="wifi-off"
+              size={16}
+              color="#60A5FA"
+              style={{ marginRight: 8 }}
+            />
             <Text style={styles.offlineEntryText}>
               In low or no internet? Continue with Offline Safety Shield →
             </Text>

@@ -2,6 +2,7 @@ import React, { Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
+import { AlertTriangle } from 'lucide-react';
 import { Navbar } from './components/common/Navbar';
 import { Sidebar } from './components/common/Sidebar';
 import { CommandPalette } from './components/common/CommandPalette';
@@ -64,7 +65,9 @@ export class ErrorBoundary extends React.Component<
       return (
         <div className="min-h-screen bg-obsidian-950 flex flex-col items-center justify-center p-6 text-white font-mono">
           <div className="p-6 rounded-2xl bg-red-950/80 border border-red-500/50 max-w-2xl w-full space-y-4 shadow-2xl">
-            <h2 className="text-lg font-bold text-red-400">⚠️ SAFORA Application Runtime Error</h2>
+            <h2 className="text-lg font-bold text-red-400 flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-red-400 inline" /> SAFORA Application Runtime Error
+            </h2>
             <p className="text-xs text-red-200">{this.state.error?.message}</p>
             <pre className="text-[11px] p-4 rounded-xl bg-black/60 overflow-x-auto text-red-300 max-h-60">
               {this.state.error?.stack}

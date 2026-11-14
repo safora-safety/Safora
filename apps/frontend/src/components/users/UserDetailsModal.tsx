@@ -8,6 +8,8 @@ import {
   Calendar,
   ShieldCheck,
   UserCheck,
+  Check,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface UserDetailsModalProps {
@@ -81,11 +83,13 @@ export const UserDetailsModal: React.FC<UserDetailsModalProps> = ({
             </span>
             {user.termsAcceptedAt || user.terms_accepted_at ? (
               <span className="text-emerald-400 font-mono text-[11px] font-bold flex items-center gap-1">
-                ✓ Signed ({new Date(user.termsAcceptedAt || user.terms_accepted_at!).toLocaleDateString()})
+                <Check className="w-3.5 h-3.5 inline text-emerald-400" />
+                <span>Signed ({new Date(user.termsAcceptedAt || user.terms_accepted_at!).toLocaleDateString()})</span>
               </span>
             ) : (
-              <span className="text-amber-400 font-mono text-[11px] font-bold">
-                ⚠️ Pending / Not Signed
+              <span className="text-amber-400 font-mono text-[11px] font-bold flex items-center gap-1">
+                <AlertTriangle className="w-3.5 h-3.5 inline text-amber-400" />
+                <span>Pending / Not Signed</span>
               </span>
             )}
           </div>

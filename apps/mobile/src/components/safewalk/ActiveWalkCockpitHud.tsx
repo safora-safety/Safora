@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
 import { typography } from '../../theme/typography';
+import { Feather } from '../common/Icon';
 
 interface ActiveWalkCockpitHudProps {
   distanceMeters: number;
@@ -88,6 +89,21 @@ export const ActiveWalkCockpitHud: React.FC<ActiveWalkCockpitHudProps> = ({
               },
             ]}
           />
+          {isDeviated ? (
+            <Feather
+              name="alert-triangle"
+              size={13}
+              color={colors.danger}
+              style={{ marginRight: 6 }}
+            />
+          ) : (
+            <Feather
+              name="shield"
+              size={13}
+              color={colors.brandEmerald}
+              style={{ marginRight: 6 }}
+            />
+          )}
           <Text
             style={[
               styles.statusText,
@@ -97,8 +113,8 @@ export const ActiveWalkCockpitHud: React.FC<ActiveWalkCockpitHudProps> = ({
             ]}
           >
             {isDeviated
-              ? `⚠️ DEVIATION: ${deviationCountdown}s TO DISPATCH`
-              : '🛡️ 150m SAFE CORRIDOR ACTIVE'}
+              ? `DEVIATION: ${deviationCountdown}s TO DISPATCH`
+              : '150m SAFE CORRIDOR ACTIVE'}
           </Text>
         </View>
 

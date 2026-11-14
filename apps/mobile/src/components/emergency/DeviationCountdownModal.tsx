@@ -10,6 +10,7 @@ import {
   StatusBar,
 } from 'react-native';
 import { typography } from '../../theme/typography';
+import { FontAwesome5 } from '../common/Icon';
 
 export interface DeviationCountdownModalProps {
   visible: boolean;
@@ -138,7 +139,13 @@ export const DeviationCountdownModal: React.FC<
               accessibilityRole="button"
               accessibilityLabel="I Am Safe. Cancel emergency countdown"
             >
-              <Text style={styles.disarmButtonIcon}>✅</Text>
+              <FontAwesome5
+                name="check-circle"
+                regular
+                size={26}
+                color="#FFFFFF"
+                style={{ marginRight: 12 }}
+              />
               <View style={styles.btnTextCol}>
                 <Text style={styles.disarmButtonMainText}>
                   I AM SAFE (CANCEL ALERT)
@@ -157,7 +164,13 @@ export const DeviationCountdownModal: React.FC<
               accessibilityRole="button"
               accessibilityLabel="Need Help Now. Immediately send Emergency SOS"
             >
-              <Text style={styles.escalateButtonIcon}>🚨</Text>
+              <FontAwesome5
+                name="bell"
+                regular
+                size={26}
+                color="#FFFFFF"
+                style={{ marginRight: 12 }}
+              />
               <View style={styles.btnTextCol}>
                 <Text style={styles.escalateButtonMainText}>
                   NEED HELP NOW (SEND SOS)

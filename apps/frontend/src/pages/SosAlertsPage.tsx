@@ -560,9 +560,10 @@ export const SosAlertsPage: React.FC = () => {
                             </span>
                             <button
                               onClick={unlockAudio}
-                              className="px-2.5 py-1 rounded bg-amber-500 hover:bg-amber-400 text-black font-bold text-[11px] transition-all shadow"
+                              className="px-2.5 py-1 rounded bg-amber-500 hover:bg-amber-400 text-black font-bold text-[11px] transition-all shadow flex items-center gap-1"
                             >
-                              🔊 Enable Audio
+                              <Volume2 className="w-3.5 h-3.5" />
+                              <span>Enable Audio</span>
                             </button>
                           </div>
                         )}

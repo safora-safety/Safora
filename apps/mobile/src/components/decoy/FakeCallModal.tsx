@@ -16,6 +16,7 @@ import {
   FakeCallLanguage,
 } from '../../services/FakeCallService';
 import { typography } from '../../theme/typography';
+import { Icon, Feather, FontAwesome5 } from '../common/Icon';
 
 interface FakeCallModalProps {
   visible: boolean;
@@ -27,7 +28,7 @@ interface FakeCallModalProps {
 export const FakeCallModal: React.FC<FakeCallModalProps> = ({
   visible,
   onClose,
-  callerName = 'Mom 🏠',
+  callerName = 'Mom',
   callerNumber = '+91 98765 43210',
 }) => {
   const insets = useSafeAreaInsets();
@@ -165,14 +166,27 @@ export const FakeCallModal: React.FC<FakeCallModalProps> = ({
                   onPress={() => selectLanguage('en')}
                   activeOpacity={0.7}
                 >
-                  <Text
-                    style={[
-                      styles.langPillText,
-                      language === 'en' && styles.langPillTextActive,
-                    ]}
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 5,
+                    }}
                   >
-                    🇺🇸 English
-                  </Text>
+                    <Feather
+                      name="globe"
+                      size={12}
+                      color={language === 'en' ? '#0F172A' : '#94A3B8'}
+                    />
+                    <Text
+                      style={[
+                        styles.langPillText,
+                        language === 'en' && styles.langPillTextActive,
+                      ]}
+                    >
+                      English
+                    </Text>
+                  </View>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -183,22 +197,41 @@ export const FakeCallModal: React.FC<FakeCallModalProps> = ({
                   onPress={() => selectLanguage('hi')}
                   activeOpacity={0.7}
                 >
-                  <Text
-                    style={[
-                      styles.langPillText,
-                      language === 'hi' && styles.langPillTextActive,
-                    ]}
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 5,
+                    }}
                   >
-                    🇮🇳 Hindi
-                  </Text>
+                    <Feather
+                      name="globe"
+                      size={12}
+                      color={language === 'hi' ? '#0F172A' : '#94A3B8'}
+                    />
+                    <Text
+                      style={[
+                        styles.langPillText,
+                        language === 'hi' && styles.langPillTextActive,
+                      ]}
+                    >
+                      Hindi
+                    </Text>
+                  </View>
                 </TouchableOpacity>
               </View>
             </View>
 
             {/* Quick Actions Note */}
             <View style={styles.tipBox}>
+              <Feather
+                name="info"
+                size={14}
+                color="#60A5FA"
+                style={{ marginRight: 6 }}
+              />
               <Text style={styles.tipText}>
-                💡 Tap Accept to simulate a real conversation and exit safely.
+                Tap Accept to simulate a real conversation and exit safely.
               </Text>
             </View>
 
@@ -211,7 +244,7 @@ export const FakeCallModal: React.FC<FakeCallModalProps> = ({
                 accessibilityRole="button"
                 accessibilityLabel="Decline incoming call"
               >
-                <Text style={styles.btnIcon}>📞</Text>
+                <Feather name="phone-off" size={26} color="#FFFFFF" />
                 <Text style={styles.btnLabel}>Decline</Text>
               </TouchableOpacity>
 
@@ -222,7 +255,7 @@ export const FakeCallModal: React.FC<FakeCallModalProps> = ({
                 accessibilityRole="button"
                 accessibilityLabel="Accept incoming call"
               >
-                <Text style={styles.btnIcon}>📞</Text>
+                <Feather name="phone" size={26} color="#FFFFFF" />
                 <Text style={styles.btnLabel}>Accept</Text>
               </TouchableOpacity>
             </View>
@@ -241,16 +274,16 @@ export const FakeCallModal: React.FC<FakeCallModalProps> = ({
                 {formatDuration(callSeconds)}
               </Text>
               <Text style={styles.connectedLangBadge}>
-                {language === 'hi' ? '🇮🇳 Hindi Script' : '🇺🇸 English Script'} •{' '}
-                {isSpeaker ? '🔊 Speakerphone' : '👂 Earpiece Mode'}
+                {language === 'hi' ? 'Hindi Script' : 'English Script'} •{' '}
+                {isSpeaker ? 'Speakerphone' : 'Earpiece Mode'}
               </Text>
 
               {/* Conversational Escape Teleprompter Script */}
               <View style={styles.teleprompterCard}>
                 <Text style={styles.teleprompterTitle}>
                   {language === 'hi'
-                    ? '🗣️ बात करने का सुझाव (Say this out loud):'
-                    : '🗣️ Suggested Natural Reply:'}
+                    ? 'बात करने का सुझाव (Say this out loud):'
+                    : 'Suggested Natural Reply:'}
                 </Text>
                 <Text style={styles.teleprompterScript}>
                   {language === 'hi'
@@ -270,14 +303,18 @@ export const FakeCallModal: React.FC<FakeCallModalProps> = ({
                 style={[styles.gridBtn, isMuted && styles.gridBtnActive]}
                 onPress={() => setIsMuted(!isMuted)}
               >
-                <Text style={styles.gridBtnEmoji}>🎤</Text>
+                <Feather
+                  name={isMuted ? 'mic-off' : 'mic'}
+                  size={22}
+                  color="#FFFFFF"
+                />
                 <Text style={styles.gridBtnLabel}>
                   {isMuted ? 'Muted' : 'Mute'}
                 </Text>
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.gridBtn}>
-                <Text style={styles.gridBtnEmoji}>⌨️</Text>
+                <Feather name="grid" size={22} color="#FFFFFF" />
                 <Text style={styles.gridBtnLabel}>Keypad</Text>
               </TouchableOpacity>
 
@@ -285,9 +322,11 @@ export const FakeCallModal: React.FC<FakeCallModalProps> = ({
                 style={[styles.gridBtn, isSpeaker && styles.gridBtnActive]}
                 onPress={toggleSpeaker}
               >
-                <Text style={styles.gridBtnEmoji}>
-                  {isSpeaker ? '🔊' : '👂'}
-                </Text>
+                <Feather
+                  name={isSpeaker ? 'volume-2' : 'volume-1'}
+                  size={22}
+                  color="#FFFFFF"
+                />
                 <Text style={styles.gridBtnLabel}>
                   {isSpeaker ? 'Speaker On' : 'Earpiece'}
                 </Text>
@@ -297,21 +336,19 @@ export const FakeCallModal: React.FC<FakeCallModalProps> = ({
                 style={styles.gridBtn}
                 onPress={() => selectLanguage(language === 'en' ? 'hi' : 'en')}
               >
-                <Text style={styles.gridBtnEmoji}>
-                  {language === 'hi' ? '🇮🇳' : '🇺🇸'}
-                </Text>
+                <FontAwesome5 name="globe" size={22} color="#FFFFFF" />
                 <Text style={styles.gridBtnLabel}>
                   {language === 'hi' ? 'Hindi' : 'English'}
                 </Text>
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.gridBtn}>
-                <Text style={styles.gridBtnEmoji}>📹</Text>
+                <Feather name="video" size={22} color="#FFFFFF" />
                 <Text style={styles.gridBtnLabel}>FaceTime</Text>
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.gridBtn}>
-                <Text style={styles.gridBtnEmoji}>👤</Text>
+                <Feather name="users" size={22} color="#FFFFFF" />
                 <Text style={styles.gridBtnLabel}>Contacts</Text>
               </TouchableOpacity>
             </View>
@@ -327,14 +364,7 @@ export const FakeCallModal: React.FC<FakeCallModalProps> = ({
                 onPress={handleDecline}
                 activeOpacity={0.8}
               >
-                <Text
-                  style={[
-                    styles.btnIcon,
-                    { transform: [{ rotate: '135deg' }] },
-                  ]}
-                >
-                  📞
-                </Text>
+                <Feather name="phone-off" size={28} color="#FFFFFF" />
                 <Text style={styles.btnLabel}>End</Text>
               </TouchableOpacity>
             </View>

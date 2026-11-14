@@ -14,6 +14,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useAuthStore } from '../store/authStore';
 import { GoogleLogo } from '../components/common/GoogleLogo';
+import { Feather } from '../components/common/Icon';
 
 interface LoginScreenProps {
   navigation: any;
@@ -117,7 +118,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
         {/* Error Notification Banner */}
         {displayError && (
           <View style={styles.errorBox}>
-            <Text style={styles.errorIcon}>⚠️</Text>
+            <Feather
+              name="alert-triangle"
+              size={14}
+              color="#EF4444"
+              style={{ marginRight: 6 }}
+            />
             <Text style={styles.errorText}>{displayError}</Text>
             <TouchableOpacity
               onPress={() => {
@@ -126,7 +132,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
               }}
               style={styles.errorDismiss}
             >
-              <Text style={styles.errorDismissText}>✕</Text>
+              <Feather name="x" size={14} color="#94A3B8" />
             </TouchableOpacity>
           </View>
         )}
@@ -146,7 +152,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
                     isEmailValid(email) ? styles.validText : styles.invalidText,
                   ]}
                 >
-                  {isEmailValid(email) ? '✓ Valid' : '✕ Incomplete'}
+                  {isEmailValid(email) ? 'Valid' : 'Incomplete'}
                 </Text>
               )}
             </View>
@@ -210,7 +216,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
                   showPassword ? 'Hide password' : 'Show password'
                 }
               >
-                <Text style={styles.eyeIcon}>{showPassword ? '🙈' : '👁️'}</Text>
+                <Feather
+                  name={showPassword ? 'eye-off' : 'eye'}
+                  size={18}
+                  color="#94A3B8"
+                />
               </TouchableOpacity>
             </View>
           </View>

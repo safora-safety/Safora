@@ -9,6 +9,7 @@ import {
   Platform,
 } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
+import { Feather, FontAwesome5 } from '../common/Icon';
 
 interface HoldToConfirmButtonProps {
   onConfirmed: () => void;
@@ -21,7 +22,7 @@ export const HoldToConfirmButton: React.FC<HoldToConfirmButtonProps> = ({
   onConfirmed,
   holdDurationMs = 1500,
   label = 'Hold 1.5s to End Walk',
-  confirmedLabel = 'Walk Completed! ✅',
+  confirmedLabel = 'Walk Completed!',
 }) => {
   const { colors } = useTheme();
   const [isHolding, setIsHolding] = useState(false);
@@ -98,9 +99,29 @@ export const HoldToConfirmButton: React.FC<HoldToConfirmButtonProps> = ({
         />
 
         <View style={styles.contentRow}>
-          <Text style={styles.buttonEmoji}>
-            {isCompleted ? '✅' : isHolding ? '⏳' : '🛡️'}
-          </Text>
+          {isCompleted ? (
+            <FontAwesome5
+              name="check-circle"
+              regular
+              size={18}
+              color="#FFFFFF"
+              style={{ marginRight: 8 }}
+            />
+          ) : isHolding ? (
+            <Feather
+              name="clock"
+              size={18}
+              color={colors.brandEmerald}
+              style={{ marginRight: 8 }}
+            />
+          ) : (
+            <Feather
+              name="shield"
+              size={18}
+              color={colors.textPrimary}
+              style={{ marginRight: 8 }}
+            />
+          )}
           <Text
             numberOfLines={1}
             adjustsFontSizeToFit={true}

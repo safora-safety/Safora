@@ -10,6 +10,28 @@ const SOCKET_URL = API_BASE_URL.replace(/\/api\/?$/, '');
 
 const activeRooms = new Set<string | number>();
 const activeSosRooms = new Set<string | number>();
+const eventListeners = new Map<string, Set<(payload: any) => void>>();
+
+function registerListener(
+  event: string,
+  cb: (payload: any) => void,
+): () => void {
+  if (!eventListeners.has(event)) {
+    eventListeners.set(event, new Set());
+  }
+  eventListeners.get(event)!.add(cb);
+
+  if (socket) {
+    socket.on(event, cb);
+  }
+
+  return () => {
+    eventListeners.get(event)?.delete(cb);
+    if (socket) {
+      socket.off(event, cb);
+    }
+  };
+}
 
 export async function ensureSocketConnected(
   timeoutMs = 4000,
@@ -75,7 +97,16 @@ export function connectSocket(jwt: string): Socket {
 
   socket.on('connect', () => {
     console.log('[Socket.IO Mobile] Connected to server:', socket?.id);
-    // Auto-rejoin rooms on reconnection
+
+    // Re-attach all registered listeners
+    eventListeners.forEach((callbacks, event) => {
+      callbacks.forEach(cb => {
+        socket?.off(event, cb);
+        socket?.on(event, cb);
+      });
+    });
+
+    // Auto-rejoin active journey & SOS rooms
     activeRooms.forEach(id => {
       socket?.emit('journey:join', { journeyId: id });
     });
@@ -121,39 +152,19 @@ export function leaveJourneyRoom(journeyId: number | string): void {
 }
 
 export function onJourneyLocation(cb: (payload: any) => void): () => void {
-  if (!socket) return () => {};
-
-  socket.on('journey:location', cb);
-  return () => {
-    socket?.off('journey:location', cb);
-  };
+  return registerListener('journey:location', cb);
 }
 
 export function onJourneyStart(cb: (payload: any) => void): () => void {
-  if (!socket) return () => {};
-
-  socket.on('journey:start', cb);
-  return () => {
-    socket?.off('journey:start', cb);
-  };
+  return registerListener('journey:start', cb);
 }
 
 export function onJourneyEnded(cb: (payload: any) => void): () => void {
-  if (!socket) return () => {};
-
-  socket.on('journey:ended', cb);
-  return () => {
-    socket?.off('journey:ended', cb);
-  };
+  return registerListener('journey:ended', cb);
 }
 
 export function onSosAlert(cb: (payload: any) => void): () => void {
-  if (!socket) return () => {};
-
-  socket.on('sos:alert', cb);
-  return () => {
-    socket?.off('sos:alert', cb);
-  };
+  return registerListener('sos:alert', cb);
 }
 
 export function emitSosAudioChunk(data: {
@@ -166,25 +177,15 @@ export function emitSosAudioChunk(data: {
   isLast: boolean;
 }): void {
   if (socket?.connected) {
-    console.log(
-      `[Socket.IO Mobile] Emitting live audio slice #${data.seq} for alert ${data.alertId}`,
-    );
     socket.emit('sos:audio_chunk', data);
   } else {
-    console.log(
-      `[Socket.IO Mobile] Socket not yet connected, queueing audio chunk #${data.seq} for alert ${data.alertId}`,
-    );
     pendingAudioChunks.push(data);
     ensureSocketConnected(4000).catch(() => {});
   }
 }
 
 export function onSosAudioChunkAck(cb: (payload: any) => void): () => void {
-  if (!socket) return () => {};
-  socket.on('sos:audio_chunk_ack', cb);
-  return () => {
-    socket?.off('sos:audio_chunk_ack', cb);
-  };
+  return registerListener('sos:audio_chunk_ack', cb);
 }
 
 export function joinSosAlertRoom(alertId: string | number): void {

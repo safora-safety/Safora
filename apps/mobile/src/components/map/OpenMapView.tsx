@@ -14,6 +14,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import WebView from 'react-native-webview';
+import { Feather } from '../common/Icon';
 
 export type MapLayerType = 'default' | 'tactical' | 'satellite' | 'street';
 
@@ -490,17 +491,17 @@ const generateHtml = (
           htmlIcon = '<div class="user-pulse"><div class="user-dot"></div></div>';
           iconSize = [32, 32];
           iconAnchor = [16, 16];
-        } else if (m.icon === '🚶‍♀️') {
-          htmlIcon = '<div class="walker-marker">🚶‍♀️</div>';
+        } else if (m.icon === 'walk' || m.icon === 'walking') {
+          htmlIcon = '<div class="walker-marker"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"></path><path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"></path></svg></div>';
           iconSize = [36, 36];
           iconAnchor = [18, 18];
-        } else if (m.icon === '📍') {
-          htmlIcon = '<div class="dest-marker">📍</div>';
+        } else if (m.icon === 'pin' || m.icon === 'dest') {
+          htmlIcon = '<div class="dest-marker"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg></div>';
           iconSize = [36, 36];
           iconAnchor = [18, 18];
         } else {
           var bg = m.color || '#F59E0B';
-          htmlIcon = '<div class="hazard-pin" style="background:' + bg + ';">' + (m.icon || '⚠️') + '</div>';
+          htmlIcon = '<div class="hazard-pin" style="background:' + bg + ';"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></div>';
         }
 
         var customIcon = L.divIcon({
@@ -856,15 +857,7 @@ export const OpenMapView = forwardRef<OpenMapViewRef, OpenMapViewProps>(
                     onPress={() => setIsLayerMenuOpen(false)}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
-                    <Text
-                      style={{
-                        color: '#94A3B8',
-                        fontSize: 13,
-                        fontWeight: '700',
-                      }}
-                    >
-                      ✕
-                    </Text>
+                    <Feather name="x" size={14} color="#94A3B8" />
                   </TouchableOpacity>
                 </View>
 
@@ -879,7 +872,12 @@ export const OpenMapView = forwardRef<OpenMapViewRef, OpenMapViewProps>(
                   }}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.layerOptionIcon}>⚡</Text>
+                  <Feather
+                    name="zap"
+                    size={14}
+                    color="#F59E0B"
+                    style={{ marginRight: 8 }}
+                  />
                   <Text
                     style={[
                       styles.layerOptionText,
@@ -901,7 +899,12 @@ export const OpenMapView = forwardRef<OpenMapViewRef, OpenMapViewProps>(
                   }}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.layerOptionIcon}>🛡️</Text>
+                  <Feather
+                    name="shield"
+                    size={14}
+                    color="#10B981"
+                    style={{ marginRight: 8 }}
+                  />
                   <Text
                     style={[
                       styles.layerOptionText,
@@ -924,7 +927,12 @@ export const OpenMapView = forwardRef<OpenMapViewRef, OpenMapViewProps>(
                   }}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.layerOptionIcon}>🛰️</Text>
+                  <Feather
+                    name="globe"
+                    size={14}
+                    color="#38BDF8"
+                    style={{ marginRight: 8 }}
+                  />
                   <Text
                     style={[
                       styles.layerOptionText,
@@ -947,7 +955,12 @@ export const OpenMapView = forwardRef<OpenMapViewRef, OpenMapViewProps>(
                   }}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.layerOptionIcon}>🛣️</Text>
+                  <Feather
+                    name="map"
+                    size={14}
+                    color="#6366F1"
+                    style={{ marginRight: 8 }}
+                  />
                   <Text
                     style={[
                       styles.layerOptionText,
@@ -964,15 +977,20 @@ export const OpenMapView = forwardRef<OpenMapViewRef, OpenMapViewProps>(
                 onPress={() => setIsLayerMenuOpen(true)}
                 activeOpacity={0.85}
               >
-                <Text style={styles.layerFabIcon}>
-                  {activeLayer === 'satellite'
-                    ? '🛰️'
-                    : activeLayer === 'street'
-                      ? '🛣️'
-                      : activeLayer === 'tactical'
-                        ? '🛡️'
-                        : '⚡'}
-                </Text>
+                <Feather
+                  name={
+                    activeLayer === 'satellite'
+                      ? 'globe'
+                      : activeLayer === 'street'
+                        ? 'map'
+                        : activeLayer === 'tactical'
+                          ? 'shield'
+                          : 'zap'
+                  }
+                  size={16}
+                  color="#FFFFFF"
+                  style={{ marginBottom: 2 }}
+                />
                 <Text style={styles.layerFabLabel}>
                   {activeLayer === 'satellite'
                     ? 'Satellite'

@@ -88,7 +88,7 @@ class NotificationService {
       const title =
         remoteMessage.notification?.title ||
         remoteMessage.data?.title ||
-        '🚨 Safora Alert';
+        'Safora Alert';
       const body =
         remoteMessage.notification?.body ||
         remoteMessage.data?.body ||

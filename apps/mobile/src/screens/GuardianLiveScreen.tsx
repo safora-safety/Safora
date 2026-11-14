@@ -16,12 +16,14 @@ import {
   MapMarkerItem,
 } from '../components/map/OpenMapView';
 import {
+  ensureSocketConnected,
   onJourneyLocation,
   onJourneyEnded,
   joinJourneyRoom,
   leaveJourneyRoom,
 } from '../services/socketService';
 import { JourneyService } from '../services/journeyService';
+import { Feather, FontAwesome5 } from '../components/common/Icon';
 import { useTheme } from '../theme/ThemeContext';
 
 interface GuardianLiveScreenProps {
@@ -103,9 +105,38 @@ export const GuardianLiveScreen: React.FC<GuardianLiveScreenProps> = ({
   }, [initialJourneyId]);
 
   useEffect(() => {
-    if (initialJourneyId) {
-      joinJourneyRoom(initialJourneyId);
-    }
+    // 1. Ensure socket connection is active and join the journey room
+    ensureSocketConnected(4000)
+      .then(() => {
+        if (initialJourneyId) {
+          joinJourneyRoom(initialJourneyId);
+        }
+      })
+      .catch(() => {});
+
+    // 2. Heartbeat polling fallback to keep live tracking synced even on spotty networks
+    const syncEscortLocation = () => {
+      JourneyService.getActiveEscort()
+        .then(escort => {
+          if (!escort) return;
+          const loc = escort.currentLocation || escort.lastLocation;
+          if (loc) {
+            const lat = Number(loc.latitude);
+            const lng = Number(loc.longitude);
+            if (!isNaN(lat) && !isNaN(lng) && (lat !== 0 || lng !== 0)) {
+              setCoords({ latitude: lat, longitude: lng });
+              setLastUpdated(new Date());
+            }
+          }
+          if (escort.status) {
+            setIsDeviated(escort.status === 'deviated');
+          }
+        })
+        .catch(() => {});
+    };
+
+    syncEscortLocation();
+    const pollInterval = setInterval(syncEscortLocation, 3500);
 
     const unsub = onJourneyLocation((payload: any) => {
       if (!payload) return;
@@ -157,7 +188,7 @@ export const GuardianLiveScreen: React.FC<GuardianLiveScreenProps> = ({
       ) {
         const isCompleted = payload.status === 'completed';
         Alert.alert(
-          isCompleted ? '🎉 Safe Arrival!' : '🛑 Safe Walk Ended',
+          isCompleted ? 'Safe Arrival!' : 'Safe Walk Ended',
           isCompleted
             ? `${walkerName} has reached their destination safely! Safe Walk escort session is complete.`
             : `${walkerName} has cancelled / ended their Safe Walk escort session.`,
@@ -167,6 +198,7 @@ export const GuardianLiveScreen: React.FC<GuardianLiveScreenProps> = ({
     });
 
     return () => {
+      clearInterval(pollInterval);
       if (initialJourneyId) {
         leaveJourneyRoom(initialJourneyId);
       }
@@ -183,7 +215,7 @@ export const GuardianLiveScreen: React.FC<GuardianLiveScreenProps> = ({
       title: `${walkerName} (Live GPS)`,
       description: isDeviated ? 'Route Deviation Warning' : 'Safe Walk Active',
       color: isDeviated ? '#EF4444' : '#10B981',
-      icon: '🚶‍♀️',
+      icon: 'walk',
       isUser: true,
     },
     ...(originCoord
@@ -193,7 +225,7 @@ export const GuardianLiveScreen: React.FC<GuardianLiveScreenProps> = ({
             latitude: originCoord.latitude,
             longitude: originCoord.longitude,
             title: 'Start Location',
-            icon: '🟢',
+            icon: 'pin',
             color: '#10B981',
           },
         ]
@@ -205,7 +237,7 @@ export const GuardianLiveScreen: React.FC<GuardianLiveScreenProps> = ({
             latitude: destCoord.latitude,
             longitude: destCoord.longitude,
             title: destCoord.name || 'Destination',
-            icon: '🏁',
+            icon: 'pin',
             color: '#EF4444',
           },
         ]
@@ -214,7 +246,7 @@ export const GuardianLiveScreen: React.FC<GuardianLiveScreenProps> = ({
 
   const handleCallEmergency = () => {
     Alert.alert(
-      '🚨 Dial Emergency 112',
+      'Dial Emergency 112',
       `Connect directly to national police and emergency response services for ${walkerName}?`,
       [
         { text: 'Cancel', style: 'cancel' },
@@ -282,16 +314,24 @@ export const GuardianLiveScreen: React.FC<GuardianLiveScreenProps> = ({
                 { backgroundColor: isDeviated ? '#EF4444' : '#10B981' },
               ]}
             />
-            <Text
-              style={[
-                styles.headerSubtitle,
-                { color: isDeviated ? '#EF4444' : colors.textSecondary },
-              ]}
-            >
-              {isDeviated
-                ? '⚠️ Off Route Corridor'
-                : '🛡️ Live Guardian Escort Active'}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Feather
+                name={isDeviated ? 'alert-triangle' : 'shield'}
+                size={12}
+                color={isDeviated ? '#EF4444' : '#10B981'}
+                style={{ marginRight: 4 }}
+              />
+              <Text
+                style={[
+                  styles.headerSubtitle,
+                  { color: isDeviated ? '#EF4444' : colors.textSecondary },
+                ]}
+              >
+                {isDeviated
+                  ? 'Off Route Corridor'
+                  : 'Live Guardian Escort Active'}
+              </Text>
+            </View>
           </View>
         </View>
 
@@ -306,15 +346,26 @@ export const GuardianLiveScreen: React.FC<GuardianLiveScreenProps> = ({
           onPress={handleCenter}
           accessibilityLabel="Center on Walker"
         >
-          <Text style={styles.centerBtnText}>🎯</Text>
+          <Feather name="crosshair" size={18} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
 
       {/* Warning banner if deviated */}
       {isDeviated && (
-        <View style={styles.deviationBanner}>
-          <Text style={styles.deviationBannerText}>
-            🚨 ALERT: {walkerName} has deviated from their safe corridor route!
+        <View
+          style={[
+            styles.deviationBanner,
+            { flexDirection: 'row', alignItems: 'center' },
+          ]}
+        >
+          <Feather
+            name="alert-triangle"
+            size={14}
+            color="#EF4444"
+            style={{ marginRight: 6 }}
+          />
+          <Text style={[styles.deviationBannerText, { flex: 1 }]}>
+            ALERT: {walkerName} has deviated from their safe corridor route!
           </Text>
         </View>
       )}
@@ -392,21 +443,35 @@ export const GuardianLiveScreen: React.FC<GuardianLiveScreenProps> = ({
               >
                 Battery
               </Text>
-              <Text
-                style={[
-                  styles.telemetryValue,
-                  {
-                    color:
-                      battery <= 20
-                        ? '#EF4444'
-                        : battery <= 40
-                          ? '#F59E0B'
-                          : '#10B981',
-                  },
-                ]}
-              >
-                🔋 {battery}%
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Feather
+                  name="battery"
+                  size={12}
+                  color={
+                    battery <= 20
+                      ? '#EF4444'
+                      : battery <= 40
+                        ? '#F59E0B'
+                        : '#10B981'
+                  }
+                  style={{ marginRight: 4 }}
+                />
+                <Text
+                  style={[
+                    styles.telemetryValue,
+                    {
+                      color:
+                        battery <= 20
+                          ? '#EF4444'
+                          : battery <= 40
+                            ? '#F59E0B'
+                            : '#10B981',
+                    },
+                  ]}
+                >
+                  {battery}%
+                </Text>
+              </View>
             </View>
           )}
 
@@ -439,11 +504,22 @@ export const GuardianLiveScreen: React.FC<GuardianLiveScreenProps> = ({
             onPress={handleCenter}
             activeOpacity={0.85}
           >
-            <Text
-              style={[styles.recenterButtonText, { color: colors.textPrimary }]}
-            >
-              🎯 Center Map
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Feather
+                name="crosshair"
+                size={14}
+                color={colors.textPrimary}
+                style={{ marginRight: 6 }}
+              />
+              <Text
+                style={[
+                  styles.recenterButtonText,
+                  { color: colors.textPrimary },
+                ]}
+              >
+                Center Map
+              </Text>
+            </View>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -451,7 +527,15 @@ export const GuardianLiveScreen: React.FC<GuardianLiveScreenProps> = ({
             onPress={handleCallEmergency}
             activeOpacity={0.85}
           >
-            <Text style={styles.emergencyButtonText}>🚨 Call 112</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Feather
+                name="alert-octagon"
+                size={14}
+                color="#FFFFFF"
+                style={{ marginRight: 6 }}
+              />
+              <Text style={styles.emergencyButtonText}>Call 112</Text>
+            </View>
           </TouchableOpacity>
         </View>
       </View>

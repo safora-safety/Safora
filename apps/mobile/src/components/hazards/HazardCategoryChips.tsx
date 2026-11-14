@@ -8,20 +8,49 @@ import {
 } from 'react-native';
 import { HazardCategory } from '@safora/shared-types';
 import { useTheme } from '../../theme/ThemeContext';
+import { Icon, IconFamily } from '../common/Icon';
 
 export interface CategoryOption {
   id: HazardCategory;
   label: string;
-  icon: string;
+  iconName: string;
+  iconFamily: IconFamily;
+  regular?: boolean;
 }
 
 export const HAZARD_CATEGORIES: CategoryOption[] = [
-  { id: 'lighting', label: 'Poor Lighting', icon: '💡' },
-  { id: 'road_hazard', label: 'Road Trench / Hazard', icon: '🚧' },
-  { id: 'waterlogging', label: 'Waterlogging', icon: '🌊' },
-  { id: 'isolated_area', label: 'Isolated Trail', icon: '🌲' },
-  { id: 'traffic', label: 'Traffic Danger', icon: '🚗' },
-  { id: 'other', label: 'Other Hazard', icon: '⚠️' },
+  {
+    id: 'lighting',
+    label: 'Poor Lighting',
+    iconName: 'lightbulb',
+    iconFamily: 'fa',
+    regular: true,
+  },
+  {
+    id: 'road_hazard',
+    label: 'Road Trench / Hazard',
+    iconName: 'road',
+    iconFamily: 'fa',
+  },
+  {
+    id: 'waterlogging',
+    label: 'Waterlogging',
+    iconName: 'droplet',
+    iconFamily: 'feather',
+  },
+  {
+    id: 'isolated_area',
+    label: 'Isolated Trail',
+    iconName: 'eye-off',
+    iconFamily: 'feather',
+  },
+  { id: 'traffic', label: 'Traffic Danger', iconName: 'car', iconFamily: 'fa' },
+  {
+    id: 'other',
+    label: 'Other Hazard',
+    iconName: 'alert-triangle',
+    iconFamily: 'feather',
+  },
 ];
 
 interface HazardCategoryChipsProps {
@@ -62,7 +91,15 @@ export const HazardCategoryChips: React.FC<HazardCategoryChipsProps> = ({
               onPress={() => onSelectCategory(cat.id)}
               activeOpacity={0.8}
             >
-              <Text style={styles.categoryIcon}>{cat.icon}</Text>
+              <View style={styles.categoryIconWrap}>
+                <Icon
+                  name={cat.iconName}
+                  family={cat.iconFamily}
+                  regular={cat.regular}
+                  size={18}
+                  color={category === cat.id ? '#38BDF8' : colors.textSecondary}
+                />
+              </View>
               <Text
                 style={[
                   styles.categoryLabel,
@@ -134,8 +171,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 4,
   },
-  categoryIcon: {
-    fontSize: 20,
+  categoryIconWrap: {
+    height: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   categoryLabel: {
     fontSize: 10,

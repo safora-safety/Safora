@@ -2,6 +2,7 @@
 // Grouped into semantic subfolders: common, decoy, emergency, hazards, map, profile
 
 export * from './common/GoogleLogo';
+export * from './common/Icon';
 export * from './decoy/CalculatorDecoyModal';
 export * from './decoy/FakeCallModal';
 export * from './emergency/ContactModal';

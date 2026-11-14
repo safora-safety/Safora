@@ -2,7 +2,7 @@ import React from 'react';
 import { User, UserRole } from '@safora/shared-types';
 import { Badge, BadgeVariant } from '../common/Badge';
 import { Pagination } from '../common/Pagination';
-import { RefreshCw, Eye, Shield, UserX } from 'lucide-react';
+import { RefreshCw, Eye, Shield, UserX, Check, AlertTriangle } from 'lucide-react';
 
 interface UserTableProps {
   users: User[];
@@ -109,12 +109,14 @@ export const UserTable: React.FC<UserTableProps> = ({
                           {isActive ? 'ACTIVE' : 'SUSPENDED'}
                         </Badge>
                         {user.termsAcceptedAt || user.terms_accepted_at ? (
-                          <span className="text-[10px] font-mono font-bold text-emerald-400">
-                            ✓ Terms Signed
+                          <span className="text-[10px] font-mono font-bold text-emerald-400 flex items-center gap-1">
+                            <Check className="w-3 h-3 inline text-emerald-400" />
+                            <span>Terms Signed</span>
                           </span>
                         ) : (
-                          <span className="text-[10px] font-mono text-amber-400">
-                            ⚠️ Terms Pending
+                          <span className="text-[10px] font-mono text-amber-400 flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3 inline text-amber-400" />
+                            <span>Terms Pending</span>
                           </span>
                         )}
                       </div>

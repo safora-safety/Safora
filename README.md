@@ -16,7 +16,7 @@
 
 ---
 
-## 🌟 Executive Summary
+## Executive Summary
 
 **SAFORA** is a community-powered personal safety navigation and emergency response platform designed for university campuses and urban corridors. While conventional navigation platforms optimize purely for distance and travel time, SAFORA empowers pedestrians—particularly women and students traveling after dark—to proactively evaluate route safety, share live journeys with trusted guardians, and dispatch instant SOS alerts backed by real-time audio evidence.
 
@@ -24,9 +24,9 @@ The platform combines crowdsourced hazard telemetry, PostGIS spatial clustering,
 
 ```mermaid
 flowchart TD
-    User(["👤 Mobile User (Walker / Student)"])
-    Guardian(["👥 Trusted Guardian (Family / Friend)"])
-    Admin(["🛡️ Operations Dispatcher (Web Admin)"])
+    User(["Mobile User (Walker / Student)"])
+    Guardian(["Trusted Guardian (Family / Friend)"])
+    Admin(["Operations Dispatcher (Web Admin)"])
 
     subgraph MobileApp ["Mobile Safety App (React Native + TypeScript)"]
         Radar["Geospatial Safety Radar & DBSCAN Heatmap"]
@@ -70,7 +70,7 @@ flowchart TD
 
 ---
 
-## 🚀 Core Platform Capabilities
+## Core Platform Capabilities
 
 ### 1. Geospatial Safety Radar & Community Telemetry
 * **Algorithmic Safety Score (0–100)**: Evaluates location risk combining hazard severity, proximity falloff, exponential time decay ($t_{\text{half}} = 24\text{h}$), and community confirmations.
@@ -104,7 +104,7 @@ flowchart TD
 
 ---
 
-## 🛠️ Technology Stack
+## Technology Stack
 
 | Layer | Technologies | Key Rationale |
 |---|---|---|
@@ -119,7 +119,7 @@ flowchart TD
 
 ---
 
-## 📊 Testing & Quality Assurance
+## Testing & Quality Assurance
 
 The codebase enforces rigorous automated test coverage and comprehensive manual physical device field verification:
 
@@ -141,7 +141,7 @@ npm test
 
 ---
 
-## ⚡ Quick Start & Local Setup
+## Quick Start & Local Setup
 
 ### 1. Prerequisites
 * **Node.js**: `v20.x` or `v22.x` & `npm`
@@ -184,7 +184,7 @@ npm run android
 
 ---
 
-## 📚 Documentation Index
+## Documentation Index
 
 Comprehensive documentation is structured into the following guides:
 
@@ -201,7 +201,7 @@ Comprehensive documentation is structured into the following guides:
 
 ---
 
-## 📄 License & Academic Attribution
+## License & Academic Attribution
 
 This project is developed as an academic Minor Project-I under the School of Engineering and Computing (SoEC), **Dev Bhoomi Uttarakhand University (DBUU)**, Dehradun.  
 All rights reserved by the project team and institution.

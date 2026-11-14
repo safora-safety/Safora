@@ -264,11 +264,11 @@ export const searchPlaces = async (
 
   const formatDistanceBadge = (d: number): string => {
     if (d <= 1500) {
-      return ` • 🚶 ${d}m walk`;
+      return ` • ${d}m walk`;
     } else if (d <= 6000) {
-      return ` • 🚶 ${(d / 1000).toFixed(1)} km walk`;
+      return ` • ${(d / 1000).toFixed(1)} km walk`;
     } else if (d <= 15000) {
-      return ` • 🚲 ${(d / 1000).toFixed(1)} km`;
+      return ` • ${(d / 1000).toFixed(1)} km`;
     }
     return ` • ${(d / 1000).toFixed(1)} km`;
   };
