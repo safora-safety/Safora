@@ -1,41 +1,62 @@
-# V3.4 — Research and Evaluation Framework
+# V3.4 – Research and Evaluation Framework
 
-> A way to decide *if and when* to pursue any V3 item, rather than a plan to build all three. Use this if you (or a future team) revisit V3 after V2 ships.
+> A way to decide *whether and when* to pursue any V3 item, not a plan to build all of them. Use it if the team, or a future one, revisits V3 after V2 ships.
 
-## 1. Gate questions before starting any V3 item
-Ask these in order — a "no" at any step means "not yet," not "never":
+## 1. Gate Questions Before Starting Any V3 Item
 
-1. **Is V2 actually stable and in real use?** None of the three V3 items make sense to attempt while the core product (accounts, tracking, triggers) is still being hardened — they'd be built on a moving foundation, and none of them are needed for Safora to be useful.
-2. **Does the prerequisite data exist yet?** Item 1 needs real hazard/audit history; item 3 needs a real photo corpus; item 2 needs none (it's independent), which is part of why it's the easiest to *scope* even though it's the hardest to *build*.
-3. **Is there a dedicated time budget separate from product maintenance?** All three are research-shaped work (uncertain timeline, need for evaluation against a baseline) — mixing them into ordinary feature sprints is how they either never finish or quietly degrade product quality.
-4. **Does it still match a real need?** Re-check against actual user feedback from V2's usage, not just the original synopsis wording — if usage data shows people don't struggle with route choice, item 1 may not be worth it regardless of feasibility.
+Ask these in order. A "no" at any step means "not yet", not "never".
 
-## 2. Scoring framework (use this to prioritise if pursuing more than one)
-Score each item 1 (low) – 5 (high) on:
+```mermaid
+flowchart TD
+    Q1{"1. Is V2 stable<br/>and in real use?"} -- no --> N["Not yet"]
+    Q1 -- yes --> Q2{"2. Does the prerequisite<br/>data exist?"}
+    Q2 -- no --> N
+    Q2 -- yes --> Q3{"3. Is there a dedicated time budget<br/>separate from maintenance?"}
+    Q3 -- no --> N
+    Q3 -- yes --> Q4{"4. Does it still match a real need<br/>(re-checked against V2 user feedback)?"}
+    Q4 -- no --> N
+    Q4 -- yes --> GO["Score it (section 2)<br/>and scope it as its own project"]
+```
 
-| Criterion | What it means |
+1. **Is V2 stable and in real use?** None of the three V3 items make sense while the core product (accounts, tracking, triggers) is still being hardened. They would be built on a moving foundation, and none of them is needed for Safora to be useful.
+2. **Does the prerequisite data exist?** Item 1 needs real hazard and audit history, item 3 needs a real photo corpus, and item 2 needs none (it is independent), which is part of why it is the easiest to *scope* even though it is the hardest to *build*.
+3. **Is there a dedicated time budget separate from product maintenance?** All three are research-shaped work (uncertain timeline, evaluation against a baseline). Mixing them into ordinary feature sprints is how they either never finish or quietly degrade product quality.
+4. **Does it still match a real need?** Re-check against actual user feedback from V2, not only the original synopsis wording. If usage shows that people do not struggle with route choice, item 1 may not be worth it regardless of feasibility.
+
+## 2. Scoring Framework
+
+Score each item from 1 (low) to 5 (high) on:
+
+| Criterion | Meaning |
 |---|---|
-| **Data readiness** | Does the labelled/training data already exist or is it realistic to gather soon? |
-| **Technical risk** | How likely is a competent attempt to actually work within a reasonable timeframe? |
-| **Free-tech compatibility** | Can it run without ongoing cost, matching your stated constraint? |
-| **User value if it works** | How much would it actually improve safety/usefulness, versus the rule-based/manual alternative already in V2? |
-| **Downside if it fails or is misused** | Cost of getting it wrong — a bad AI safe-route suggestion is embarrassing; a bad mesh-messaging security flaw or a false hazard auto-classification could actively mislead someone in danger |
+| **Data readiness** | Does the labelled or training data exist, or is it realistic to gather soon? |
+| **Technical risk** (lower risk scores higher) | How likely is a competent attempt to work in a reasonable time? |
+| **Free-technology compatibility** | Can it run without ongoing cost? |
+| **User value if it works** | How much would it improve safety or usefulness compared with the rule-based or manual alternative in V2? |
+| **Downside if it fails or is misused** (smaller downside scores higher) | The cost of getting it wrong. A poor AI route suggestion is embarrassing; a security flaw in mesh messaging or a false automatic classification could actively mislead someone in danger |
 
-A reasonable rule: don't start anything scoring below 3 on **Data readiness** or below 3 on **Free-tech compatibility** — those two are hard blockers for a solo/small-team, no-budget project, regardless of how good an idea looks otherwise.
+A sensible rule: **do not start anything that scores below 3 on Data readiness or below 3 on Free-technology compatibility.** Those two are hard blockers for a small, no-budget team, however good an idea looks otherwise.
 
-## 3. Suggested comparative scores (my assessment, re-score once you have real usage data)
-| Item | Data readiness | Technical risk (lower risk = higher score) | Free-tech compatibility | User value if it works | Downside if it fails |
+## 3. Suggested Comparative Scores
+
+These are an initial assessment; re-score with real usage data.
+
+| Item | Data readiness | Technical risk | Free-technology compatibility | User value | Downside if it fails |
 |---|:---:|:---:|:---:|:---:|:---:|
-| 1. AI safe-route (audit-weighted, §3a of `01-ai-safe-route-recommendation.md`) | 2 (needs audit data) | 4 | 5 | 4 | 2 (worst case: a bad suggestion, not a crisis) |
-| 2. Offline mesh messaging | 5 (no data needed) | 1 (genuinely hard) | 4 | 3 (narrow real-world benefit, per §5 of that file) | 4 (security/reliability failure could mislead someone in a real emergency) |
-| 3. AI hazard image detection (narrow/binary task) | 1 (no photo corpus yet) | 3 | 4 (on-device only) | 2 (nice-to-have, not core) | 2 (wrong auto-suggestion, user still confirms) |
+| 1. AI safe route (audit-weighted version, note 01 §3a) | 2 (needs audit data) | 4 | 5 | 4 | 2 (worst case: a poor suggestion) |
+| 2. Offline mesh messaging | 5 (no data needed) | 1 (genuinely hard) | 4 | 3 (narrow real-world benefit) | 4 (a security or reliability failure could mislead someone in an emergency) |
+| 3. AI hazard image detection (narrow binary task) | 1 (no photo corpus yet) | 3 | 4 (on-device only) | 2 (nice to have, not core) | 2 (a wrong suggestion; the user still confirms) |
+| 4. Voice-activated SOS (note 06) | 2 (needs recordings of the safe word) | 3 | 4 (on-device) | 4 (valuable when the phone cannot be touched) | 4 (false triggers or missed triggers affect trust) |
 
-Read this as: **item 1's audit-weighted version is the most realistic starting point once there's some audit data**, item 3's narrow version is a reasonable "someday, once there's a photo corpus" project, and **item 2 is the one to explicitly defer indefinitely** unless someone wants to make mesh networking itself the focus of a future project, separate from Safora's core product goals.
+Read this as follows. **The audit-weighted version of item 1 is the most realistic starting point once there is some audit data.** The narrow version of item 3 is a reasonable "someday" project once a photo corpus exists. Item 4 is attractive because V1 already provides the microphone service and the SOS pipeline, but it needs its own data collection and false-alarm testing. **Item 2 should be deferred indefinitely** unless someone wants to make mesh networking itself the focus of a future project, separate from Safora's core goals.
 
-## 4. What "success" would look like for each, if attempted
-- **Item 1:** a route ranking that measurably differs from the pure-hazard-density baseline and that a sample of real users rate as more trustworthy, evaluated with a held-out comparison, not just "it runs."
-- **Item 2:** a working one-hop (not full mesh) SOS relay, security-reviewed, tested in a real no-signal location, with an honest write-up of its actual range and reliability limits.
-- **Item 3:** a binary classifier with a documented precision/recall on a held-out test set, always shown as a suggestion, with a clear plan for what happens when it's wrong.
+## 4. What Success Would Look Like
 
-## 5. What not to do
-Don't let any V3 item become a way to avoid finishing V2. If faculty or reviewers ask "what about the AI/mesh features," the honest answer — "future scope, gated on data and time that V1/V2 don't have yet, here's the research and here's what would need to be true first" — is a stronger answer than a half-built version of any of them.
+- **Item 1:** a route ranking that measurably differs from the pure hazard-density baseline and that a sample of real users rate as more trustworthy, evaluated with a held-out comparison, not only "it runs".
+- **Item 2:** a working one-hop (not full mesh) SOS relay, security-reviewed, tested in a real no-signal location, with an honest write-up of its range and reliability limits.
+- **Item 3:** a binary classifier with documented precision and recall on a held-out test set, always shown as a suggestion, with a clear plan for when it is wrong.
+- **Item 4:** a documented false-accept and false-reject rate for the safe word across several voices, noise conditions and phone models, with measured battery cost.
+
+## 5. What Not to Do
+
+Do not let any V3 item become a way to avoid finishing V2. If reviewers ask about the AI, mesh or voice features, the honest answer is: *they are future scope, gated on data and time that V1 and V2 do not have yet; here is the research and here is what would need to be true first.* That is a stronger answer than a half-built version of any of them.

@@ -1,27 +1,47 @@
-# Safora Docs — V2 (Product)
+# Safora Documentation – Version 2 (Product)
 
-> Builds on `docs/v1/` (the college-submission version). No deadline pressure — this is the roadmap for turning the submission build into something you'd actually trust and let the public use.
+> V2 builds on [`../v1/`](../v1/README.md), the completed college release. It is the roadmap for turning the submission build into a product that can be trusted and offered to the public.
 >
-> **Updated 22 Sep 2026 & Oct 2026:** moderator role detailed with an abuse-flag queue (SEC-10), escalation ladder replacing simultaneous guardian broadcast (TRK-11), battery dead-man's switch (TRK-10), "walk with me" (TRK-12), scheduled walks (TRK-13), chat duress codeword (CHT-4), "safe stop" verified local spots (MAP-7b), reporter trust score (MAP-9c), duplicate detection (MAP-9d), photo EXIF check (MAP-9e), vibration-pattern accessibility (LOC-5), `parent-of` relationship (AGE-2), forensic evidentiary PDF dossier (ADM-4), municipal 112 ERSS & campus CAD connector (ADM-5), and `environmental-hazards.md` (weather + earthquake data, WX-1…WX-3). **Dropped:** `volunteer_responder` role and all institution-scoped features (your decision).
+> **Updated 22 September 2026 and October 2026:** the moderator role with an abuse-flag queue (SEC-10), an escalation ladder (TRK-11), a battery dead-man's switch (TRK-10), "walk with me" (TRK-12), scheduled walks (TRK-13), a chat duress code word (CHT-4), verified "safe stops" (MAP-7b), a reporter trust score (MAP-9c), duplicate detection (MAP-9d), a photo EXIF check (MAP-9e), vibration-pattern accessibility (LOC-5), a `parent-of` relationship (AGE-2), a forensic PDF dossier (ADM-4), a 112 ERSS and campus CAD connector (ADM-5), and weather and earthquake data (WX-1 to WX-3). **Dropped:** the `volunteer_responder` role and all institution-scoped features.
 
-## Files in this folder
+## What V2 Changes
 
-| File | Contents |
+V1 ships a deviation-only watchdog, a minimal guardian model without an accept step, no e-mail, no session hardening, no OpenFreeMap, no chat, and the existing MapTiler-based map and search. V2 replaces or extends every one of these.
+
+```mermaid
+flowchart LR
+    V1["V1 (complete)<br/>deviation watchdog,<br/>simple guardians,<br/>live audio"] --> M1["M1 Trust fixes"]
+    M1 --> M2["M2 Map quick wins"]
+    M2 --> M3["M3 Server-side escalation<br/>and guardian handshake"]
+    M3 --> CB(["Closed beta"])
+    CB --> M4["M4 Accounts for the public"]
+    M4 --> PB(["Public beta"])
+    PB --> M5["M5 Routing and voice"]
+    M5 --> M6["M6 No-unlock triggers"]
+    M6 --> PV1(["Public v1"])
+    PV1 --> M7["M7 Chat"]
+    M7 --> M8["M8 Local fit and readiness"]
+```
+
+## Document Index
+
+| Document | Contents |
 |---|---|
-| `roadmap.md` | Work items, capacity math, milestones/gates, cut list, risks, open questions (Phase 6 includes ADM-4 & ADM-5) |
-| `architecture-decisions.md` | ADR-001…018 — every major technical decision and why |
-| `api.md` | Index of every new/changed endpoint introduced in V2 (incl. CAD export / dispatch-feed) |
-| `database.md` | Index of every new table/column introduced in V2 |
-| `safety-and-tracking.md` | Guardians, alert fan-out, full watchdog, check-in timer, tracking link, on-device SMS, no-unlock SOS triggers, staged chat, forensic PDF dossier (ADM-4), and municipal 112 ERSS / CAD connector (ADM-5) |
-| `map-routing-search.md` | OpenFreeMap basemap, offline packs, search v2, per-mode routing, voice guidance, safest route, safe places (incl. verified "safe stops"), hazard alerts, trust score, duplicate detection |
-| `environmental-hazards.md` | Weather overlay (Open-Meteo), earthquake advisories (USGS), static seismic-zone weighting |
-| `accounts-email-local.md` | Brevo email, session hardening, account deletion, age policy, `parent-of` relationship, Hindi, Uttarakhand content, admin ops, medical card, **moderator role & abuse-flag queue** |
-| `security-privacy-compliance.md` | Threat model, data inventory, DPDP mapping (incl. children's data), anti-coercion rules, public-launch checklist |
-| `testing-and-beta.md` | Real-device matrix, scenario tests, CI gates, closed beta plan |
-| `references.md` | Every external source cited, `[R1]`…`[R61]`, and what's still to verify |
+| [`roadmap.md`](./roadmap.md) | Work items, capacity, milestones and gates, cut list, risks, open questions |
+| [`architecture-decisions.md`](./architecture-decisions.md) | ADR-001 to ADR-018: every major technical decision and its reasoning |
+| [`migration-plan.md`](./migration-plan.md) | How to move a running V1 system to V2 safely: data steps, switches, rollout and rollback |
+| [`api.md`](./api.md) | Index of the endpoints and events introduced in V2 |
+| [`database.md`](./database.md) | Index of the tables and columns introduced in V2, with a relationship diagram |
+| [`safety-and-tracking.md`](./safety-and-tracking.md) | Guardians, alert fan-out, full watchdog, check-in timer, tracking link, on-device SMS, no-unlock triggers, staged chat, forensic PDF and CAD connector |
+| [`map-routing-search.md`](./map-routing-search.md) | OpenFreeMap basemap, offline packs, search v2, per-mode routing, voice guidance, safest route, safe places, hazard alerts, trust score, duplicate detection |
+| [`environmental-hazards.md`](./environmental-hazards.md) | Weather overlay (Open-Meteo), earthquake advisories (USGS), static seismic-zone weighting |
+| [`accounts-email-local.md`](./accounts-email-local.md) | Brevo e-mail, session hardening, account deletion, age policy, Hindi, Uttarakhand content, admin operations, medical card, moderator role |
+| [`security-privacy-compliance.md`](./security-privacy-compliance.md) | Threat model, data inventory, DPDP mapping (including children's data), anti-coercion rules, public-launch checklist |
+| [`testing-and-beta.md`](./testing-and-beta.md) | Device matrix, scenario tests, CI gates, closed beta plan |
+| [`references.md`](./references.md) | Every external source, `[R1]` to `[R72]`, and what is still to verify |
 
-## Status labels used throughout
-✅ verified in code/review · 📄 documented only · 🔬 needs a test/check · 🗓 planned. Sizes: **S** ≈ 1.2–1.5 days · **M** ≈ 4–5 · **L** ≈ 9–12 · **XL** ≈ 19–25 focused days at your pace.
+## Status Labels
 
-## What changed vs the college build
-V1 shipped a deviation-only watchdog, a minimal guardian model (no accept/verify handshake), no email, no session hardening, no OpenFreeMap, no chat, and the current MapTiler-based map/search. V2 replaces or extends every one of those. Read `roadmap.md` §4 for the full work-item list and where each V1 shortcut gets hardened.
+✅ verified in code or review · 📄 documented only · 🔬 needs a test or check · 🗓 planned.
+
+Sizes: **S** about 1.2 to 1.5 focused days · **M** about 4 to 5 · **L** about 9 to 12 · **XL** about 19 to 25.

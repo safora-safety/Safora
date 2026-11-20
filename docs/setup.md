@@ -1,163 +1,118 @@
-# SAFORA — Developer Setup & Run Guide
+# Developer Setup Guide
 
-Step-by-step instructions for getting the SAFORA monorepo running locally on Windows, macOS, or Linux.
+This guide takes a new developer from a clean machine to a running backend, admin console and Android app. Version-specific additions are listed in [`v1/setup.md`](v1/setup.md).
 
 ## 1. Prerequisites
 
-Ensure you have the following installed on your host workstation:
-- **Node.js**: `v20.x` or `v22.x`
-- **npm**: `v10.x+`
-- **PostgreSQL**: `15+` with the **PostGIS** extension
-- **Java Development Kit (JDK)**: OpenJDK 17 (e.g. Eclipse Adoptium `jdk-17`)
-- **Android Studio**:
-  - Android SDK Platform 34 or 35
-  - Android SDK Build-Tools `35.0.0` or `37.0.0`
-  - Android NDK `27.1.12297006`
-  - CMake `3.22.1`
+| Tool | Version | Notes |
+|---|---|---|
+| Node.js | 22.11 or later | `node --version` |
+| npm | Bundled with Node | The repository is an npm workspace monorepo |
+| PostgreSQL | 15 or later with the **PostGIS** extension | A free Neon project is sufficient |
+| Android SDK | Platform 34 or 35 | Install through Android Studio |
+| Android NDK | 27.1.12297006 | Required by React Native 0.87 |
+| JDK | OpenJDK 17 | `java -version` |
+| Android device or emulator | Android 10 or later | Use a physical device for location, audio and battery tests |
 
----
-
-## 2. Environment Configuration
-
-### 2.1 Backend Environment (`apps/backend/.env`)
-
-Create or update `apps/backend/.env` with your database credentials:
-
-```env
-PORT=5000
-NODE_ENV=development
-
-# PostgreSQL Connection String (Neon / Supabase / Local PostgreSQL)
-DATABASE_URL=postgresql://user:password@ep-sample-pooler.region.neon.tech/safora?sslmode=require
-DATABASE_URL_DIRECT=postgresql://user:password@ep-sample.region.neon.tech/safora?sslmode=require
-
-# Security & JWT (use a long random phrase in production)
-JWT_SECRET=your_secure_random_jwt_secret_phrase
-
-# Watchdog Tick Endpoint Auth (V1)
-INTERNAL_TICK_SECRET=your_long_random_internal_secret
-
-# Push Notifications (Firebase Admin SDK)
-FCM_SERVER_KEY=sample_fcm_key
-
-# Media Storage (Cloudinary - Photos & Master SOS Audio)
-CLOUDINARY_URL=cloudinary://sample:secret@safora
-CLOUDINARY_CLOUD_NAME=your_cloudinary_cloud_name
-CLOUDINARY_API_KEY=your_cloudinary_api_key
-CLOUDINARY_API_SECRET=your_cloudinary_api_secret
-```
-
-### 2.2 Mobile Environment (`apps/mobile/.env`)
-
-Configure the backend API URL for the mobile application:
-
-```env
-# For Android Emulator: Use 10.0.2.2 to access host PC
-API_BASE_URL=http://10.0.2.2:5000/api
-
-# For Physical Device: Use your PC's local Wi-Fi IP address
-# API_BASE_URL=http://192.168.1.15:5000/api
-```
-
----
-
-## 3. Installation & Dependency Bootstrapping
-
-From the repository root (`D:\Safora`):
+## 2. Get the Code and Install
 
 ```bash
-# Install all root, mobile, backend, and shared dependencies
+git clone https://github.com/safora-safety/Safora.git
+cd Safora
 npm install
 ```
 
----
+The root `package.json` defines the workspaces `apps/*` and `packages/*`. Husky installs the Git hooks during `npm install`.
 
-## 4. Running the Backend Server
+## 3. Configure the Environment
 
-From the root directory:
+Each application reads its configuration from a `.env` file that is **not** committed. Copy the `.env.example` file in the application folder, if present, and fill in the values.
 
-```bash
-cd apps/backend
-npm run dev
+### 3.1 Backend (`apps/backend/.env`)
+
+| Variable | Purpose |
+|---|---|
+| Database connection string | PostgreSQL and PostGIS (Neon). The exact variable name is in `.env.example` |
+| `JWT_SECRET` | Signing key for access tokens. Use a long random string |
+| `JWT_EXPIRES_IN` | Optional. Default `7d` |
+| `INTERNAL_TICK_SECRET` | Authenticates `POST /api/internal/tick` (the watchdog trigger) |
+| `CORRIDOR_THRESHOLD_METERS` | Optional. Default corridor in metres, 20 to 1000. Default `100` |
+| Cloudinary credentials | Photo and audio storage |
+| Firebase service-account credentials | Push notifications |
+| Google OAuth client identifier | Verifies Google ID tokens |
+| MapTiler key | Geocoding fallback. **Server side only** |
+
+### 3.2 Admin console (`apps/frontend/.env`)
+The base URL of the API (and of the WebSocket gateway if separate). For local work use `http://localhost:5000`.
+
+### 3.3 Mobile (`apps/mobile`)
+`API_BASE_URL` points to the backend. For a physical device on the same network use the computer's LAN address; for the Android emulator use `http://10.0.2.2:5000`. The Firebase configuration file `google-services.json` and the Google Sign-In web client identifier are needed for push notifications and Google sign-in.
+
+> **Secrets.** Never commit `.env` files, service-account files or signing keys. Anything compiled into the APK is public, so map, routing and e-mail keys belong only on the backend.
+
+## 4. Database
+
+`initDatabase()` creates all tables and indexes when the backend starts against an empty database. To prepare an existing database or to inspect the V1 schema changes, see [`v1/database.md`](v1/database.md#5-v1-migration-script). Confirm that PostGIS is enabled:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS postgis;
+SELECT postgis_full_version();
 ```
 
-The server will automatically:
-1. Initialize the PostgreSQL connection pool.
-2. Create the `postgis` extension if not already present.
-3. Automatically execute DDL migrations for `users` and `reports`.
-4. Seed 5 demo campus hazard locations if the reports table is empty.
-5. Launch the REST API & Socket.IO server on `http://localhost:5000`.
-
-### Verifying Backend Health & Diagnostics
-Open your browser or run:
-- **Health Check**: [http://localhost:5000/api/health](http://localhost:5000/api/health)
-- **Live Diagnostics**: [http://localhost:5000/api/diagnostics](http://localhost:5000/api/diagnostics)
-
----
-
-## 5. Running the Web Admin Command Center
-
-SAFORA includes a real-time web command center for dispatchers and incident moderators:
+## 5. Run
 
 ```bash
-cd apps/frontend
-npm run dev
+# Terminal 1 – backend (http://localhost:5000/api, health: /api/health)
+cd apps/backend && npm run dev
+
+# Terminal 2 – admin console (http://localhost:5173)
+cd apps/frontend && npm run dev
+
+# Terminal 3 – Metro bundler
+cd apps/mobile && npm start -- --reset-cache
+
+# Terminal 4 – install and launch on a connected device or emulator
+cd apps/mobile && npm run android
 ```
 
-Open your browser at [http://localhost:5173](http://localhost:5173). The dashboard connects live to the backend on `http://localhost:5000` via Socket.IO and REST APIs, featuring the Dark Matrix Geospatial Command Map, incident dispatch feed, and system telemetry.
+The 30-second watchdog runs inside the backend process, so no extra worker is needed locally.
 
----
+## 6. Test
 
-## 6. Running & Building the Mobile App
+```bash
+npm test                  # all workspaces: 15 suites, 104 tests
+npm run test:backend      # Jest and Supertest
+npm run test:frontend     # Vitest and Happy-DOM
+npm run test:mobile       # Jest and React Test Renderer
+```
 
-### 6.1 Direct USB Running on a Physical Android Phone
-1. Enable **Developer Options** (tap *Build Number* 7 times in *About Phone*) and toggle **USB Debugging** (plus *Install via USB* on Xiaomi/Realme/Oppo).
-2. Connect your phone via USB cable (select *File Transfer/MTP* mode) and accept the debugging prompt.
-3. Forward workstation backend and Metro ports over USB:
-   ```bash
-   adb reverse tcp:8081 tcp:8081
-   adb reverse tcp:5000 tcp:5000
-   ```
-4. Start Metro bundler:
-   ```bash
-   cd apps/mobile
-   npm start
-   ```
-5. Deploy and run directly onto the connected phone:
-   ```bash
-   cd apps/mobile
-   npm run android
-   ```
+Run `npm run lint` before committing. CI runs lint and the whole test suite for every push and pull request.
 
-### 6.2 Compiling Standalone Production Release APK
-To compile a standalone APK ready for distribution or installation without PC tethering:
-```powershell
+## 7. Build Android Packages
+
+```bash
 cd apps/mobile/android
-.\gradlew assembleRelease
-```
-The compiled APK will be created at:
-```
-apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+./gradlew assembleDebug        # debug APK: app/build/outputs/apk/debug/app-debug.apk
+./gradlew assembleRelease      # release APK: app/build/outputs/apk/release/app-release.apk
 ```
 
-To install directly to a connected phone via ADB:
-```powershell
-adb install -r apps/mobile/android/app/build/outputs/apk/release/app-release.apk
-```
+Use `gradlew.bat` on Windows. The release build targets `arm64-v8a`, is about 34 MB and must be signed with the project's release key. Keep the key outside the repository.
 
----
+## 8. Deploy
 
-## 7. Troubleshooting Common Issues
+`render.yaml` describes the Render services (backend web service and admin static site). Set the environment variables in the Render dashboard. After the first deployment:
 
-### Issue 1: "Cannot find module react-native" or Invariant Violation with ViewConfigs
-- **Cause**: Duplicate hoisted versions of `react-native` inside monorepo workspaces.
-- **Solution**: Ensure `disableHierarchicalLookup: true` and `extraNodeModules` are present in `apps/mobile/metro.config.js`. Clean Metro cache via `npm start -- --reset-cache`.
+1. Open `/api/health` and `/api/diagnostics` to check the services.
+2. Create a free scheduler job that calls `POST /api/internal/tick` every **60 seconds** with the header `X-Internal-Secret`. See [`v1/setup.md`](v1/setup.md#3-watchdog).
 
-### Issue 2: "Android Gradle Plugin requires Java 17"
-- **Solution**: Set `JAVA_HOME` environment variable to JDK 17 (e.g. `C:\Program Files\Eclipse Adoptium\jdk-17.0.12.7-hotspot`).
+## 9. Troubleshooting
 
-### Issue 3: "Network request failed" inside the mobile app
-- **Cause**: Mobile phone cannot reach host `localhost`.
-- **Solution**:
-  - Over USB: Run `adb reverse tcp:5000 tcp:5000` so phone `localhost:5000` forwards to workstation port 5000.
-  - Over Wi-Fi: Replace `localhost` with your workstation's Wi-Fi IPv4 address (e.g. `http://192.168.1.100:5000/api`) in `apps/mobile/.env`. Ensure your PC firewall permits inbound traffic on port 5000.
+| Symptom | Likely cause and fix |
+|---|---|
+| Metro cannot resolve a shared package | Start Metro with `--reset-cache`; check `extraNodeModules` in `metro.config.js` |
+| The app cannot reach the backend on a device | Use the computer's LAN address, allow the port in the firewall, and check that both are on the same network |
+| `postgis` functions are missing | Run `CREATE EXTENSION postgis;` on the database |
+| Push notifications do not arrive | Check the Firebase credentials on the backend and `google-services.json` in the app; confirm the FCM token is registered |
+| Location stops with the screen locked | Disable battery optimisation for the app; follow the vendor guide in Settings |
+| First request after a long idle is slow | The free Render instance and the Neon compute were asleep; the scheduler keeps the watchdog alive but not the first-request latency |
+| Android build fails on NDK | Install NDK 27.1.12297006 and set `ANDROID_HOME` |

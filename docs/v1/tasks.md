@@ -1,341 +1,138 @@
-# V1 Task List — Implementation Detail
+# V1 Delivery Record
 
-> Priority order. Each task names the exact files to touch (from the real repo structure), the change to make, pseudocode/schema where useful, and a concrete test. Written so you can hand a single task to a coding agent as its whole brief. Sizes are focused-day estimates at your pace (18–24 h/week + agent).
->
-> **Updated 22 Sep 2026:** three tasks added (13–15, foreground service / lock-screen audio / ETA notification) after review — they strengthen the core "Safe Walk alerts a guardian" objective rather than being separate scope. **New total ≈ 34 days**, against an ~18–20 day mid-November budget. This realistically means **V1 now targets your end-November college deadline, not the mid-November personal buffer** — flagged plainly rather than left implicit. Cut list at the end is updated accordingly.
+| | |
+|---|---|
+| **Version** | V1 (complete) |
+| **Purpose** | Record of every V1 work item: what was changed, where, and how it was verified |
+| **Status** | All items delivered and verified |
 
-## Repo map (for reference across every task below)
+This page started as the V1 task list. Now that V1 is complete it serves as the delivery record. Work item identifiers (SYN, SEC, TRK, TRG, NAV, AGE, PUB, UI, AUTH) are used in commit messages and in the V2 documents.
+
+## 1. Summary
+
+| Group | Items | Status |
+|---|---|---|
+| Must-do | SYN-1, SEC-2, SEC-9, TRK-1, TRK-2, SYN-4, SYN-5 | Delivered |
+| Should-do | SYN-2, SEC-4, AGE-lite, PUB-1-lite | Delivered |
+| Added 22 Sep 2026 (strengthen the core objective) | TRG-2-lite, TRG-6-lite and DUAL-PIPE-1, NAV-1 | Delivered |
+| Added during delivery | UI-16, AUTH-17 and MAP-PERF | Delivered |
+| Nice-to-have | SYN-3 | Delivered |
+
+```mermaid
+flowchart LR
+    A["SYN-1<br/>no fake score"] --> E
+    B["SEC-2<br/>identity stripped"] --> E
+    C["SEC-9<br/>no sample data"] --> E
+    D["TRK-1<br/>breadcrumbs"] --> F["TRK-2<br/>socket client"]
+    F --> G["SYN-4<br/>guardian live view"]
+    D --> H["SYN-5<br/>watchdog"]
+    G --> H
+    H --> I["TRG-2-lite<br/>foreground service"]
+    I --> J["DUAL-PIPE-1<br/>live audio"]
+    I --> K["NAV-1<br/>ETA notification"]
+    E["Integrity fixes"] --> L["V1 release"]
+    H --> L
+    J --> L
+    K --> L
+    M["UI-16, AUTH-17,<br/>SYN-2, SYN-3, AGE, PUB"] --> L
 ```
+
+The items TRK-1, TRK-2, SYN-4, SYN-5 and TRG-2-lite together implement the objective "a Safe Walk alerts a guardian". They were never optional, and TRG-2-lite is what keeps them reliable once the screen is locked.
+
+## 2. Repository Map
+
+```text
 apps/backend/src/
-  routes/         reportRoutes.ts, journeyRoutes.ts, sosRoutes.ts, ...
-  services/       reportService.ts, journeyService.ts, sosService.ts, firebaseService.ts
-  repositories/   reportRepository.ts, journeyRepository.ts, userRepository.ts
+  routes/         reportRoutes.ts, journeyRoutes.ts, sosRoutes.ts, authRoutes.ts, internalRoutes.ts, ...
+  services/       reportService.ts, journeyService.ts, watchdogService.ts, audioStitcherService.ts, sosAudioService.ts, firebaseService.ts
+  repositories/   reportRepository.ts, journeyRepository.ts, sosRepository.ts, userRepository.ts
   middleware/     rateLimiter.ts, auth guards
+  sockets/        journeySocket.ts
 apps/mobile/src/
-  screens/        HomeScreen.tsx, MapScreen.tsx, SafeWalkScreen.tsx, SettingsScreen.tsx, ProfileScreen.tsx
-  components/     ReportHazardModal.tsx, OpenMapView.tsx, ContactModal.tsx
-  services/       reportService.ts, (new) socketService.ts
+  screens/        HomeScreen, MapScreen, SafeWalkScreen, SettingsScreen, ProfileScreen, TermsScreen
+  components/     ReportHazardModal, OpenMapView, GuardianSosLiveModal, ...
+  services/       reportService, socketService, audioRecorderService, sirenService, routingService, locationService
+apps/mobile/android/.../com/mobile/   SafeWalkService.kt, SafeWalkServiceModule.kt
 apps/frontend/src/
-  pages/          DashboardPage.tsx, SafeWalksPage.tsx, HazardsPage.tsx, SosAlertsPage.tsx
-  services/       journeyService.ts (contains getMockActiveJourneys)
+  pages/          Dashboard, SafeWalks, Hazards, SosAlerts, Users, Analytics, Diagnostics, Settings, Login
+  context/        SocketContext.tsx
+packages/shared-types/
 ```
 
----
+## 3. Integrity and Security Fixes
 
-## Must-do (do not cut)
+### SYN-1 – Remove the fake safety-score fallback
+- **Problem.** When the score request failed, the app showed an invented value ("84, safe"). A fabricated safety number is the opposite of what a safety application should show.
+- **Change.** The fallback object was deleted. The Home score card has `loading`, `error` (with retry) and `success` states.
+- **Files.** `HomeScreen.tsx`, `reportService.ts`.
+- **Verification.** Airplane mode shows the retry state and no number; restoring connectivity and retrying loads the real score.
 
-### 1. SYN-1 — Remove the fake safety-score fallback
-**Size:** S (~1.2 days) · **Files:** `apps/mobile/src/screens/HomeScreen.tsx`, `apps/mobile/src/services/reportService.ts`
+### SEC-2 – Strip reporter identity from public responses
+- **Change.** Two representations: `PublicReportDto` (no `userId`, `reporterName`, e-mail or phone) and `StaffReportDto`. Public routes use the first; staff-guarded routes use the second. The SQL and the `reports.user_id` column are unchanged.
+- **Files.** `reportRepository.ts`, `Report.ts` (mapping), `reportRoutes.ts`.
+- **Verification.** `curl /api/reports` shows no identity fields; the staff route still includes them.
 
-**Current behaviour:** `reportService.ts` has a fallback that returns a hard-coded `{score: 84, riskLevel: 'safe', nearbyHazards: 3}` (or similar) when the `/api/reports/safety-score` request fails; `HomeScreen.tsx` renders whatever it gets with no distinction between real and fallback data.
+### SEC-9 – Remove the admin sample data
+- **Change.** `getMockActiveJourneys` was deleted. The Safe Walks page shows an empty state when the API returns `[]` and a separate error state when the call fails.
+- **Files.** `journeyService.ts` (admin), `SafeWalksPage.tsx`.
+- **Verification.** With no active walk anywhere, the radar shows the empty state.
 
-**Change:**
-1. In `reportService.ts`, delete the fallback object. Let the fetch function throw or return `null`/a typed error on failure — do not synthesize a fake success response.
-2. In `HomeScreen.tsx`, add three render states for the safety-score card: `loading` (skeleton), `error` (retry button + "Couldn't load your safety score" message), `success` (the real card). Use a simple state machine (`useState<'loading'|'error'|'success'>`) or whatever async-state pattern the rest of the screen already uses.
-3. Search the rest of the codebase for any other hard-coded fallback numbers tied to safety score (`grep -rn "84\|86" apps/mobile/src` as a starting point, but read each hit — those are common numbers that may appear for unrelated reasons too).
+## 4. Safe Walk Core
 
-**Test:** Turn off Wi-Fi and mobile data, open Home screen, confirm you see the error/retry state and no number. Turn connectivity back on, tap retry, confirm the real score loads.
+### TRK-1 – Persist journey breadcrumbs
+`updateLocation` now inserts a breadcrumb, updates `last_location` and `last_seen_at`, runs the corridor check and sets `deviated_at` when needed. Files: `journeyService.ts`, `journeyRepository.ts`, and the migration in [`database.md`](./database.md). Verified by querying `journey_breadcrumbs` after a test walk.
 
----
-
-### 2. SEC-2 — Strip reporter identity from public report responses
-**Size:** S (~1.2 days) · **Files:** `apps/backend/src/repositories/reportRepository.ts`, wherever `ReportModel.fromRow` (or equivalent mapping function) lives, `apps/backend/src/routes/reportRoutes.ts`
+### TRK-2 – Mobile Socket.IO client
+`socketService.ts` connects after login with the JWT, joins the journey room and exposes `onJourneyLocation`. Location updates continue over REST when the socket drops, so tracking never depends on the socket. Verified with two devices.
 
-**Current behaviour:** `findAll` and `nearby` in `reportRepository.ts` join against `users` and the row-mapping function returns `userId`/`reporterName` (and possibly email/phone) regardless of caller.
-
-**Change:**
-1. Define two response shapes (TypeScript interfaces or two separate mapping functions):
-   ```ts
-   interface PublicReportDto {
-     id: number; category: string; severity: number; description: string;
-     photoUrl?: string; location: { lat: number; lng: number };
-     confirmationsCount: number; createdAt: string;
-     // deliberately no userId, reporterName, email, phone
-   }
-   interface StaffReportDto extends PublicReportDto {
-     userId: number; reporterName: string; reporterEmail?: string;
-   }
-   ```
-2. In the route handlers for `GET /`, `GET /nearby` (and any other non-staff report endpoint), map rows to `PublicReportDto`.
-3. In staff-only routes (already guarded by `requireStaff`/`requireAdmin` — confirm the guard is actually applied on the analytics/moderation routes), map to `StaffReportDto`.
-4. Leave the underlying SQL query and `reports.user_id` column untouched — this is a response-shaping change only, not a schema change.
+### SYN-4 – Live location visible to a guardian
+A guardian who is also a Safora user sees a map with the walker's marker, name and last-updated time (`GuardianLiveScreen`, reusing `OpenMapView`). *Simplification:* V1 has no invitation and acceptance step. This is weaker than the V2 handshake and is stated as a known limitation.
 
-**Test:**
-```bash
-curl -s https://<backend>/api/reports | jq 'map(has("userId") or has("reporterName") or has("email"))' 
-# expect: every entry false
-curl -s -H "Authorization: Bearer <staff-jwt>" https://<backend>/api/reports/analytics/summary | jq 'has("userId")'
-# staff route: identity still present where the route intentionally includes it
-```
+### SYN-5 – Server-side deviation watchdog
+`watchdogService.ts` holds an in-memory map of active journeys and runs a 30-second tick. A deviation older than 60 seconds without `confirm-safe` creates an alert with `source = 'watchdog'` through the existing SOS service, pushes to guardians and sets `escalated_at`. `POST /api/journeys/:id/confirm-safe` clears the deviation. `POST /api/internal/tick` (shared-secret header) runs a scan on demand so an external scheduler can keep the free instance awake. Verified: the alert appears about 60 seconds after the deviation and does not appear when the walker confirms safety first.
 
----
+## 5. Mobile Platform Work
 
-### 3. SEC-9 — Remove/label admin sample data
-**Size:** S (~1.2 days) · **Files:** `apps/frontend/src/services/journeyService.ts` (contains `getMockActiveJourneys`), `apps/frontend/src/pages/SafeWalksPage.tsx`
+### TRG-2-lite – Foreground service
+`SafeWalkService.kt` keeps location updates flowing with the screen locked and shows a persistent notification. It is started from `SafeWalkScreen` through the `SafeWalkServiceModule` bridge and declared with `FOREGROUND_SERVICE_LOCATION` and microphone types in `AndroidManifest.xml`. Verified: breadcrumb timestamps stay continuous after locking the screen.
 
-**Current behaviour:** when the backend returns no active journeys (or fails), the frontend service falls back to a hard-coded sample list, flagged internally as `isSimulated` but rendered identically to real data on the map.
+### TRG-6-lite and DUAL-PIPE-1 – Dual-pipe SOS audio
+Live 5-second slices, a lossless master file and a server rescue watchdog. See [Dual-pipe audio](./dual-pipe-audio-streaming.md). Verified by `audioStitcher.test.ts` and the end-to-end scenarios T15 to T17.
 
-**Change:**
-1. Delete `getMockActiveJourneys` and its call site.
-2. In `SafeWalksPage.tsx`, add an explicit empty state: "No active Safe Walks right now" when the API returns `[]`, and a distinct error state when the API call itself fails (don't conflate "no data" with "request failed").
+### NAV-1 – Distance and ETA notification
+The foreground notification shows the real route distance and walking ETA (for example "4.1 km, 51 min remaining"), updated through `updateRouteProgress(distanceKm, etaMin)` so that it matches the cockpit HUD. Verified with mock locations.
 
-**Test:** With no Safe Walk running anywhere, open the admin dashboard and confirm the radar shows the empty state, not moving markers.
+### SYN-2 – Heat map
+`MapScreen` calls `/api/reports/clusters` and draws a circle per cluster (radius by count, colour by average severity). The Home "Live heat map" card now opens this view.
 
----
+### SYN-3 – Photo picker
+Camera and gallery picker in `ReportHazardModal.tsx` uploading through `POST /api/reports/upload-photo`.
 
-### 4. TRK-1 — Persist journey breadcrumbs
-**Size:** S (~1.2 days) · **Files:** `apps/backend/src/services/journeyService.ts`, `apps/backend/src/repositories/journeyRepository.ts`, DB migration (see `database.md` §2)
+## 6. Accounts and Compliance
 
-**Current behaviour:** `updateLocation` computes the corridor-deviation distance but does not persist the incoming coordinate anywhere, and does not update `journeys.last_location`.
+| Item | Delivered |
+|---|---|
+| **AGE-lite** | One screen after registration with an age field and a note for users under 18; stored through `PATCH /api/auth/profile` as `age` and `ageNoticeAck` |
+| **PUB-1-lite** | Plain-language terms and privacy screen (`TermsScreen.tsx`) that records `termsAcceptedAt`. It has **not** been legally reviewed; the V2 compliance document describes the real version for a public release |
+| **SEC-4** | Overclaiming copy removed (for example claims of "dispatching to police" or "256-bit encrypted coordinates"). A persistent note states that Safora does not replace calling 112 |
+| **AUTH-17** | Google Sign-In with account linking and a `tokeninfo` fallback; verified by the eight cases of checklist section 17 |
 
-**Change (pseudocode for `journeyService.updateLocation`):**
-```ts
-async function updateLocation(journeyId: number, lat: number, lng: number, speed?: number, battery?: number) {
-  const journey = await journeyRepository.findById(journeyId);
-  if (!journey || journey.status !== 'active') throw new NotFoundOrInactiveError();
-
-  await journeyRepository.insertBreadcrumb(journeyId, lat, lng, speed, battery); // NEW
-  await journeyRepository.updateLastLocation(journeyId, lat, lng);               // NEW
-
-  const distanceFromRoute = computeCorridorDistance(journey.routePolyline, lat, lng); // existing logic
-  if (distanceFromRoute > CORRIDOR_METERS) {
-    await journeyRepository.setDeviatedAt(journeyId, new Date());  // NEW — see task 7
-  }
-
-  emitSocketEvent(`journey:${journeyId}`, 'journey:location', { lat, lng, speed, recordedAt: new Date() }); // NEW — see task 5
-  return { deviated: distanceFromRoute > CORRIDOR_METERS };
-}
-```
-Add matching repository methods `insertBreadcrumb`, `updateLastLocation`, `setDeviatedAt` to `journeyRepository.ts` using the schema in `database.md` §2.
-
-**Test:** Start a walk via the app, send a few location updates, then query directly:
-```sql
-SELECT * FROM journey_breadcrumbs WHERE journey_id = <id> ORDER BY recorded_at;
-```
-Confirm rows exist and `journeys.last_location`/`last_seen_at` are updated.
+## 7. Added During Delivery
 
----
+### UI-16 – Interface modernisation, admin ergonomics and unified tests
+- Five-phase mobile interface upgrade (see [Mobile features](./mobile-app-features.md#9-interface-modernisation-five-phases-completed)).
+- Admin command palette, shortcut manual, mute switch, failover banner, evidence lightbox and range selection (see [Admin console](./admin-panel.md)).
+- One command, `npm test`, runs all 15 suites and 104 tests.
 
-### 5. TRK-2 — Mobile Socket.IO client
-**Size:** M (~4 days) · **Files:** new `apps/mobile/src/services/socketService.ts`, `apps/mobile/src/screens/SafeWalkScreen.tsx`
+### MAP-PERF and cockpit SOS
+Map canvas rendering fixes (`invalidateSize(false)` at staggered intervals, a resize observer, no 3D tilt), an in-cockpit SOS button next to "End walk", and an auto-fitting hold-to-confirm label.
 
-**Note:** `socket.io-client` is already in `package.json` — it has just never been imported anywhere.
+## 8. Effort
 
-**New file `socketService.ts` (pseudocode):**
-```ts
-import { io, Socket } from 'socket.io-client';
-let socket: Socket | null = null;
+The original plan estimated about 34 focused days after the three foreground-service items were added on 22 September 2026, against 18 to 20 days originally budgeted. The target therefore moved from the personal mid-November buffer to the end-November college deadline. V1 was completed within that deadline.
 
-export function connectSocket(jwt: string) {
-  if (socket?.connected) return socket;
-  socket = io(API_BASE_URL, { auth: { token: jwt }, reconnection: true, reconnectionDelay: 1000 });
-  socket.on('connect_error', (err) => console.warn('socket connect error', err));
-  return socket;
-}
+## 9. Delivery Rules Followed
 
-export function joinJourneyRoom(journeyId: number) {
-  socket?.emit('journey:join', { journeyId }); // if the backend expects an explicit join event —
-  // otherwise the server may auto-join based on JWT + active journey lookup; confirm against
-  // whatever journeyService.ts / socket auth middleware does server-side before assuming either shape
-}
-
-export function onJourneyLocation(cb: (payload: {lat:number; lng:number; recordedAt:string}) => void) {
-  socket?.on('journey:location', cb);
-}
-
-export function disconnectSocket() {
-  socket?.disconnect();
-  socket = null;
-}
-```
-Call `connectSocket(jwt)` once after login (e.g. in whatever root auth-state effect already exists), and `joinJourneyRoom` when a Safe Walk starts in `SafeWalkScreen.tsx`. Handle reconnect gracefully — if the socket drops, location updates should keep going via the existing REST `PATCH /:id/location` call regardless, so tracking never fully stops even if realtime delivery hiccups.
-
-**Test:** Two devices logged in as the same test walker + a trusted-contact account; confirm the second device's socket receives `journey:location` events as the first device's coordinates change (can simulate with mock-location tools instead of physically walking).
-
----
-
-### 6. SYN-4 — Live location visible to a guardian
-**Size:** M (~4 days, shares work with #5) · **Files:** new small screen/component in `apps/mobile/src`, reusing `OpenMapView.tsx`
-
-**Change:** When a logged-in user has an active `trusted_contacts` relationship pointing *at* them from a walker (i.e., they are someone else's contact) and that walker has an active journey, show a lightweight screen: a map (reuse `OpenMapView.tsx`) with a single marker driven by `onJourneyLocation` from task 5, plus the walker's name and last-updated timestamp.
-
-**Simplification, stated explicitly (write this in your report too):** V1 has no separate "guardian accepts an invite" step — any existing trusted contact who also happens to be a Safora user sees this automatically once a walk starts. This is weaker than the full handshake design in `docs/v2/safety-and-tracking.md` §1 (verified email, pending/accepted/revoked states) — that hardening is explicitly a V2 item, not an oversight.
-
-**Test:** the two-device flow in `testing-and-submission.md` T4 — this *is* that test.
-
----
-
-### 7. SYN-5 — Server-side deviation watchdog (deviation rule only)
-**Size:** M (~4 days) · **Files:** new `apps/backend/src/services/watchdogService.ts`, `apps/backend/src/app.ts` (or wherever the server bootstraps), new route in `journeyRoutes.ts`, new internal route
-
-**New file `watchdogService.ts` (pseudocode):**
-```ts
-const activeJourneys = new Map<number, { deviatedAt: Date | null }>(); // in-memory, loaded at boot + kept in sync on start/complete/cancel
-
-export function startTick() {
-  setInterval(async () => {
-    const now = Date.now();
-    for (const [journeyId, state] of activeJourneys) {
-      if (state.deviatedAt && (now - state.deviatedAt.getTime()) > 60_000) {
-        await escalate(journeyId);
-        activeJourneys.delete(journeyId); // or mark escalated, don't re-fire
-      }
-    }
-  }, 30_000);
-}
-
-async function escalate(journeyId: number) {
-  const journey = await journeyRepository.findById(journeyId);
-  await sosService.createAlert({ userId: journey.userId, source: 'watchdog',
-    location: journey.lastLocation, battery: null }); // reuses the EXISTING sos creation path —
-    // do not write a second, parallel notification code path
-  await journeyRepository.setEscalatedAt(journeyId, new Date());
-}
-```
-- Populate `activeJourneys` from the database at server boot (`SELECT id, deviated_at FROM journeys WHERE status='active'`) and keep it in sync: add on `POST /start`, remove on `complete`/`cancel`, update `deviatedAt` from task 4's `setDeviatedAt` call (either via a shared in-memory update or by re-reading — simplest is to update the in-memory map directly from `journeyService.updateLocation` rather than round-tripping through the DB).
-- New endpoint: `POST /api/journeys/:id/confirm-safe` — clears `deviated_at` in both the DB and the in-memory map, cancelling a pending escalation.
-- New internal endpoint: `POST /api/internal/tick` — protected by a shared-secret header (`X-Internal-Secret`, compare against `process.env.INTERNAL_TICK_SECRET`), triggers one manual scan of `activeJourneys` immediately (needed because Render's free tier can sleep and the in-process `setInterval` doesn't run while asleep — an external pinger hitting this endpoint both wakes the instance and forces a scan).
-- Call `startTick()` once at server startup, alongside registering the internal route.
-
-**Test:**
-1. Start a journey, manually set a deviation (either walk off-route or add a temporary debug endpoint that calls `setDeviatedAt` directly for testing).
-2. Wait ~60s with no `confirm-safe` call — confirm an `sos_alerts` row appears with `source='watchdog'` and the guardian's device gets a push.
-3. Repeat, but call `confirm-safe` before 60s — confirm no alert is created.
-
----
-
-## Should-do (cut only if genuinely out of time)
-
-### 8. SYN-2 — Wire the heatmap
-**Size:** M (~4 days) · **Files:** `apps/mobile/src/screens/MapScreen.tsx`, `apps/mobile/src/screens/HomeScreen.tsx`, `apps/mobile/src/components/OpenMapView.tsx`
-
-**Change:** `GET /api/reports/clusters` already exists and works server-side (DBSCAN, see `safety-algorithms.md` §2) — no backend change needed. Call it from `MapScreen.tsx`, render each cluster as a circle on the Leaflet WebView map (radius scaled by cluster point count, fill colour scaled by average severity — e.g. green→yellow→red), and change the Home screen's "Live Heatmap" card's `onPress` to actually route to this view instead of the plain pin map if it currently doesn't.
-
-**Test:** Create 3–4 nearby reports (within ~330 m of each other, the default `epsDegrees`), confirm a cluster circle renders; create isolated reports elsewhere, confirm they render as regular pins (below `minPoints`).
-
----
-
-### 9. SEC-4 — Correct overclaiming copy
-**Size:** S (~1.2 days) · **Files:** `apps/mobile/src/screens/HomeScreen.tsx`, `apps/mobile/src/screens/OnboardingScreen.tsx`, SOS-related screens
-
-**Change:** `grep -rn -i "police\|112 dispatch\|256-bit\|encrypted coordinates" apps/mobile/src` and replace each hit per the table in `docs/v2/accounts-email-local.md` §3 (SEC-4) — e.g. "Dispatches live coordinates to Family Guardians & Police 112" → "Sends live coordinates and audio to your guardians. Quick-dial 112 is one tap away." Add a one-line persistent note somewhere visible (Home footer or onboarding): "Safora does not replace calling 112."
-
-**Test:** Manual read-through of every screen touched; no remaining false claims.
-
----
-
-### 10. AGE-lite — Age field + notice
-**Size:** S (~1.2 days) · **Files:** new step in `apps/mobile/src/screens/OnboardingScreen.tsx` or `RegisterScreen.tsx`, `apps/backend/src/routes/authRoutes.ts` (profile update), DB migration (see `database.md` §2)
-
-**Change:** One screen after registration: numeric age input, a static text note ("If you're under 18, please make sure a parent or guardian knows you're using Safora"), and a checkbox that also covers Terms acceptance (task 11) to avoid a separate screen. On submit, `PATCH /api/auth/profile` with `{ age, ageNoticeAck: true }`.
-
-**Test:** Register a new account, confirm the screen appears once and not again on subsequent logins (`users.age_notice_ack` gates it).
-
----
-
-### 11. PUB-1-lite — Terms & Privacy static screen
-**Size:** S (~1.2 days) · **Files:** new `apps/mobile/src/screens/TermsScreen.tsx` (static content, no API call except the accept action)
-
-**Change:** Plain-language static screen: what's collected (location during Safe Walk, hazard reports, SOS data, audio), why, that it's a beta/college project, a contact email for questions. On accept, `PATCH /api/auth/profile` with `{ termsAcceptedAt: now }`. **Not legally reviewed — say so explicitly in your project report**, and treat `docs/v2/security-privacy-compliance.md` §10 (PUB-1) as the real version to do before any public release.
-
-**Test:** New registration flow shows this screen once; existing test accounts (if `terms_accepted_at` is already set) don't see it again.
-
----
-
-## Must-do, added 22 Sep 2026 (strengthens the core objective — do not treat as optional)
-
-### 13. TRG-2-lite — Foreground service for background Safe Walk tracking
-**Status:** ✅ Completed & Verified · **Size:** L (~6 days) · **Files:** new `apps/mobile/android/app/src/main/java/com/mobile/SafeWalkService.kt`, a small native-module bridge file (e.g. `SafeWalkServiceModule.kt` + `SafeWalkServicePackage.kt`) registered in `MainApplication.kt`, `apps/mobile/src/services/socketService.ts` and `screens/SafeWalkScreen.tsx` (call the new native module instead of/alongside the JS-side location watcher), `AndroidManifest.xml` (declare the service + `FOREGROUND_SERVICE_LOCATION` permission)
-
-**Change:**
-1. New Kotlin `Service` subclass that:
-   - Acquires location updates via `FusedLocationProviderClient` (or whatever the existing `@react-native-community/geolocation` setup already uses under the hood — check before adding a second location API).
-   - Posts each update to the backend via a simple HTTP call (or bridges back to the existing JS `PATCH /journeys/:id/location` call — simplest is usually to keep the JS side making the actual API calls and have the native service just keep the JS thread/location callbacks alive, rather than duplicating network code natively; confirm this approach with whichever library you use for the RN↔native bridge).
-   - Shows a persistent `NotificationCompat` notification, updated per location tick (§8c logic — distance/ETA).
-2. Start the service from `SafeWalkScreen.tsx` when a walk begins (`NativeModules.SafeWalkService.start(journeyId, destinationLat, destinationLng)`), stop it on complete/cancel.
-3. Declare in `AndroidManifest.xml`: `<service android:name=".SafeWalkService" android:foregroundServiceType="location">` and the `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_LOCATION` permissions (Android 14+ requires the specific type permission, not just the general one — confirm your target SDK version and adjust).
-
-**Test:** Start a Safe Walk, lock the screen, wait several minutes, confirm `journey_breadcrumbs` rows keep arriving at roughly the same interval as with the screen unlocked (compare timestamps before/after locking).
-
----
-
-### 14. TRG-6-lite & DUAL-PIPE-1 — Dual-Pipe Audio Streaming & Fail-Safe Concatenator
-**Status:** ✅ Completed & Verified (72/72 tests passing) · **Size:** M (~4 days) · **Files:** `SafeWalkService.kt`, `SafeWalkServiceModule.kt`, `apps/mobile/src/services/audioRecorderService.ts`, `apps/mobile/src/services/socketService.ts`, `apps/backend/src/services/audioStitcherService.ts`, `apps/backend/src/sockets/journeySocket.ts`, `apps/frontend/src/context/SocketContext.tsx`
-**Documentation:** See [`dual-pipe-audio-streaming.md`](./dual-pipe-audio-streaming.md) for full protocol payloads, buffer sizing, and edge-case mitigations.
-
-**Implementation Summary:**
-1. **Pipe 1 (Real-Time Progressive Delivery):** Slices audio in memory into sequential 5-second PCM/WAV chunks and broadcasts them over Socket.IO (`sos:audio_chunk`) directly to Guardians and Admin dispatchers in real time (~5s latency).
-2. **Pipe 2 (Continuous Local Master Archival):** Concurrently streams all raw PCM frames into an unbroken local master file (`sos_${alertId}_master.wav`) on device disk under `FOREGROUND_SERVICE_TYPE_MICROPHONE`.
-3. **Fail-Safe Server Concatenator:** If the phone is smashed or disconnects mid-stream, an 8-second watchdog timer on the server (`AudioStitcherService`) automatically concatenates received chunks with standard 44-byte WAV headers and uploads the partial evidence to Cloudinary.
-4. **Web Dispatcher Audio Queue:** Enqueues incoming slices chronologically via Web Audio API (`AudioContext.decodeAudioData()`) with live UI badges (`LIVE STREAMING CHUNK #N/6`).
-
-**Test:**
-- Unit tests: `apps/backend/src/__tests__/audioStitcher.test.ts` (100% passing).
-- End-to-end: Start Safe Walk, trigger SOS, verify live chunks play sequentially on admin dashboard, and verify Cloudinary master archival. Simulate broken phone (app kill at 12s) to verify 8s watchdog auto-stitching.
-
----
-
-### 15. NAV-1 — Synchronized Route Distance & ETA Notification during Safe Walk
-**Status:** ✅ Completed & Verified · **Size:** S (~2 days) · **Files:** `SafeWalkService.kt`, `SafeWalkServiceModule.kt`, `SafeWalkScreen.tsx`
-
-**Change:** Android foreground service notification is kept in continuous real-time synchronization with actual walking road distance (e.g., `4.1 km`) and walking ETA (`51 min remaining`) via `SafeWalkService.updateRouteProgress(distanceKm, etaMin)`, ensuring walker and system notifications match the cockpit HUD identically.
-
-**Test:** Start a Safe Walk with a destination set, confirm the notification's distance decreases and ETA updates plausibly as you move (or simulate movement via mock location).
-
----
-
-### 16. UI-16 — Mobile UI Modernization (Phases 1–5), Admin CAD Ergonomics & Unified Monorepo Testing
-**Size:** M (~3 days) · **Status:** ✅ Fully Delivered & Verified
-**Files:**
-- Mobile: `FloatingSearchCapsule.tsx`, `HazardFilterChips.tsx`, `SafetyFabDrawer.tsx`, `MultiModalRouteSheet.tsx`, `ActiveWalkCockpitHud.tsx`, `HoldToConfirmButton.tsx`, `SosGracePeriodOverlay.tsx`, `AudioWaveformBars.tsx`, `DeviationCountdownModal.tsx`, `CalculatorDecoyModal.tsx`, `FakeCallModal.tsx`, `ArrivalCelebrationModal.tsx`
-- Admin: `CommandPalette.tsx`, `KeyboardShortcutsModal.tsx`, `OfflineFailoverBanner.tsx`, `Navbar.tsx`, `HazardTable.tsx`, `HazardsPage.tsx`
-- Testing: `package.json` (`npm test`), `apps/frontend/src/__tests__/`, `apps/mobile/__tests__/`
-
-**Delivered Capabilities:**
-1. Complete 5-phase habit-aligned mobile UI upgrade (Material Design 3 search capsule, 1-handed map gestures, corridor halo, heads-up walk HUD, 5s abort overlay, secret PIN duress calculator, bilingual fake call).
-2. Professional CAD command center ergonomics in web admin console (Spotlight palette `Ctrl+K`, keyboard cheatsheet `?`, audio mute toggle `M`, offline failover banner, high-res evidence lightbox, and continuous Shift-select range moderation).
-3. Monorepo-wide unified test suite (`npm test`) executing 15 test suites and 104 tests across Backend, Frontend, and Mobile with 100% pass rate.
-
-**Test:** Execute `npm test` from root. Confirms 8 backend suites (72 tests), 2 frontend suites (12 tests), and 5 mobile suites (20 tests) all pass with zero failures.
-
----
-
-### 17. AUTH-17 & MAP-PERF — Google Sign-In OAuth, Cockpit SOS Trigger & Canvas Rendering Optimizations
-**Size:** M (~3 days) · **Status:** ✅ Fully Delivered & Verified
-**Files:**
-- Auth: `@react-native-google-signin/google-signin`, `authController.ts`, `userRepository.ts`, `authRoutes.ts`
-- Mobile Cockpit: `SafeWalkScreen.tsx`, `HoldToConfirmButton.tsx`
-- Map: `OpenMapView.tsx`
-
-**Delivered Capabilities:**
-1. **Native Google Play Services Sign-In:** Bottom sheet account picker with automatic account linking by email, fallback token verification via Google tokeninfo, and JWT session persistence.
-2. **Safe Walk Cockpit Emergency SOS:** Embedded red `🚨 SOS` button alongside End Walk in `SafeWalkScreen.tsx`, firing immediate `SosService.triggerSOS` with GPS accuracy and active journey ID.
-3. **OpenMapView Seamless Canvas Rendering:** Staggered canvas invalidations (`map.invalidateSize(false)` at 50, 150, 350, 700, 1500ms), dynamic ResizeObserver, and elimination of trapezoidal 3D tilt distortion (`tilt3D={false}`).
-4. **Adaptive Button Typography:** `HoldToConfirmButton.tsx` dynamic scaling (`numberOfLines={1}`, `adjustsFontSizeToFit={true}`, `minimumFontScale={0.7}`) ensuring termination button text never clips across screen dimensions.
-
-**Test:** Field tested across physical Android devices. 8/8 Google Sign-In test cases verified (Section 17 in checklist).
-
----
-
-## Nice-to-have (Delivered in V1)
-
-### 12. SYN-3 — Photo picker for hazard reports
-**Status:** ✅ Completed & Verified · **Size:** M (~4 days) · **Files:** `apps/mobile/src/components/ReportHazardModal.tsx`
-
-**Change:** Added native camera/gallery image picker integrated with Cloudinary `POST /api/reports/upload-photo`, replacing presets with real evidence photos.
-
----
-
-## Cut order if you run out of time (drop from the top first)
-1. **SYN-3** (photo picker) — keep presets.
-2. **NAV-1** (ETA notification) — keep the plain "Safe Walk active" notification from task 13 with no distance/ETA text; cheap to add back later since task 13's plumbing already exists.
-3. **AGE-lite** — fold into a single added sentence on the Terms screen (task 11) instead of a separate screen.
-4. **SEC-9** — if truly no time, at minimum relabel the admin radar "Demo data" so it isn't presented as real.
-5. **SYN-2** (heatmap) — demo the plain pin map, explain the heatmap is next.
-6. **TRG-6-lite** (lock-screen audio) — if genuinely out of time, ship task 13 (foreground service, tracking works) without the audio piggyback; SOS still sends GPS/battery, just never gets audio when triggered during a locked-screen Safe Walk. State this as a known limitation, not a silent gap.
-7. **Never cut:** SYN-1 (fake number), SEC-2 (identity leak), TRK-1 / TRK-2 / SYN-4 / SYN-5 / **TRG-2-lite (task 13, foreground service)** — together these ARE the "Safe Walk alerts a guardian" objective, the centrepiece of the synopsis, and task 13 is now load-bearing for the others to actually work reliably with the screen locked.
-
-## After each item
-- [x] Run the specific test listed above.
-- [x] One line in your project report: what it does, why it was needed, any known limitation.
-- [x] Commit with a clear message referencing the item ID (e.g. `SYN-1: remove fake safety score fallback`).
+- The specific test for each item was run before it was closed.
+- Each item has a line in the project report: what it does, why it was needed and any known limitation.
+- Commit messages reference the item identifier, for example `SYN-1: remove fake safety score fallback`.

@@ -1,97 +1,89 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# SAFORA — Mobile Safety Application
 
-# Getting Started
+The **SAFORA Mobile Application** is a personal safety and navigation platform designed for university students, women, and citizens navigating urban corridors and campus perimeters.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+It combines crowdsourced hazard telemetry, background walking escorts, automated corridor compliance monitoring, emergency SOS broadcasting with progressive dual-pipe audio evidence capture, and discreet decoy tools.
 
-## Step 1: Start Metro
+---
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+## Key Features
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+1. **Geospatial Safety Radar & Map**:
+   - Hardware-accelerated Leaflet map canvas rendering real-time safety heatmaps via PostGIS DBSCAN clustering.
+   - Dynamic safety score badge (0–100) calibrated with exponential recency decay ($t_{1/2} = 168\text{ h}$ / 7 days, 0.25 floor) and community confirmation weighting.
 
-```sh
-# Using npm
-npm start
+2. **Safe Walk Escort**:
+   - Background pedestrian monitoring powered by a native Android Kotlin Foreground Service (`SafeWalkService.kt`).
+   - 150-meter corridor compliance tracking with real-time ETA and road distance updates displayed in persistent lock-screen system notifications.
+   - 60-second departure grace period and 3-minute post-confirmation snooze to eliminate false deviation alerts.
 
-# OR using Yarn
-yarn start
+3. **Guardian SOS & Dual-Pipe Audio Capture**:
+   - Instant one-tap emergency broadcast streaming GPS coordinates, battery status, and telemetry to trusted guardians and dispatchers.
+   - **Pipe 1**: Emits 5-second 16kHz PCM audio slices live over WebSockets for immediate guardian listening.
+   - **Pipe 2**: Continuously records an unbroken 30-second local master file for Cloudinary cloud preservation.
+   - **Server Watchdog Rescue**: 8-second server-side watchdog auto-assembles received slices into playable WAV evidence if the device is lost or destroyed mid-broadcast.
+
+4. **Covert Decoy Tools**:
+   - **Calculator Decoy**: Fully operational 4-function arithmetic calculator that silently triggers an emergency SOS and haptic feedback upon entering duress PIN `9999=`.
+   - **Fake Call Simulator**: Configurable bilingual (English/Hindi) incoming call simulator for discreet extraction from uncomfortable situations.
+
+---
+
+## Technical Architecture
+
+| Component | Technology | Rationale |
+|---|---|---|
+| **Core Framework** | React Native `0.87.1` | Native performance with **Fabric (New Architecture)** and **Hermes** engine. |
+| **Language** | TypeScript 5.x | Strict type safety aligned across `@safora/shared-types`. |
+| **Native Android Bridge** | Kotlin Foreground Service | Survives Android Doze mode and lock-screen deep sleep for continuous GPS and microphone capture. |
+| **Map Rendering** | Leaflet in Hardware-Accelerated WebView | High frame-rate vector rendering, smooth layer switching, and offline tile caching. |
+| **Real-Time Transport** | Socket.IO Client | Persistent listener registry surviving network drops and socket reconnects. |
+| **State & Cache** | React Hooks + AsyncStorage | Local hazard queue that auto-synchronizes when network connectivity returns. |
+
+---
+
+## Development Setup
+
+### Prerequisites
+- **Node.js**: `v20.x` or `v22.x`
+- **Android SDK**: API Platform 34 or 35, NDK `27.1.12297006`
+- **JDK**: OpenJDK 17
+- Physical Android device (recommended) or Android Virtual Device (AVD)
+
+### 1. Start Metro Bundler
+From the monorepo root:
+```bash
+npm start --workspace=mobile -- --reset-cache
 ```
 
-## Step 2: Build and run your app
-
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
-
-### Android
-
-```sh
-# Using npm
-npm run android
-
-# OR using Yarn
-yarn android
+### 2. Launch Android Debug Build
+In a separate terminal:
+```bash
+npm run android --workspace=mobile
 ```
 
-### iOS
-
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
-
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
-
-```sh
-bundle install
+### 3. Run Automated Tests
+```bash
+npm test --workspace=mobile
 ```
+Executes all 5 Jest test suites (**20 / 20 tests passing**):
+- `ActiveWalkCockpitHud` & `HoldToConfirmButton`
+- `FloatingSearchCapsule`
+- `SosGracePeriodOverlay`
+- `CalculatorDecoyModal` (Duress PIN verification)
+- `FakeCallModal`
 
-Then, and every time you update your native dependencies, run:
+---
 
-```sh
-bundle exec pod install
+## Production Release Build
+
+To compile a signed standalone release APK:
+```powershell
+cd android
+.\gradlew.bat clean
+.\gradlew.bat assembleRelease
 ```
-
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
-
-```sh
-# Using npm
-npm run ios
-
-# OR using Yarn
-yarn ios
+The output APK is generated at:
+```text
+android/app/build/outputs/apk/release/app-release.apk
 ```
-
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
-
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
-
-## Step 3: Modify your app
-
-Now that you have successfully run the app, let's make changes!
-
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
-
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
-
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
-
-## Congratulations! :tada:
-
-You've successfully run and modified your React Native App. :partying_face:
-
-### Now what?
-
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
-
-# Troubleshooting
-
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
