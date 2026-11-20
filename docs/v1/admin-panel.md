@@ -1,67 +1,87 @@
-# Admin Panel — V1
+# Admin Console
 
-## Pages and status
-
-| Page | Status |
+| | |
 |---|---|
-| Login | Existing |
-| Dashboard (map + KPIs) | **Interactive (V1)** — all StatCards clickable with module navigation; live API latency ping measured in ms; priority queue click-through |
-| SOS Alerts (queue, status, audio playback) | **Live (V1)** — shows watchdog alerts (`source='watchdog'`); Web Audio API progressive 5s chunk queue player with real-time badges (`LIVE STREAMING CHUNK #N/6`) and automatic transition to Cloudinary archival scrubber |
-| Hazards (filters, moderation) | **Interactive (V1)** — KPI StatCards filter table; "Add Resolution Notes" modal dialog with quick municipal preset chips; batch checkboxes with floating action bar |
-| Safe Walks radar | **Interactive (V1)** — sample-data fallback removed (SEC-9); KPI StatCards and filter pills; "🗺️ View Corridor" modal with direct Google Maps/OSM navigation links; direct "📞 Call Walker" callback |
-| Analytics | Existing |
-| Users (role/status) | **Interactive (V1)** — clickable role StatCards (`Admins`, `Moderators`, `Citizens`); "+ Add Staff / Citizen" modal connected to `userService.createUser` |
-| Diagnostics | **Interactive (V1)** — top KPI StatCards; individual "Test Service" action buttons for PostGIS, Cloudinary, Firebase, MapTiler, Nominatim, and Express with live measured latency ms |
-| Settings | **Interactive (V1)** — credentials change; audible SOS alarm toggle with Web Audio API "🔔 Test Chime" preview button |
-| Navigation Sidebar | **Live (V1)** — auto-updating badge counters for active SOS alerts and pending community hazards |
-| **Global Spotlight Command Palette** | **New (CAD)** — triggerable globally via `Ctrl+K` / `Cmd+K`; fuzzy action launcher, live route jumping, emergency drill simulation (`Alt+S`), Voice Clarity toggle (`C`) |
-| **Dispatcher Keyboard Shortcuts Manual** | **New (CAD)** — triggerable globally via `?`; Linear-style cheatsheet for navigation, incident triage, Web Audio controls, and batch actions |
-| **Automated Offline Failover Banner** | **New (CAD)** — ceiling banner drops down on WSS link interruption with manual reconnection trigger |
-| **Tactical Audio Chime Mute Switch** | **New (CAD)** — persistent top-bar speaker toggle (`M`) allowing dispatchers to silence non-critical chimes during high-stress operations |
-| **High-Resolution Evidence Lightbox** | **New (CAD)** — thumbnail click expands high-res image with EXIF timestamp, verified GPS coordinates with Google Maps shortcut, and 1-click status moderation |
-| **Batch Multi-Select Range Selection** | **New (CAD)** — `Shift`+Click on checkboxes selects continuous range of hazard reports for instantaneous batch approval/dismissal |
-| **Tabular Numerics CSS** | **New (CAD)** — `font-variant-numeric: tabular-nums` globally enforced to eliminate character width jitter on clocks, GPS coords, and latency pings |
+| **Version** | V1 (complete) |
+| **Stack** | React 19, Vite 6, TypeScript, Tailwind CSS 3.4, Recharts, Leaflet |
+| **Access** | Staff only (roles `admin` and `moderator`) |
+| **Hosting** | Render static site |
 
-## Why the sample-data fix matters for the submission
-An evaluator who opens the admin panel during a demo and sees moving "journeys" that don't correspond to anything real is an easy, damaging thing to notice. This is a small code change (delete the fallback function, show an empty state) with a large credibility payoff — it's in the V1 must-do list (`tasks.md`, SEC-9) for that reason, not because it's technically hard.
+## 1. Pages
 
-## Deferred to V2
-Campus/organisation scoping, dispatch workflow (assign responder, call-back log), response-time analytics, PDF evidence export, chat moderation queue (no chat exists yet in V1).
+```mermaid
+flowchart LR
+    LOGIN["Login"] --> DASH["Dashboard<br/>map + KPIs"]
+    DASH --> SOS["SOS alerts<br/>queue and live audio"]
+    DASH --> WALK["Safe Walks<br/>live radar"]
+    DASH --> HAZ["Hazards<br/>moderation"]
+    DASH --> USERS["Users<br/>roles and status"]
+    DASH --> AN["Analytics"]
+    DASH --> DIAG["Diagnostics"]
+    DASH --> SET["Settings"]
+```
 
-## File map
-
-| Change | File(s) |
+| Page | Content |
 |---|---|
-| Remove sample-journey fallback | `apps/frontend/src/services/journeyService.ts` — delete `getMockActiveJourneys` and its call site |
-| Empty/error states for Safe Walks radar | `apps/frontend/src/pages/SafeWalksPage.tsx` |
-| Watchdog-sourced SOS alerts appear in the queue | `apps/frontend/src/pages/SosAlertsPage.tsx` already reads from `sos_alerts`/`GET /api/sos/alerts`, which contains `source='watchdog'` rows |
-| Progressive live audio queue & real-time badge | `apps/frontend/src/context/SocketContext.tsx` (ordered Web Audio API queue decoding `sos:live_audio_chunk`), `apps/frontend/src/pages/SosAlertsPage.tsx` (live chunk badges #1..6 and player) |
-| Hazard identity still visible to staff | No change — `apps/frontend/src/pages/HazardsPage.tsx` already calls staff-guarded endpoints, which keep full `StaffReportDto` identity per `tasks.md` #2 |
+| **Login** | Staff authentication. Citizen accounts are refused |
+| **Dashboard** | Map and KPI cards. Every card opens its module. A live API latency ping is shown in milliseconds, and the priority queue links to the alert |
+| **SOS alerts** | Queue with status triage. Includes alerts from the watchdog (`source = watchdog`). Live audio plays slice by slice with a `LIVE STREAMING CHUNK #N/6` badge and then switches to the archived master recording |
+| **Hazards** | KPI cards that filter the table; "Add resolution notes" dialog with municipal preset chips; batch selection with a floating action bar; high-resolution photo viewer with time stamp and coordinates |
+| **Safe Walks** | Live radar of active walkers with breadcrumb trails. The sample-data fallback was removed: when no walk is active the page shows an empty state. A corridor view opens a map link, and a call button dials the walker |
+| **Analytics** | Incident trends, heat maps and hourly distribution |
+| **Users** | Role cards (admins, moderators, citizens), role and status changes, and an "Add staff or citizen" dialog |
+| **Diagnostics** | Health and latency checks for PostGIS, Cloudinary, Firebase, MapTiler, Nominatim and the Express service, each with a "Test" button. Also shows watchdog latency |
+| **Settings** | Credentials, corridor threshold (20 to 1000 m), audible alarm toggle with a test chime |
+| **Sidebar** | Badge counters for active SOS alerts and pending community hazards |
 
-## Exact pseudocode for the sample-data removal
+## 2. Dispatcher Tools (CAD features)
+
+| Tool | Description |
+|---|---|
+| **Command palette** (`Ctrl+K` / `Cmd+K`) | Fuzzy action launcher, jump to any page, start an emergency drill (`Alt+S`), toggle voice clarity (`C`) |
+| **Shortcut manual** (`?`) | Cheat sheet for navigation, triage, audio controls and batch actions |
+| **Offline-failover banner** | Drops down when the WebSocket link is interrupted and offers a manual reconnect |
+| **Alert mute switch** (`M`) | Silences non-critical chimes during a busy operation |
+| **Evidence lightbox** | Full-size photo with EXIF time, verified coordinates, a map shortcut and one-click moderation |
+| **Range selection** | `Shift` + click selects a continuous range of reports for batch approval or dismissal |
+| **Tabular numerals** | `font-variant-numeric: tabular-nums` prevents jitter in clocks, coordinates and latency values |
+
+## 3. Why the Sample-Data Fallback Was Removed
+
+An evaluator who sees moving "journeys" that correspond to nothing real loses trust in the whole product. The fallback function was deleted, and the radar now renders loading, error and empty states honestly.
 
 ```ts
-// apps/frontend/src/services/journeyService.ts — BEFORE
-export async function getActiveJourneys() {
-  try {
-    const res = await api.get('/journeys/active');
-    return res.data.length > 0 ? res.data : getMockActiveJourneys(); // DELETE this fallback
-  } catch {
-    return getMockActiveJourneys(); // DELETE this fallback
-  }
-}
-
-// AFTER
+// apps/frontend/src/services/journeyService.ts
 export async function getActiveJourneys(): Promise<Journey[]> {
   const res = await api.get('/journeys/active');
-  return res.data; // empty array is a valid, real answer — let the page component render it as such
+  return res.data; // an empty array is a valid, real answer
 }
 ```
-```tsx
-// apps/frontend/src/pages/SafeWalksPage.tsx — add explicit states
-const { data: journeys, isLoading, isError } = useActiveJourneys(); // or whatever data-fetching pattern is already used
-if (isLoading) return <LoadingSpinner />;
-if (isError) return <ErrorState message="Couldn't load active Safe Walks" />;
-if (journeys.length === 0) return <EmptyState message="No active Safe Walks right now" />;
-return <RadarMap journeys={journeys} />;
+
+## 4. Data Flow
+
+```mermaid
+flowchart LR
+    SIO["Socket.IO<br/>sos:alert, sos:audio,<br/>sos:live_audio_chunk,<br/>journey:location"] --> CTX["SocketContext"]
+    REST["REST API"] --> PAGES["Pages"]
+    CTX --> PAGES
+    CTX --> Q["Web Audio queue<br/>jitter buffer + clarity filter"]
+    Q --> PLAYER["AudioPlayer<br/>scrub bar"]
+    PAGES --> PLAYER
 ```
+
+Live audio handling (de-duplication, ordering, filters) is described in [Dual-pipe audio](./dual-pipe-audio-streaming.md).
+
+## 5. File Map
+
+| Subject | File |
+|---|---|
+| Empty and error states for the radar | `src/pages/SafeWalksPage.tsx`, `src/services/journeyService.ts` |
+| Watchdog alerts in the SOS queue | `src/pages/SosAlertsPage.tsx` (reads `GET /api/sos/alerts`, which contains `source = 'watchdog'` rows) |
+| Live audio queue | `src/context/SocketContext.tsx`, `src/components/common/AudioPlayer.tsx` |
+| Command palette, shortcuts, failover banner | `src/components/common/CommandPalette.tsx`, `KeyboardShortcutsModal.tsx`, `OfflineFailoverBanner.tsx` (wired in `src/App.tsx`) |
+| Reporter identity for staff | `src/pages/HazardsPage.tsx` uses staff-guarded endpoints that return the staff representation |
+
+## 6. Deferred to V2
+
+Campus or organisation scoping, a dispatch workflow (assign responder, call-back log), response-time analytics, PDF evidence export and a chat moderation queue.

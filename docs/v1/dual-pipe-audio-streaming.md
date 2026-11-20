@@ -1,107 +1,120 @@
-# Dual-Pipe Audio Streaming & Resilient Archival Engine — V1
+# Dual-Pipe Audio Streaming and Resilient Archival
 
-> **Status:** Production Architecture Hardened, Verified & Benchmarked  
-> **Target Subsystems:** Android Native (`SafeWalkService.kt`), Mobile Service Bridge (`audioRecorderService.ts`), Node/Express REST (`sosRoutes.ts`, `sosController.ts`), Audio Streaming Core (`sosAudioService.ts`), Node/Express Sockets (`journeySocket.ts`), Audio Stitcher (`audioStitcherService.ts`), Web Admin Dispatcher (`SocketContext.tsx`, `AudioPlayer.tsx`, `SosAlertsPage.tsx`)
+| | |
+|---|---|
+| **Version** | V1 (production) |
+| **Status** | Implemented, verified and hardened |
+| **Components** | `SafeWalkService.kt`, `SafeWalkServiceModule.kt`, `audioRecorderService.ts`, `sosAudioService.ts`, `audioStitcherService.ts`, `journeySocket.ts`, `SocketContext.tsx`, `AudioPlayer.tsx`, `GuardianSosLiveModal.tsx` |
 
----
+## 1. Purpose
 
-## 1. Executive Summary & Root Cause of the Locked-Screen Bug
+During an SOS, Safora records 30 seconds of ambient audio. A conventional design records one file and uploads it when the recording ends. That design has two weaknesses:
 
-### 1.1 The 30-Second Black Hole & "Broken Phone" Risk
-In conventional emergency apps, audio recording is a single monolithic 30-second file uploaded only after 30 seconds elapse. This creates two fatal vulnerabilities:
-1. **Silence During Crisis:** Dispatchers and guardians wait 30 seconds before hearing a single sound while an attack or assault unfolds.
-2. **Total Evidence Destruction:** If the attacker smashes the phone, throws it in water, or the battery dies at second 12, the entire recording is lost. Zero evidence reaches the cloud.
+1. **Silence during the critical period.** Guardians and dispatchers hear nothing until the upload finishes.
+2. **Total loss of evidence.** If the phone is destroyed, submerged or loses power before the upload, nothing reaches the server.
 
-### 1.2 The Locked-Screen Pure JavaScript Failure (Root Cause Discovered & Fixed)
-In earlier versions, 5-second audio chunks were emitted to mobile JavaScript via React Native's bridge and sent over `socket.io-client` (`socket.emit('sos:audio_chunk', ...)`).
-* **The Failure:** When a citizen triggered SOS and immediately locked their phone or slipped it into a pocket/bag, Android's `PowerManager` entered Doze/Standby mode.
-* **The Consequence:** Android severely throttled or completely paused React Native's JavaScript thread (Hermes/V8). The pure JS Socket.IO client stopped transmitting heartbeats and frames. Chunks accumulated in JS memory and only flushed in a late burst once the phone was unlocked—defeating real-time emergency intervention.
+The dual-pipe engine removes both weaknesses. It delivers audio to guardians and dispatchers in 5-second slices while it is still being recorded, keeps one unbroken master recording on the device, and lets the server rescue the evidence if the phone stops transmitting.
 
-### 1.3 The Industry-Standard Solution: Native Dual-Sink Pipeline
-We re-engineered audio transmission to follow the pattern used by law enforcement body cameras (Axon) and first-responder platforms (Zello Work):
-* **Pipe 1 (Real-Time Progressive Delivery — Native OkHttp):** 
-  Slices audio in native Kotlin memory into 5-second PCM/WAV chunks and transmits them directly over **native OkHttp POST** (`POST /api/sos/:id/audio-chunk`). This runs inside an Android Foreground Service (`FOREGROUND_SERVICE_TYPE_MICROPHONE`) holding a partial `WAKE_LOCK`, completely immune to screen lock and JS thread throttling.
-* **Pipe 1b (Dual-Redundant Fallback — Socket.IO):** 
-  Concurrently emits to mobile JS for Socket.IO delivery when the phone is unlocked. The backend and frontend deduplicate chunks so neither transport interferes with the other.
-* **Pipe 2 (Continuous Local Master Archival):** 
-  Concurrently streams all raw PCM frames into an unbroken local master file (`sos_${alertId}_master.wav`) on device disk. At 30 seconds, the 44-byte WAV header is finalized and the continuous file is uploaded to Cloudinary.
-* **Fail-Safe Server Watchdog (AudioStitcherService):** 
-  If the phone is destroyed, loses cell coverage, or runs out of battery at second 12, an 8-second watchdog timer on the server automatically stitches whatever chunks arrived into a single WAV file and uploads it to Cloudinary.
+## 2. Design Summary
 
----
+| Item | Value |
+|---|---|
+| Capture format | 16 kHz, 16-bit, mono linear PCM (32,000 bytes per second) |
+| Total recording length | 30 seconds |
+| Live slice length | 5 seconds (6 slices; 160,000 bytes of PCM each before compression) |
+| Server chunk-loss timeout | 8 seconds |
+| Live-delivery rate limit | 60 chunks per minute per user |
+| Master-upload rate limit | 30 uploads per 15 minutes per user |
+| Request body limit | 10 MB (Base64 audio) |
 
-## 2. End-to-End System Flow
+The engine has two independent pipes fed by the same microphone stream:
 
-```
-                                ┌───────────────────────────────────────────┐
-                                │          Android Mobile Device            │
-                                │                                           │
-                                │  Microphone Input (Single 30s Session)    │
-                                │  Foreground Service + Partial WakeLock    │
-                                └─────────────────────┬─────────────────────┘
-                                                      │
-                           ┌──────────────────────────┴──────────────────────────┐
-                           │                                                     │
-                           ▼                                                     ▼
-             ┌───────────────────────────┐                         ┌───────────────────────────┐
-             │   PIPE 1: Live Slices     │                         │   PIPE 2: Master File     │
-             │   (5-Second WAV Chunks)   │                         │ (Continuous Local File)   │
-             └─────────────┬─────────────┘                         └─────────────┬─────────────┘
-                           │                                                     │
-              ┌────────────┴────────────┐                                        │
-              │                         │                                        │
-     [Screen Locked]           [Screen Unlocked]                                 │
-              │                         │                                        │
-              ▼                         ▼                                        │
-    Native OkHttp POST          JS Socket.IO Emit                                │
- (POST /api/sos/:id/audio-chunk) ('sos:audio_chunk')                             │
-              │                         │                                        │
-              └────────────┬────────────┘                                        │
-                           │                                                     │
-                           ▼                                                     │
-             ┌───────────────────────────┐                                       │
-             │   Safora Backend Engine   │                                       │
-             │  (processSosAudioChunk)   │                                       │
-             │  - DB Grace Retry (4x)    │                                       │
-             │  - 10MB Body Limit        │                                       │
-             │  - 60/min Rate Limiter    │                                       │
-             └──────┬─────────────┬──────┘                                       │
-                    │             │                                              │
-         Relays live│             │Relays live via WebSocket                     │
-                    ▼             ▼                                              │
-             ┌─────────────┐ ┌─────────────────────────────────┐                 │
-             │  Guardian   │ │       Web Admin Dashboard       │                 │
-             │  Phone App  │ │ - Deduplication Cache           │                 │
-             │             │ │ - 6ms Audio Edge Micro-Fades    │                 │
-             │             │ │ - Sequential Live Streamer      │                 │
-             │             │ │ - Custom Scrub Bar (Never Stalls│                 │
-             └─────────────┘ └─────────────────────────────────┘                 │
-                    │                         │                                  │
-                    └───────────┬─────────────┘                                  │
-                                ▼                                                │
-             ┌─────────────────────────────────────┐                             │
-             │        Server Staging Buffer        │                             │
-             │      (/tmp/safora_sos_chunks/)      │                             │
-             └──────────────────┬──────────────────┘                             │
-                                │                                                │
-                                ▼                                                │
-                     [Watchdog Triggered?]                                       │
-                     ├─ IF Phone Dies (Timeout > 8s):                            │
-                     │  Server stitches partial chunks ───► Uploads to Cloudinary│
-                     │                                                           │
-                     └─ IF Phone Finishes 30s Normally: ─────────────────────────┘
-                        Mobile uploads unbroken 30s Master file to Cloudinary
-                        Server watchdog disarmed; temporary staging folder purged
+- **Pipe 1 – live slices.** The Kotlin foreground service cuts the stream into 5-second slices and posts each one directly to the backend over native HTTP (OkHttp). While the screen is unlocked the same slice is also emitted to the JavaScript layer for delivery over Socket.IO, so there are two redundant transports.
+- **Pipe 2 – local master file.** The raw PCM stream is written continuously to `sos_<alertId>_master.wav` on the device. When the 30 seconds end, the 44-byte WAV header is finalised and the file is uploaded to cloud storage.
+- **Server rescue watchdog.** If no slice arrives for 8 seconds, the server stitches the slices it already holds and stores them as the evidence file.
+
+## 3. Why Native Transmission
+
+An earlier version emitted the slices from React Native JavaScript over a Socket.IO client. When the user locked the phone or put it in a pocket, Android entered Doze mode and throttled the JavaScript thread. The socket stopped sending, and the slices were delivered in one late burst after the phone was unlocked, which defeated real-time intervention.
+
+The current design moves transmission into a typed Android foreground service (`FOREGROUND_SERVICE_TYPE_MICROPHONE` and `FOREGROUND_SERVICE_TYPE_LOCATION`) that holds a partial wake lock. This pattern is also used by body-worn cameras and push-to-talk platforms. The service continues to capture and post audio with the screen off.
+
+## 4. End-to-End Flow
+
+```mermaid
+flowchart TD
+    MIC["Microphone<br/>16 kHz, 16-bit, mono"] --> SVC["SafeWalkService.kt<br/>Foreground service + wake lock"]
+    SVC --> P1["Pipe 1<br/>5-second slices"]
+    SVC --> P2["Pipe 2<br/>Continuous master WAV on device"]
+
+    P1 --> NATIVE["Native OkHttp POST<br/>/api/sos/:id/audio-chunk<br/>works with screen locked"]
+    P1 --> JS["JS bridge -> Socket.IO<br/>sos:audio_chunk<br/>when unlocked"]
+
+    NATIVE --> BE["Backend<br/>processSosAudioChunk"]
+    JS --> BE
+
+    BE --> RELAY["Live relay<br/>sos:live_audio_chunk"]
+    BE --> STAGE[("Server staging buffer<br/>temporary chunk files")]
+    BE --> WD{"Watchdog<br/>no chunk for 8 s?"}
+
+    RELAY --> ADMIN["Web admin<br/>Web Audio queue"]
+    RELAY --> GUARD["Guardian app<br/>native player and SOS HUD"]
+
+    P2 --> MASTER["Master upload at 30 s<br/>PATCH /api/sos/:id/audio"]
+    MASTER --> CLOUD[("Cloudinary<br/>evidence archive")]
+    MASTER --> DISARM["Watchdog disarmed<br/>staging purged"]
+
+    WD -- "yes: phone lost or destroyed" --> STITCH["AudioStitcherService<br/>concatenate slices + 44-byte WAV header"]
+    STITCH --> CLOUD
+    WD -- "no" --> MASTER
 ```
 
----
+## 5. Sequence
 
-## 3. Communication Protocol Specification
+```mermaid
+sequenceDiagram
+    autonumber
+    participant W as Walker phone (foreground service)
+    participant API as Backend API
+    participant SIO as Socket.IO gateway
+    participant AS as AudioStitcherService
+    participant ADM as Admin console
+    participant G as Guardian app
+    participant C as Cloudinary
 
-### 3.1 Mobile Native to Backend REST (`POST /api/sos/:id/audio-chunk`)
-Transmitted directly from Kotlin via OkHttp:
-* **Headers:** `Authorization: Bearer <token>`, `Content-Type: application/json`
-* **Body:**
+    W->>API: POST /api/sos (position, battery) - immediate alert
+    API->>SIO: sos:alert to staff and guardians
+    W->>W: Start dual-pipe capture
+    par Pipe 1 - live slices (every 5 s, up to 6)
+        loop slice 1..6
+            W->>API: POST /api/sos/:id/audio-chunk
+            API->>SIO: sos:live_audio_chunk
+            SIO-->>ADM: play slice in order
+            SIO-->>G: play slice in order
+            API->>AS: stage slice, reset 8 s watchdog
+        end
+    and Pipe 2 - master file
+        W->>W: Append PCM to master WAV
+    end
+    alt Normal completion at 30 s
+        W->>API: PATCH /api/sos/:id/audio (master WAV)
+        API->>C: Store evidence
+        API->>AS: handleMasterUploaded (disarm watchdog, purge staging)
+        API->>SIO: sos:audio (final evidence link)
+    else Phone destroyed or offline (for example at 12 s)
+        AS->>AS: 8 s without a slice
+        AS->>AS: Stitch received slices into one WAV
+        AS->>C: Upload interrupted_stitched.wav
+        API->>SIO: sos:audio (partial evidence link)
+    end
+```
+
+## 6. Protocol
+
+### 6.1 Native slice upload
+
+`POST /api/sos/:id/audio-chunk` with `Authorization: Bearer <token>` and a JSON body:
+
 ```json
 {
   "alertId": 142,
@@ -110,202 +123,100 @@ Transmitted directly from Kotlin via OkHttp:
   "durationSec": 5.0,
   "sampleRate": 16000,
   "mimeType": "audio/wav",
-  "data": "UklGRuRwAABXQVZFZm10IBAAAAABAAEAwF0AA...",
+  "data": "<Base64 audio>",
   "isLast": false
 }
 ```
 
-### 3.2 Mobile JS Fallback over Socket.IO (`sos:audio_chunk`)
-Emitted by mobile client when unlocked as dual-redundant transport:
-```json
-{
-  "alertId": 142,
-  "seq": 1,
-  "totalChunksExpected": 6,
-  "durationSec": 5.0,
-  "mimeType": "audio/wav",
-  "data": "UklGRuRwAABXQVZFZm10IBAAAAABAAEAwF0AA...",
-  "isLast": false
-}
-```
+### 6.2 Socket.IO fallback
 
-### 3.3 Backend to Listeners (`sos:live_audio_chunk`)
-Broadcasted immediately to room `sos:alert:{alertId}`, room `staff` (admin operations), and guardian rooms (`user:{gid}`):
-```json
-{
-  "alertId": 142,
-  "seq": 1,
-  "totalChunksExpected": 6,
-  "durationSec": 5.0,
-  "mimeType": "audio/wav",
-  "data": "UklGRuRwAABXQVZFZm10IBAAAAABAAEAwF0AA...",
-  "isLast": false,
-  "timestamp": "2026-10-17T19:30:00.000Z"
-}
-```
+The JavaScript layer emits `sos:audio_chunk` with the same fields (without `sampleRate`) while the screen is unlocked. The server acknowledges every slice with `sos:audio_chunk_ack`.
 
-### 3.4 Room Authorization & Rate Limiting
-- **Endpoint Limits:** `audioChunkRateLimiter` permits up to 60 chunks/minute per authenticated user, preventing standard trigger throttling during active streaming.
-- **Express Body Parser:** Increased to `{ limit: "10mb" }` in `app.ts` to accommodate Base64 WAV audio payloads without HTTP 413 errors.
-- **Access Control:** Slices are authorized only if the alert belongs to the authenticated user or the user possesses `admin`/`moderator` role.
+### 6.3 Live relay
 
----
+The backend relays each accepted slice as `sos:live_audio_chunk` to three audiences: the room `sos:alert:{alertId}`, the `staff` room, and the guardian rooms `user:{guardianId}`. The payload repeats the slice fields and adds an ISO `timestamp`.
 
-## 4. Subsystem Implementation Details
+### 6.4 Authorisation
 
-### 4.1 Native Android Engine (`SafeWalkService.kt`)
-- **Foreground Service:** Runs with `FOREGROUND_SERVICE_TYPE_MICROPHONE | FOREGROUND_SERVICE_TYPE_LOCATION` and `PARTIAL_WAKE_LOCK`. Survives screen-off, pocket storage, and Android Doze mode.
-- **Audio Configuration:** 16,000 Hz sample rate, 16-bit linear PCM, mono channel (`AudioFormat.CHANNEL_IN_MONO`). Generates 32 KB/sec.
-- **Dual-Sink Thread:**
-  - `fileOut`: Streams raw PCM bytes continuously to `sos_${alertId}_master.wav`.
-  - `chunkBuffer`: Accumulates 160,000 bytes (5s), prepends 44-byte WAV header, Base64 encodes, and invokes `postAudioChunkNatively(...)`.
-  - Concurrently emits `onSosAudioChunk` to React Native JS bridge for parallel Socket.IO transmission.
-- **OkHttp Hardening:**
-  - Explicit timeouts: `connectTimeout(15s)`, `readTimeout(20s)`, `writeTimeout(20s)`, `retryOnConnectionFailure(true)`.
-  - Automatic retry: If a network blip occurs during cell tower handover, retries up to 2 times with 1.5s backoff.
-- **Alert ID Queue Buffering:**
-  - If Chunk #1 completes before the asynchronous HTTP SOS alert ID returns, the chunk is staged in `pendingNativeChunks`.
-  - Flushed immediately via `flushPendingNativeAudioChunks(alertId)` the millisecond `ACTION_UPDATE_ALERT_ID` arrives.
-- **Triple-Redundant Auth Token:**
-  1. Passed in intent extra upon SOS trigger (`EXTRA_AUTH_TOKEN`).
-  2. Passed dynamically when associating alert ID (`updateEmergencyAlertIdWithToken`).
-  3. Direct fail-safe fallback read from Android local SQLite database (`RKStorage` / `catalystLocalStorage` for key `@safora_token`).
+A slice is accepted only if the alert belongs to the authenticated user or the caller has the `admin` or `moderator` role. Room subscription (`sos:join`) follows the same rule and also admits verified guardians.
 
-### 4.2 Mobile Service Bridge (`audioRecorderService.ts`)
-- Calls `NativeModules.SafeWalkService.startEmergencyAudioWithToken(alertId, token)`.
-- Dispatches `updateEmergencyAlertIdWithToken` when backend alert creation completes.
-- Listens to `onSosAudioMasterCompleted` to upload the 30-second continuous WAV file to Cloudinary.
-- Fallback: If hardware `AudioRecord` fails, activates `Sound.startRecorder()` automatically.
+## 7. Implementation Notes
 
-### 4.3 Backend Core & Stitcher (`sosAudioService.ts` & `audioStitcherService.ts`)
-- **Transport Agnostic:** `processSosAudioChunk` handles chunks identically whether delivered via REST HTTP or WebSocket.
-- **Rapid DB Commit Grace Retry:** Retries finding newly created alert up to 4 times with 500ms intervals to handle sub-second database propagation lag.
-- **8-Second Watchdog Timer:**
-  - Automatically resets with every sequential chunk received.
-  - If mobile client disconnects, watchdog auto-stitches all received fragments into a single cohesive WAV file and uploads to Cloudinary.
-  - When the client uploads the unbroken master WAV, `handleMasterUploaded` disarms the watchdog and purges temporary files.
+### 7.1 Android engine (`SafeWalkService.kt`)
 
-### 4.4 Web Dispatcher Audio Queue (`SocketContext.tsx`, `AudioPlayer.tsx`, `SosAlertsPage.tsx`)
-- **Dual-Transport Deduplication:**
-  - Cache set (`enqueuedOrPlayedChunkKeys`) tracks `${alertId}:${seq}`.
-  - Slices received via both OkHttp and Socket.IO are deduplicated instantly, preventing audio echoes or stutter.
-- **Web Audio API 6ms Micro-Fades:**
-  - Applied at slice start and end via `GainNode` exponential ramping. Eliminates audible DC-offset "clicks" between successive PCM chunks.
-- **Sequential Live Feed Streaming:**
-  - Clicking "Listen Live Feed" plays Chunk 1 through Chunk 6 continuously and sequentially without stopping.
-  - Dynamic button toggles between "Listen Live Feed" and "Pause Feed (Slice #X)".
-- **Tactical Audio Scrubber / Seeker:**
-  - Replaced brittle `<input type="range">` with custom scrub track.
-  - Window-level mouse/touch drag listeners: Dragging anywhere on the monitor **never freezes** the playhead.
-  - Click-to-seek, hover timestamp tooltip (e.g. `00:14`), and gradient progress fill.
-- **Aligned 720px Dashboard Layout:**
-  - Added `max-h-[720px] overflow-y-auto custom-scrollbar` to both the left beacon queue and right alert telemetry panel, ensuring sleek tactical alignment without layout overflow.
+- Foreground service types: microphone and location, with a partial wake lock. It survives screen-off, pocket storage and Doze mode.
+- Dual-sink thread: one sink writes raw PCM to the master file; the other accumulates 5 seconds, wraps the data with a header (or compresses it, see section 9.3), Base64-encodes it and calls `postAudioChunkNatively`. The same slice is emitted to the JavaScript bridge as `onSosAudioChunk`.
+- OkHttp timeouts: connect 15 s, read 20 s, write 20 s, with connection-failure retry. A failed post is retried up to twice with a 1.5 s back-off to survive cell-tower hand-over.
+- Alert-ID buffering: if the first slice completes before the HTTP request that creates the alert has returned, the slice waits in `pendingNativeChunks` and is flushed when `ACTION_UPDATE_ALERT_ID` arrives.
+- Triple-redundant token: the JWT is passed in the start intent, re-passed when the alert ID is associated, and, as a last resort, read from the local React Native storage.
 
-### 4.5 Mobile Guardian Audio Queue & Live SOS HUD (`SafeWalkServiceModule.kt` & `GuardianSosLiveModal.tsx`)
-- **Native Hardware Audio Player:**
-  - `SafeWalkServiceModule.playLiveAudioChunk` decodes incoming Base64 WAV slices into cache storage and streams via `android.media.MediaPlayer`.
-  - Automatically emits `onLiveAudioChunkFinished` to trigger seamless chaining to the next sequential chunk (`#seq + 1`).
-- **Global Emergency Transmission HUD:**
-  - Mounted globally in `App.tsx` (`GuardianSosLiveModal`), popping up instantly across any screen when a companion triggers SOS.
-  - Live chunk progress pills (`#1..6`), soundwave visualizer, mute/unmute toggle, and automatic transition to 30s master audio.
-  - Includes instant action dispatch: Navigate to Live GPS Coordinates, Call Companion, or Call 112 Emergency Dispatch.
-- **Auto-Refreshing Guardian Inbox:**
-  - `NotificationScreen.tsx` listens directly to `sos:alert` and `sos:audio` socket events to keep the emergency inbox synchronised in real time.
+### 7.2 Mobile bridge (`audioRecorderService.ts`)
 
----
+Starts the service with `startEmergencyAudioWithToken(alertId, token)`, forwards the alert ID when it becomes known, and uploads the master file when `onSosAudioMasterCompleted` fires. If the hardware `AudioRecord` cannot start, it falls back to the standard recorder.
 
-## 5. Resilience & Edge-Case Matrix
+### 7.3 Backend (`sosAudioService.ts`, `audioStitcherService.ts`)
 
-| # | Incident Scenario | Traditional Risk | Safora Dual-Pipe Mitigation |
+- `processSosAudioChunk` treats REST and WebSocket slices identically.
+- A slice that arrives before the alert row is visible is retried up to four times at 500 ms intervals.
+- The 8-second watchdog is reset by every slice. On expiry it assembles the staged PCM, adds a standard 44-byte RIFF/WAVE header, uploads the file and updates `sos_alerts.audio_url`.
+- `handleMasterUploaded` disarms the watchdog and deletes the staging directory when the full master file arrives.
+
+### 7.4 Admin playback (`SocketContext.tsx`, `AudioPlayer.tsx`, `SosAlertsPage.tsx`)
+
+- Duplicate slices (same `alertId:seq` from both transports) are discarded.
+- A Web Audio queue plays slices strictly in order with 6 ms gain ramps at slice edges to remove clicks.
+- A custom scrub bar supports click-to-seek and never stalls the playhead during drag.
+- The browser autoplay restriction is handled by queueing audio until the first user gesture resumes the audio context.
+
+### 7.5 Guardian application
+
+`SafeWalkServiceModule.playLiveAudioChunk` decodes each slice to cache storage and plays it with Android `MediaPlayer`, chaining to the next slice when `onLiveAudioChunkFinished` fires. `GuardianSosLiveModal` is mounted globally and shows the live beacon, vibration, slice progress, a mute toggle, and one-tap actions to navigate to the position, call the companion or call 112. After the 30 seconds it switches to the master recording.
+
+## 8. Failure Handling
+
+| # | Scenario | Risk without mitigation | Mitigation |
 |---|---|---|---|
-| **1** | **Phone screen locked immediately** | JS thread paused by Android; 0 chunks arrive until unlocked. | `SafeWalkService.kt` runs natively as a typed foreground service and posts each chunk directly via OkHttp. Delivered every 5s. |
-| **2** | **Phone smashed / battery dies at 12s** | 100% audio evidence destroyed. | Chunks 1 & 2 (10s) were already received by server. 8s watchdog triggers auto-stitching, uploads 10s WAV to Cloudinary. |
-| **3** | **Cellular tower handover dip** | Chunk HTTP upload fails. | OkHttp client retries up to 2 times with 1.5s backoff; dual-redundant Socket.IO provides secondary path if unlocked. |
-| **4** | **Sub-second race: Chunk finishes before Alert ID created** | Native chunk dropped or rejected as unowned. | Kotlin buffers chunk in `pendingNativeChunks` and flushes the moment `ACTION_UPDATE_ALERT_ID` arrives. |
-| **5** | **Both OkHttp and Socket.IO deliver chunk #1** | Duplicate audio plays twice on admin console. | Admin frontend deduplicates by `${alertId}:${seq}` in `SocketContext.tsx`; duplicate frame is discarded. |
-| **6** | **Browser autoplay restriction on admin portal** | Browser mutes audio playback. | Web Audio API queue preserves chunks during suspended state. First click anywhere on the page or the "Enable Live Audio" button resumes context and plays full stream. |
-| **7** | **Normal 30-second completion** | Race condition between stitched and master. | Mobile master file upload disarms server watchdog (`handleMasterUploaded`) and takes precedence. |
+| 1 | Screen locked immediately after SOS | JavaScript thread paused; nothing arrives until unlock | Native foreground service posts each slice itself |
+| 2 | Phone destroyed or battery dies at 12 s | All evidence lost | Slices 1 and 2 are already on the server; the 8 s watchdog stitches and stores them |
+| 3 | Network dip during cell hand-over | Slice upload fails | OkHttp retries twice with back-off; Socket.IO is a second path when unlocked |
+| 4 | First slice finishes before the alert ID exists | Slice rejected as unowned | Slice is buffered and flushed when the ID arrives |
+| 5 | Same slice arrives over both transports | Audio plays twice | Admin client de-duplicates by `alertId:seq` |
+| 6 | Browser blocks autoplay | Dispatcher hears nothing | Slices are queued; first click resumes playback |
+| 7 | Normal 30-second completion | Race between stitched and master files | Master upload disarms the watchdog and takes precedence |
+| 8 | Slices arrive out of order | Garbled audio | Jitter buffer (section 9.1) |
 
----
+## 9. Hardening Phases (all completed)
 
-## 6. Industry Benchmark Comparison
+### 9.1 Jitter buffer and sequencer
 
-| Metric | SAFORA Dual-Pipe Engine | Zello Work (PTT) | Law Enforcement BWCs (Axon) | Citizen App |
-| :--- | :--- | :--- | :--- | :--- |
-| **Primary Ingestion Transport** | **Stateless Chunked HTTPS POST (5s)** + WebSocket fallback | Custom low-latency UDP streaming | Chunked HTTPS POST (2–5s) + local flash | RTMP / WebSockets / Edge SDR |
-| **Locked Screen Survival** | **100%** (Kotlin Foreground Service + WakeLock) | **100%** (Native PTT Service) | **100%** (Dedicated Hardware OS) | **100%** (Native OS Service) |
-| **Local Continuous Master** | **Yes** (Continuous WAV on flash) | Optional (Local cache) | **Yes** (Continuous flash storage) | No (Cloud ingest) |
-| **Server Fallback Stitching** | **Yes** (8s watchdog auto-stitching) | Server archive stream | **Yes** (DEMS evidence compiler) | Server archive stream |
-| **Admin Playback Engine** | Web Audio API + 6ms Micro-Fades | Proprietary Dispatch Hub | DEMS Web Player | Web Audio API + Waveform Render |
+During mobility, slice 3 can arrive 100–300 ms before slice 2. The admin client holds an out-of-order slice for a 450 ms playout window. When the missing predecessor arrives, the contiguous run is released in order. If it does not arrive in time, playback advances to the lowest buffered slice and logs a warning. Slices with `seq <= lastPlayedSeq` are dropped, and state is cleared per alert when playback stops.
 
----
+### 9.2 Voice-clarity processing
 
-## 7. Scalability & Resilience Enhancements
+A dispatcher-side Web Audio chain makes speech easier to understand when the phone is in a pocket or outdoors: a 175 Hz high-pass filter (Q 0.707), a +3.5 dB peaking filter at 2.4 kHz (Q 1.1), and a dynamics compressor (3 ms attack, −24 dB threshold, 4:1 ratio). A "Clarity" switch turns the chain on or off and remembers the choice.
 
-### Phase 1: Admin Jitter Buffer & Out-of-Order Sequencer — [STATUS: COMPLETED]
-- **Implemented In:** [`apps/frontend/src/context/SocketContext.tsx`](file:///d:/Safora/apps/frontend/src/context/SocketContext.tsx)
-- **Problem Solved:** When a user triggers SOS during cellular mobility (driving or walking across cell towers), TCP paths and tower handovers can cause slice #3 to arrive ~100–300ms before slice #2.
-- **Engine Architecture:**
-  1. **Sliding Playout Window (`450ms`):** If an out-of-order slice arrives (`seq > expectedSeq`), it is staged in `heldChunks` while a 450ms playout timer begins.
-  2. **Contiguous Chain Unblocking:** The moment the missing predecessor arrives, the entire contiguous series is unblocked and enqueued in strict chronological order (`#2 -> #3 -> #4`).
-  3. **Playout Timeout Fallback:** If the missing slice fails to arrive within 450ms (packet loss over congested cellular network), the timer expires, logs an audit warning, and automatically advances the sequence playout to the lowest available buffered slice, preventing dashboard audio stalls.
-  4. **Obsolete Frame Purge:** Any late slices arriving with `seq <= lastPlayedSeq` are discarded immediately.
-  5. **Memory Leak Protection:** State is isolated per `alertId` and completely purged upon `stopLiveAudioPlayback()` and `dismissEmergency()`.
+### 9.3 Hardware compression
 
-### Phase 2: Tactical Voice Clarity & Noise Reduction DSP — [STATUS: COMPLETED]
-- **Implemented In:** [`apps/frontend/src/context/SocketContext.tsx`](file:///d:/Safora/apps/frontend/src/context/SocketContext.tsx), [`apps/frontend/src/components/common/AudioPlayer.tsx`](file:///d:/Safora/apps/frontend/src/components/common/AudioPlayer.tsx), and [`apps/frontend/src/pages/SosAlertsPage.tsx`](file:///d:/Safora/apps/frontend/src/pages/SosAlertsPage.tsx)
-- **Problem Solved:** When phones are locked in citizen pockets or victims are outdoors, low-frequency acoustic energy (<150 Hz) creates heavy handling thumps, fabric rustle, and wind turbulence rumble that obscures human voice formants (whispers, distress cries, street names).
-- **Engine Architecture:**
-  1. **175 Hz High-Pass Filter (`BiquadFilterNode`):** Butterworth curve (Q: 0.707) cutting out sub-150 Hz mechanical fabric friction, vehicle engine drone, and wind turbulence.
-  2. **2.4 kHz Speech Peaking EQ (`BiquadFilterNode`):** +3.5 dB boost centered at 2,400 Hz (Q: 1.1) to elevate vocal consonant clarity and speech intelligibility.
-  3. **Dynamic Range Leveler (`DynamicsCompressorNode`):** Fast 3ms attack, -24 dB threshold, 4:1 ratio to level quiet whispers while preventing ear-piercing screams or mic drops from overloading dispatcher headsets.
-  4. **Interactive Dispatcher Toggle:** Real-time `[✨ Clarity: ON/OFF]` tactical switch on both the live 5-second slice streaming banner and the 30-second evidence player, persisting preference to `localStorage`.
+Uncompressed slices of about 160 KB are too large for 2G and congested networks. The service picks the best available encoder:
 
-### Phase 3: Hardware-Accelerated Audio Compression (Opus / AAC) — [STATUS: COMPLETED]
-- **Implemented In:** [`apps/mobile/android/app/src/main/java/com/mobile/SafeWalkService.kt`](file:///d:/Safora/apps/mobile/android/app/src/main/java/com/mobile/SafeWalkService.kt) and [`apps/backend/src/services/audioStitcherService.ts`](file:///d:/Safora/apps/backend/src/services/audioStitcherService.ts)
-- **Problem Solved:** Transmitting uncompressed 16-bit PCM WAV chunks (~160 KB per 5s slice) required high bandwidth and struggled over 2G / EDGE / congested cellular networks, where uplink speeds drop to 64–100 kbps (taking >15s to transmit a 5s slice).
-- **Engine Architecture:**
-  1. **Multi-Tier Hardware Encoder (`MediaCodec` + `MediaMuxer`):**
-     - **Tier 1 (Android 10+ / API 29+):** Hardware Opus encoder (`audio/opus`) muxed into standard Ogg Opus container (`audio/ogg; codecs=opus`) at 24 kbps. Slice size drops from **~160 KB to ~16 KB (90% bandwidth reduction)**.
-     - **Tier 2 (API 24+ Universal):** Hardware AAC-LC encoder (`audio/mp4a-latm`) muxed into MP4/M4A container (`audio/mp4`) at 32 kbps. Slice size drops to **~18 KB (88% bandwidth reduction)**.
-     - **Tier 3 (Fail-safe):** Uncompressed PCM WAV fallback with 44-byte header if hardware encoders encounter OEM restrictions.
-  2. **Zero Master Compromise (Dual-Sink Integrity):** The mobile foreground service simultaneously streams raw 16-bit linear PCM directly to flash storage (`sos_${alertId}_master.wav`), guaranteeing the pristine 30-second evidence clip remains 100% loss-free.
-  3. **Universal Browser Playback:** Both `.ogg` and `.mp4` chunks are decoded natively in microseconds by Web Audio API's `decodeAudioData` on all modern dispatcher browsers.
-  4. **Rescue Watchdog Support:** Backend `AudioStitcherService` auto-detects compressed chunks (`OggS` / `ftyp`) and reliably stores rescue audio evidence to Cloudinary if mobile is destroyed mid-transmission.
+| Tier | Condition | Codec | Container | Bit rate | Slice size |
+|---|---|---|---|---|---|
+| 1 | Android 10+ | Opus | Ogg | 24 kbps | about 16 KB |
+| 2 | Android 7+ | AAC-LC | MP4/M4A | 32 kbps | about 18 KB |
+| 3 | Encoder unavailable | PCM | WAV | – | about 160 KB |
 
-### Phase 4: OEM Battery Exemption Engine & Brand-Tailored Guides — [STATUS: COMPLETED]
-- **Implemented In:** 
-  - Android Manifest: [`apps/mobile/android/app/src/main/AndroidManifest.xml`](file:///d:/Safora/apps/mobile/android/app/src/main/AndroidManifest.xml)
-  - Native Kotlin Module: [`apps/mobile/android/app/src/main/java/com/mobile/SafeWalkServiceModule.kt`](file:///d:/Safora/apps/mobile/android/app/src/main/java/com/mobile/SafeWalkServiceModule.kt)
-  - Mobile TypeScript Service: [`apps/mobile/src/services/batteryOptimizationService.ts`](file:///d:/Safora/apps/mobile/src/services/batteryOptimizationService.ts)
-  - Settings Screen: [`apps/mobile/src/screens/SettingsScreen.tsx`](file:///d:/Safora/apps/mobile/src/screens/SettingsScreen.tsx)
-  - Safe Walk Escort Screen: [`apps/mobile/src/screens/SafeWalkScreen.tsx`](file:///d:/Safora/apps/mobile/src/screens/SafeWalkScreen.tsx)
-- **Problem Solved:** 
-  - Aggressive Android vendor battery management systems (Xiaomi MIUI/HyperOS, Samsung OneUI, OnePlus/Oppo ColorOS/OxygenOS, Huawei EMUI, Vivo FuntouchOS) frequently suspend CPU wake locks, disable background GPS polling, and terminate native foreground services when the phone screen is locked or idle, even when `FOREGROUND_SERVICE` is declared.
-- **Engine Architecture:**
-  1. **Direct System Intent Trigger:**
-     - Added `<uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />`.
-     - Integrated `isIgnoringBatteryOptimizations()` via Android's `PowerManager` to check real-time exemption status.
-     - Prompts user directly with `Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` for instant one-tap exemption (*"Let SAFORA always run in the background?"*).
-  2. **Vendor-Specific Deep-Links:**
-     - Deep-links directly to manufacturer security/power centers if direct intent is blocked by OEM policies:
-       - **Xiaomi / Redmi / POCO:** `com.miui.permcenter.autostart.AutoStartManagementActivity`
-       - **Samsung:** `com.samsung.android.lool` / `com.samsung.android.sm.ui.battery.BatteryActivity`
-       - **OnePlus / Oppo / Realme:** `com.coloros.safecenter.permission.startup.StartupAppListActivity`
-       - **Huawei / Honor:** `com.huawei.systemmanager.optimize.process.ProtectActivity`
-       - **Vivo / iQOO:** `com.iqoo.secure.ui.phoneoptimize.AddWhiteListActivity`
-  3. **Live Protection Badge & Interactive Citizen Guide:**
-     - Added dedicated **"LOCK-SCREEN & BATTERY PROTECTION"** card in `SettingsScreen.tsx` with live status indicator (`🟢 UNRESTRICTED` vs `🟡 ACTION NEEDED`).
-     - Includes manufacturer-tailored step-by-step modal guide detecting user's hardware brand in real time.
-  4. **Non-Intrusive Safe Walk Escort Banner:**
-     - Integrated a dismissible reminder banner in `SafeWalkScreen.tsx` that warns citizens embarking on night walks if their phone's vendor power saver might restrict locked-screen tracking, providing a one-tap `[Fix]` shortcut.
+The master file is always lossless PCM. The stitcher detects compressed slices by their signature (`OggS` or `ftyp`) so rescue evidence also works with compressed input.
 
----
+### 9.4 OEM battery-exemption engine
 
-## 8. Summary of All 4 Completed Architecture Phases
+Vendor battery managers (Xiaomi, Samsung, Oppo/Realme/OnePlus, Huawei/Honor, Vivo/iQOO) can stop foreground services even when they are declared. Safora requests the `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` exemption, checks its status through `PowerManager`, and deep-links to the vendor's auto-start or protected-apps screen when the direct request is blocked. Settings shows a live "Lock-screen and battery protection" status, a brand-specific step-by-step guide, and the Safe Walk screen shows a dismissible reminder with a one-tap fix.
 
-All planned hardening and optimization phases are now **fully implemented and production-ready**:
-1. **Phase 1: Admin Jitter Buffer & Out-of-Order Sequencer** (`SocketContext.tsx`) — ✅ COMPLETED
-2. **Phase 2: Tactical Voice Clarity & Noise Reduction DSP** (`SocketContext.tsx`, `AudioPlayer.tsx`, `SosAlertsPage.tsx`) — ✅ COMPLETED
-3. **Phase 3: Hardware-Accelerated Audio Compression (Opus / AAC)** (`SafeWalkService.kt`, `audioStitcherService.ts`) — ✅ COMPLETED
-4. **Phase 4: OEM Battery Exemption Engine & Brand-Tailored Guides** (`SafeWalkServiceModule.kt`, `batteryOptimizationService.ts`, `SettingsScreen.tsx`, `SafeWalkScreen.tsx`) — ✅ COMPLETED
+## 10. Comparison with Comparable Systems
+
+| Property | Safora | Push-to-talk platforms | Body-worn cameras |
+|---|---|---|---|
+| Ingestion | Chunked HTTPS (5 s) with WebSocket fallback | Low-latency streaming | Chunked HTTPS (2–5 s) plus local flash |
+| Survives locked screen | Yes (foreground service) | Yes | Yes (dedicated device) |
+| Local lossless master | Yes | Optional | Yes |
+| Server-side rescue | Yes (8 s watchdog) | Server archive | Yes (evidence management system) |
+| Operator playback | Web Audio queue with jitter buffer and clarity DSP | Proprietary dispatch hub | Evidence web player |

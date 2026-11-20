@@ -1,70 +1,78 @@
-# Database Schema — V2 Additions
+# Database Schema – V2 Additions
 
-> New tables/columns introduced across V2, on top of V1's schema (`docs/v1/database.md`). Full `CREATE TABLE` statements are in the linked spec sections — this file is the index and the relationship map.
+> New tables and columns introduced in V2, on top of V1 ([`../v1/database.md`](../v1/database.md)). Full `CREATE TABLE` statements are in the linked specification sections. This file is the index and the relationship map.
 
-## New tables by feature
+## 1. New Tables by Feature
 
-| Table | Purpose | Spec |
+| Table | Purpose | Specification |
 |---|---|---|
-| `refresh_tokens` | Rotating session refresh tokens | `accounts-email-local.md` §3 (SEC-5) |
-| `otp_codes` | Email verification / password reset codes | §1 |
-| `email_outbox` | Queued transactional email | §1 |
-| `guardian_invites` | Guardian handshake tokens | `safety-and-tracking.md` §1 |
+| `refresh_tokens` | Rotating session refresh tokens | [`accounts-email-local.md`](./accounts-email-local.md) §3 (SEC-5) |
+| `otp_codes` | E-mail verification and password-reset codes | §1 |
+| `email_outbox` | Queued transactional e-mail | §1 |
+| `guardian_invites` | Guardian handshake tokens | [`safety-and-tracking.md`](./safety-and-tracking.md) §1 |
 | `alert_deliveries` | Per-channel SOS delivery tracking | §2 |
+| `sos_escalation_state` | Which tier of the escalation ladder an SOS is on | §2 (TRK-11) |
 | `tracking_links` | Guardian web-view tokens (deferred feature) | §5 |
 | `checkins` | Safety Check timers | §6 |
-| `contacts` | Mutual accept for chat | §10 |
-| `threads` / `messages` | Chat | §10 |
-| `medical_cards` | Encrypted emergency medical info | `accounts-email-local.md` §8 |
-| `report_confirmations` | Unique "still there/cleared" votes | §2 (SEC-3), `map-routing-search.md` §9 |
-| `advisories` | Sachet/manual disaster advisories | `accounts-email-local.md` §6.2 |
-| `safe_places` | Police/hospital/pharmacy overlay | `map-routing-search.md` §7 |
-| `place_audits` | SafetiPin-style safety ratings | `accounts-email-local.md` §6.3 |
-| `organizations` | Campus/org scoping for admin (deferred) | §7 (ADM-2) |
-| `sos_events` | Admin dispatch audit trail | §7 (ADM-1) |
-
-## New tables — added 22 Sep 2026
-
-| Table | Purpose | Spec |
-|---|---|---|
-| `weather_cache` | Short-TTL cache of Open-Meteo responses | `environmental-hazards.md` §2 (WX-1) |
-| `abuse_flags` | Moderator-flagged accounts, admin-reviewed queue | `accounts-email-local.md` §8 (SEC-10) |
-| `parent_links` | Consent authority for teen accounts (relationship, not role) | §4 (AGE-2) |
-| `sos_escalation_state` | Tracks which tier an SOS's escalation ladder is on | `safety-and-tracking.md` §2 (TRK-11) |
 | `battery_warnings` | One row per battery-threshold crossing during a walk | §6b (TRK-10) |
-| `scheduled_walks` | Recurring Safe Walk reminders (local-notification driven) | §6d (TRK-13) |
+| `scheduled_walks` | Recurring Safe Walk reminders (driven by local notifications) | §6d (TRK-13) |
+| `contacts`, `threads`, `messages` | Chat | §10 |
+| `medical_cards` | Encrypted emergency medical information | `accounts-email-local.md` §9 |
+| `abuse_flags` | Moderator-flagged accounts for admin review | §8 (SEC-10) |
+| `parent_links` | Consent authority for teen accounts (a relationship, not a role) | §4 (AGE-2) |
+| `report_confirmations` | Unique "still there" and "cleared" votes | §2 (SEC-3), [`map-routing-search.md`](./map-routing-search.md) §9 |
+| `advisories` | Sachet and manual disaster advisories | `accounts-email-local.md` §6.2 |
+| `safe_places`, `safe_stops` | Police, hospital and pharmacy overlay; verified local spots | `map-routing-search.md` §7 |
+| `place_audits` | SafetiPin-style safety ratings | `accounts-email-local.md` §6.3 |
+| `weather_cache` | Short-lived cache of Open-Meteo responses | [`environmental-hazards.md`](./environmental-hazards.md) §2 (WX-1) |
+| `sos_events` | Admin dispatch audit trail | `accounts-email-local.md` §7 (ADM-1) |
+| `staff_audit_log` | Staff views of sensitive records | §7, §9 |
 
-## Column additions to existing tables
+`organizations` (campus scoping) is dropped from the plan.
 
-| Table | New columns | Spec |
+## 2. Column Additions to Existing Tables
+
+| Table | New columns | Specification |
 |---|---|---|
 | `users` | `email_verified_at`, `email_bounced_at`, `token_version`, `language` | `accounts-email-local.md` §1 |
-| `trusted_contacts` | `status`, `guardian_user_id`, `accepted_at`, `revoked_at`, `language` | `safety-and-tracking.md` §1 |
-| `journeys` | `mode`, `last_location`, `last_seen_at` *(already in V1)*, `deviated_at`/`escalated_at` *(already in V1)*, `escalation_reason`, `type` (`safe_walk`\|`walk_with_me`, added 22 Sep 2026) | §3, §4, §6c |
-| `trusted_contacts` | `priority_tier` (added 22 Sep 2026 — escalation ladder) | `safety-and-tracking.md` §1, §2 |
-| `users` | `trust_score` (added 22 Sep 2026 — reporter trust) | `map-routing-search.md` §9 (MAP-9c) |
-| `reports` | `duplicate_of` (added 22 Sep 2026) | §9 (MAP-9d) |
-| `reports` | (category-specific decay handled in application code, not schema) | `map-routing-search.md` §9 |
+| `users` | `display_name`, `trust_score` | §2; `map-routing-search.md` §9 (MAP-9c) |
+| `trusted_contacts` | `status`, `guardian_user_id`, `accepted_at`, `revoked_at`, `language`, `priority_tier` | `safety-and-tracking.md` §1, §2 |
+| `journeys` | `mode`, `escalation_reason`, `type` (`safe_walk` or `walk_with_me`); `last_location`, `last_seen_at`, `deviated_at` and `escalated_at` already exist from V1 | §3, §4, §6c |
+| `reports` | `reporter_display`, `duplicate_of` | `accounts-email-local.md` §2; `map-routing-search.md` §9 (MAP-9d) |
 
-## Entity relationship (V2 additions only)
+Category-specific decay is handled in application code and needs no schema change.
+
+## 3. Relationships (V2 additions only)
 
 ```mermaid
 erDiagram
+    users ||--o{ refresh_tokens : "sessions"
+    users ||--o{ otp_codes : "codes"
+    users ||--o| medical_cards : "has"
+    users ||--o{ contacts : "requests"
+    users ||--o{ checkins : "sets"
+    users ||--o{ scheduled_walks : "plans"
+    users ||--o{ abuse_flags : "flagged"
+    users ||--o| parent_links : "teen account"
     trusted_contacts ||--o| guardian_invites : "invited via"
     journeys ||--o{ tracking_links : "generates"
     journeys ||--o{ checkins : "may include"
-    users ||--o{ contacts : "requests"
+    journeys ||--o{ battery_warnings : "records"
     contacts ||--o{ threads : "opens"
     threads ||--o{ messages : "contains"
-    users ||--o| medical_cards : "has"
     reports ||--o{ report_confirmations : "confirmed by"
+    reports ||--o| reports : "duplicate_of"
     sos_alerts ||--o{ alert_deliveries : "delivered via"
+    sos_alerts ||--o| sos_escalation_state : "ladder state"
     sos_alerts ||--o{ sos_events : "audit trail"
 ```
 
-## Retention (see `security-privacy-compliance.md` §2 for the full table)
-Breadcrumbs 30 days, SOS audio 30 days, chat messages 30 days after last activity, OTP codes purged 24h after use/expiry, tracking links purged 30 days after expiry. A scheduled purge job (`ENG-1`) is required once these tables exist — do not ship the tables without it.
+## 4. Retention
 
-## Migration ordering note
+See [`security-privacy-compliance.md`](./security-privacy-compliance.md) §2 for the full table. In short: breadcrumbs 30 days, SOS audio 30 days, chat messages 30 days after the last activity, OTP codes purged 24 hours after use or expiry, and tracking links purged 30 days after expiry. A scheduled purge job (ENG-1) is required once these tables exist. **Do not ship the tables without it.**
 
-Apply V2 migrations in the same order as the implementation sequence above — e.g. `refresh_tokens`/`otp_codes` (session + email) before `guardian_invites` (which assumes verified-email accounts exist), before `contacts`/`threads`/`messages` (chat, which assumes the guardian handshake pattern is already proven). Use a real migration tool for this phase (`node-pg-migrate`, tracked as `ENG-1` in `roadmap.md`) rather than V1's inline-SQL-in-`initDatabase()` pattern — V2 has enough schema changes that hand-tracking them stops being safe.
+## 5. Migration Order
+
+Apply V2 migrations in the order of the implementation sequence in [`api.md`](./api.md#10-notes-for-the-implementer): `refresh_tokens` and `otp_codes` (session and e-mail) before `guardian_invites` (which assumes verified-e-mail accounts), before `contacts`, `threads` and `messages` (chat, which assumes the guardian handshake is proven).
+
+Use a real migration tool for this phase (`node-pg-migrate`, ENG-1) instead of V1's inline SQL in `initDatabase()`. V2 has enough schema changes that tracking them by hand stops being safe.

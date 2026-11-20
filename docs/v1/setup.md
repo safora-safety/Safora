@@ -1,26 +1,46 @@
-# Setup — V1 (delta from your existing `docs/setup.md`)
+# Setup – Version 1 Additions
 
-Your current `docs/setup.md` is accurate and does not need a rewrite — keep using it for prerequisites, `.env` files, and `npm install`/`npm run dev` steps. This file only lists what changes for V1.
+This page lists what V1 adds to the standard setup in [`../setup.md`](../setup.md). Prerequisites, `.env` files and the `npm install` and `npm run dev` steps are unchanged.
 
-## New environment variables
+## 1. New Environment Variables
 
-`apps/backend/.env` — add:
+`apps/backend/.env`:
+
 ```env
-# Watchdog tick endpoint auth (V1)
-INTERNAL_TICK_SECRET=some_long_random_string
+# Authenticates the external watchdog trigger (POST /api/internal/tick)
+INTERNAL_TICK_SECRET=<long random string>
+
+# Optional: default corridor width in metres (20-1000). Default is 100
+CORRIDOR_THRESHOLD_METERS=100
+
+# Optional: session lifetime. Default is 7d
+JWT_EXPIRES_IN=7d
 ```
 
-No new mobile `.env` variables for V1 (Socket.IO reuses `API_BASE_URL`'s host with the Socket.IO path).
+The mobile app needs no new variables; the Socket.IO client reuses the host of `API_BASE_URL`.
 
-## New setup steps
+## 2. Database
 
-1. **Run the schema update.** Since `initDatabase()` creates tables inline, the new V1 columns/table (`database.md` §2) will be created automatically the next time the backend starts against a fresh database. **For an existing database with data**, run the `ALTER TABLE`/`CREATE TABLE` statements from `database.md` §2 manually once.
-2. **Keep the watchdog alive locally.** For local development you don't need the external pinger — the 30-second in-process tick runs as long as `npm run dev` is running. Only the deployed Render instance needs the external `POST /api/internal/tick` scheduler (see `api.md`), because it can sleep after 15 minutes idle.
-3. **Set up the external pinger for the deployed backend** (once, before your demo/submission):
-   - Use a free scheduler such as cron-job.org.
-   - Configure it to `POST` to `https://<your-render-backend>/api/internal/tick` every 5 minutes with header `X-Internal-Secret: <INTERNAL_TICK_SECRET>`.
-   - This also has the side effect of preventing Render's free instance from sleeping, which reduces (does not eliminate) cold-start delay for real demo traffic.
-4. **Two-device test for live tracking (Architecture §3, `testing-and-submission.md` T4).** You need a second phone or emulator logged in as a trusted contact to see the live location and deviation alert land. A single device cannot demonstrate this flow to yourself.
+`initDatabase()` creates the new V1 tables and columns the first time the backend starts against a fresh database. For an **existing** database with data, run the statements in [`database.md`](./database.md#5-v1-migration-script) once, before deploying the V1 backend.
 
-## Nothing else changes
-Android Studio/SDK/NDK versions, PostgreSQL/PostGIS requirement, and the monorepo `npm install` flow are all unchanged from your existing `docs/setup.md`.
+## 3. Watchdog
+
+- **Local development.** The 30-second in-process tick runs while `npm run dev` is running. No external scheduler is needed.
+- **Deployed backend (once, before a demonstration).** Render's free instance sleeps after 15 minutes without traffic, so an external scheduler must call the tick endpoint:
+
+  1. Create a job on a free scheduler such as cron-job.org.
+  2. Method `POST`, URL `https://<backend>/api/internal/tick`, interval **every 60 seconds**.
+  3. Header `X-Internal-Secret: <INTERNAL_TICK_SECRET>`.
+  4. Check the Render logs to confirm that the job fires; the response is `{"scanned":N,"escalated":N}`.
+
+  A wrong or missing secret returns `401`.
+
+## 4. Two-Device Test
+
+Live tracking and the deviation alert need a second phone or emulator that is signed in as a trusted contact. A single device cannot demonstrate the flow. See [Testing](./testing-and-submission.md).
+
+## 5. Android Build Notes
+
+- The foreground service requires the permissions declared in `AndroidManifest.xml` (location, microphone, foreground-service types and `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`).
+- Release build: about 34 MB, arm64-v8a.
+- Do not compile the MapTiler key into the mobile bundle. It is used only by the backend; verify with `strings` on the APK before release.

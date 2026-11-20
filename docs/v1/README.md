@@ -1,29 +1,57 @@
-# Safora Docs — V1 (College Submission)
+# Safora Documentation – Version 1
 
-> **Scope:** the six objectives in `SAFORA_Synopsis_Formatted.pdf`, built honestly, on top of what already exists in the codebase.
-> **Target:** mid-November 2026 (your buffer) / end-November 2026 (college deadline).
-> **Updated 22 Sep 2026:** background Safe Walk tracking (foreground service), lock-screen SOS audio (with an honest platform limitation), and a simple distance/ETA notification were pulled into V1 — they strengthen the core objective rather than being separate scope. This adds ~9–12 focused days; **V1's realistic target is now your end-November college deadline, not the mid-November personal buffer.** See `tasks.md` for the updated total and cut list.
->
-> **Not in V1:** accounts hardening, email, OpenFreeMap, real per-mode routing/turn-by-turn voice, Quick Settings/volume-button/no-unlock triggers (only the foreground-service tracking above is V1; the rest of no-unlock trigger work is `TRG-3`/`TRG-4` in V2), chat, Hindi, medical card, legal/DPDP work — all of that is `docs/v2/`.
-> **Out of scope entirely for now:** AI routing, offline mesh messaging, AI image detection — those are `docs/v3/`.
+> **Status: complete.** Version 1 is the college-submission release of Safora. All six objectives of the synopsis are implemented, deployed and verified (104 automated tests and 143 field test cases, all passing).
 
-## Files in this folder
+## Summary
 
-| File | Contents |
+Safora is a community safety platform for students and women in campus and urban settings. Users report hazards on a map, and the reports are turned into a live safety score and heat map. A user can start a **Safe Walk**: the live location is shared with trusted contacts, and if the walker leaves the planned corridor and does not confirm safety, the server raises an alert automatically. A one-tap **SOS** sends the position and battery level at once, streams 30 seconds of audio to guardians and dispatchers while it is being recorded, and can sound a siren. All spatial queries run on PostgreSQL with PostGIS. The mobile app is React Native with a native Kotlin foreground service, the backend is Node.js and Express with Socket.IO, and a React admin console lets staff moderate reports and monitor walks and alerts.
+
+## Document Index
+
+| Document | Contents |
 |---|---|
-| `architecture.md` | System diagram, what's existing vs new-in-V1 |
-| `api.md` | Every V1 endpoint and socket event, with what changed |
-| `database.md` | Schema: existing tables + the V1 additions |
-| `tech-stack.md` | Actual technology used, corrected against the synopsis |
-| `safety-algorithms.md` | Safety score, heatmap/clusters, corridor check, deviation escalation |
-| `mobile-app-features.md` | What the app does, screen by screen, for V1 |
-| `admin-panel.md` | What the admin site does for V1 |
-| `dual-pipe-audio-streaming.md` | Real-time 5s audio chunk delivery, Android AudioRecord dual-sink, server fail-safe watchdog & Cloudinary archival |
-| `safora-v1-features-industry-research.md` | Comprehensive feature audit, global benchmarking (SafetiPin, Noonlight, Citizen, bSafe, WalkSafe, RapidSOS), and unique engineering innovations |
-| `setup.md` | Local dev setup (mostly unchanged from your current docs) |
-| `tasks.md` | The concrete V1 ticket list, in priority order, with a cut list |
-| `testing-and-submission.md` | Self-testing checklist and demo/viva readiness |
+| [`srs.md`](./srs.md) | Functional and non-functional requirements with identifiers |
+| [`use-cases.md`](./use-cases.md) | Actors, use case diagram and specifications |
+| [`architecture.md`](./architecture.md) | System context, data flow diagrams (levels 0 to 2), core flows, watchdog, foreground service, deployment |
+| [`sequence-diagrams.md`](./sequence-diagrams.md) | Sign-in, reporting, score, Safe Walk, SOS, guardian check, moderation, scheduler |
+| [`state-machines.md`](./state-machines.md) | Life cycles of reports, journeys, deviations, SOS, audio, sessions and contacts |
+| [`api.md`](./api.md) | Every REST endpoint and Socket.IO event, with request and response shapes |
+| [`database.md`](./database.md) | Tables, entity-relationship diagram, indexes, migration script |
+| [`data-dictionary.md`](./data-dictionary.md) | Enumerations, fields, payloads and constants |
+| [`safety-algorithms.md`](./safety-algorithms.md) | Safety score, clustering, corridor check, deviation escalation |
+| [`dual-pipe-audio-streaming.md`](./dual-pipe-audio-streaming.md) | Live audio slicing, master archival, server rescue, hardening phases |
+| [`mobile-app-features.md`](./mobile-app-features.md) | Screen-by-screen feature list and file map |
+| [`admin-panel.md`](./admin-panel.md) | Admin console pages and dispatcher tools |
+| [`roles-and-permissions.md`](./roles-and-permissions.md) | Permission matrix and how access is enforced |
+| [`security-and-privacy.md`](./security-and-privacy.md) | Controls delivered, data handled, known gaps |
+| [`tech-stack.md`](./tech-stack.md) | Technologies, versions, hosting, code size |
+| [`setup.md`](./setup.md) | V1-specific setup steps |
+| [`operations-runbook.md`](./operations-runbook.md) | Deployment, routine checks, incident playbook, backups |
+| [`testing-and-submission.md`](./testing-and-submission.md) | Test strategy, automated suites, field verification, demonstration script |
+| [`tasks.md`](./tasks.md) | Delivery record of the V1 work items |
+| [`safora-v1-features-industry-research.md`](./safora-v1-features-industry-research.md) | Feature comparison with existing platforms |
+| [`../v1_manual_testing_checklist.md`](../v1_manual_testing_checklist.md) | The 143-case field checklist |
 
-## One-paragraph summary for your report
+## Scope
 
-Safora V1 is a community safety platform: users report hazards on a map that generates a live safety-score heatmap, start a "Safe Walk" that shares their live location with trusted contacts and automatically alerts them if the walker deviates from the route, and can trigger an SOS with GPS, battery and audio sent to guardians. All spatial queries run on PostgreSQL/PostGIS; the mobile app is React Native with a Leaflet map in a WebView; the backend is Node/Express with Socket.IO for realtime updates; an admin web dashboard lets staff review hazard reports and monitor active Safe Walks and SOS alerts.
+| In V1 | Not in V1 |
+|---|---|
+| Hazard reporting, score, heat map, clusters | Account hardening, e-mail, refresh tokens (V2) |
+| Safe Walk with live guardian view and server watchdog | Lost-contact, overdue-arrival and check-in rules (V2) |
+| Foreground service, lock-screen tracking and audio | No-unlock SOS triggers, volume-key and tile triggers (V2) |
+| Dual-pipe SOS audio, siren, SMS fallback, decoys | Chat, medical card, Hindi content (V2) |
+| Admin console with live radar and dispatcher tools | Per-mode routing and voice guidance (V2) |
+| Google Sign-In, terms and age notice | AI routing, mesh messaging, image detection, voice trigger (V3) |
+
+## Known Limitations (stated openly)
+
+- Android only.
+- The three travel modes share the same road geometry; times differ by mode.
+- Guardian model is simplified: a contact with a Safora account sees the walk without an acceptance step.
+- The free-tier backend can sleep; the scheduled tick keeps the watchdog alive but does not remove the first-request delay.
+- The offline map cache prefetches raster tiles, which the tile provider discourages for bulk use.
+- Tokens are stored in AsyncStorage without secure hardware storage.
+
+## Related Documentation
+
+[`../v2/README.md`](../v2/README.md) describes the product roadmap and [`../v3/README.md`](../v3/README.md) the research items.

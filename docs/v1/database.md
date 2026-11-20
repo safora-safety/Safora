@@ -1,120 +1,153 @@
-# Database Schema — V1
+# Database Schema
 
-PostgreSQL + PostGIS on Neon. Schema is created inline in `initDatabase()` — V1 keeps that pattern (a real migration tool is a V2 engineering item) but every new column/table below should be added to that function and to a short `V1_CHANGES.sql` you keep in the repo for your report.
+| | |
+|---|---|
+| **Version** | V1 (complete) |
+| **Engine** | PostgreSQL 15+ with the PostGIS extension, hosted on Neon (free tier) |
+| **Access** | `pg` with raw SQL; no ORM |
+| **Migrations** | Inline in `initDatabase()` (`apps/backend/src/config/database.ts`). A migration tool is a V2 item |
 
-## 1. Existing tables (unchanged structure)
+## 1. Tables
 
-- `users` — id, name, email, password_hash, role, blood_group, emergency_contact, suspended, created_at, …
-- `reports` — id, user_id, category, severity, description, photo_url, location `geography(Point,4326)`, confirmations_count, status, created_at
-- `trusted_contacts` — id, user_id, name, email, phone
-- `journeys` — id, user_id, origin/destination points, status, started_at, completed_at
-- `sos_alerts` — id, user_id, location, battery, audio_url, status, source, created_at
-  - *Note on `audio_url`:* Populated via one of two paths: (1) **Happy Path:** Mobile uploads pristine 30s master WAV directly to Cloudinary and updates `audio_url` via `PATCH /api/sos/:id/audio`. (2) **Fail-Safe Path:** If mobile phone is destroyed/interrupted mid-stream, `AudioStitcherService` 8s watchdog concatenates received chunks into `interrupted_stitched.wav`, uploads to Cloudinary, and sets `audio_url`.
-- `notifications` — id, user_id, type, payload, read_at, created_at
+V1 has seven tables. Spatial columns use `GEOGRAPHY(Point, 4326)` so that distances are computed on the WGS 84 ellipsoid.
 
-## 2. New/changed in V1
+| Table | Purpose |
+|---|---|
+| `users` | Identity, role, authentication provider, age notice and terms acceptance |
+| `reports` | Community hazard reports with a spatial point, category, severity, photo and moderation state |
+| `trusted_contacts` | Guardians and emergency contacts of a user |
+| `journeys` | Safe Walk sessions, including watchdog state |
+| `journey_breadcrumbs` | **New in V1.** High-frequency GPS track of a journey |
+| `sos_alerts` | Emergency alerts with position, battery, audio evidence and source |
+| `notifications` | In-app notification inbox |
 
-```sql
--- Live tracking (Architecture §3)
-CREATE TABLE journey_breadcrumbs (
-  id BIGSERIAL PRIMARY KEY,
-  journey_id INTEGER NOT NULL REFERENCES journeys(id) ON DELETE CASCADE,
-  location GEOGRAPHY(Point,4326) NOT NULL,
-  speed REAL,
-  battery SMALLINT,
-  recorded_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE INDEX idx_breadcrumbs_journey ON journey_breadcrumbs (journey_id, recorded_at DESC);
-
--- Watchdog state (Architecture §4)
-ALTER TABLE journeys
-  ADD COLUMN last_location GEOGRAPHY(Point,4326),
-  ADD COLUMN last_seen_at TIMESTAMPTZ,
-  ADD COLUMN deviated_at TIMESTAMPTZ,
-  ADD COLUMN escalated_at TIMESTAMPTZ;
-
--- Age notice + terms (no parental-consent workflow in V1 — see docs/v2)
-ALTER TABLE users
-  ADD COLUMN age SMALLINT,
-  ADD COLUMN age_notice_ack BOOLEAN NOT NULL DEFAULT false,
-  ADD COLUMN terms_accepted_at TIMESTAMPTZ;
-```
-
-## 3. Report response — identity stripped for public callers (API §Reports)
-
-No schema change — `reports` still stores `user_id`. The change is in the **repository/DTO layer**: `findAll`/`nearby` must stop joining/returning `users.name`/`email`/`phone` unless the caller passed `requireStaff`. If you want this documented as a real flag rather than route-level logic, add:
-
-```sql
--- Optional but recommended: lets a user choose to hide their name even from the "shown" default
-ALTER TABLE reports ADD COLUMN show_reporter_name BOOLEAN NOT NULL DEFAULT true;
-```
-(Optional for V1 — only add it if you have time; otherwise identity is simply excluded from the public DTO server-side regardless of a stored preference, which still satisfies "admin sees who posted, public feed does not.")
-
-## 4. Indexes to check exist (performance, not new features)
-
-```sql
-CREATE INDEX IF NOT EXISTS idx_reports_location ON reports USING GIST (location);
-CREATE INDEX IF NOT EXISTS idx_journeys_status ON journeys (status) WHERE status = 'active';
-```
-The second index matters once the watchdog tick queries "active journeys" every 30 seconds — keep the active-journey list small and indexed so the tick stays cheap even as `journeys` grows.
-
-## 5. Entity relationship (V1)
+## 2. Entity Relationship Diagram
 
 ```mermaid
 erDiagram
-    users ||--o{ reports : "reports"
+    users ||--o{ reports : "submits"
     users ||--o{ trusted_contacts : "has"
     users ||--o{ journeys : "starts"
     users ||--o{ sos_alerts : "triggers"
-    journeys ||--o{ journey_breadcrumbs : "generates"
+    users ||--o{ notifications : "receives"
+    journeys ||--o{ journey_breadcrumbs : "records"
+
     users {
         int id PK
+        string name
         string email
         string password_hash
-        string role
+        string role "citizen, moderator, admin"
+        string auth_provider "email or google"
+        string google_id
+        string avatar_url
+        string blood_group
+        string emergency_contact
+        boolean suspended
         smallint age
         boolean age_notice_ack
         timestamptz terms_accepted_at
+        timestamptz created_at
     }
     reports {
         int id PK
         int user_id FK
         string category
-        smallint severity
-        geography location
-        boolean show_reporter_name
+        smallint severity "1 to 5"
+        string description
+        string photo_url
+        geography location "Point 4326, GiST index"
+        int confirmations_count
+        string status "active, resolved, duplicate, fake"
+        timestamptz created_at
+    }
+    trusted_contacts {
+        int id PK
+        int user_id FK
+        string name
+        string email
+        string phone
+        string relationship
+        string status
     }
     journeys {
         int id PK
         int user_id FK
+        geography origin
+        geography destination
+        string status "active, completed, cancelled"
+        string mode "walk, two_wheeler, car"
         geography last_location
         timestamptz last_seen_at
         timestamptz deviated_at
         timestamptz escalated_at
+        timestamptz started_at
+        timestamptz completed_at
     }
     journey_breadcrumbs {
         bigint id PK
         int journey_id FK
         geography location
+        real speed
+        smallint battery
         timestamptz recorded_at
+    }
+    sos_alerts {
+        int id PK
+        int user_id FK
+        geography location
+        smallint battery
+        string audio_url
+        string status
+        string source "manual or watchdog"
+        timestamptz created_at
+    }
+    notifications {
+        int id PK
+        int user_id FK
+        string type
+        jsonb payload
+        timestamptz read_at
+        timestamptz created_at
     }
 ```
 
-## 6. Deferred to V2 (do not build now)
-`refresh_tokens`, `otp_codes`, `email_outbox`, `report_confirmations` (uniqueness), `alert_deliveries`, `checkins`, `contacts`/`threads`/`messages` (chat), `medical_cards`, `advisories`, `safe_places`, `place_audits`, `tracking_links`, `organizations`. Full definitions are in `docs/v2/database.md`.
+## 3. Additions in V1
 
-## 7. Complete, runnable migration for V1
+| Area | Change | Used by |
+|---|---|---|
+| Live tracking | Table `journey_breadcrumbs` with index `(journey_id, recorded_at DESC)` | Location persistence, admin radar |
+| Watchdog | `journeys.last_location`, `last_seen_at`, `deviated_at`, `escalated_at` and a partial index on `status = 'active'` | Watchdog tick, active-journey list |
+| Age and terms | `users.age`, `age_notice_ack`, `terms_accepted_at` | Terms and age notice screen |
+| Google Sign-In | `users.auth_provider`, `users.google_id`, `users.avatar_url` | `POST /api/auth/google` |
+| Evidence source | `sos_alerts.source` with values `manual` and `watchdog`; `audio_url` filled by the master upload or the rescue watchdog | SOS queue, audio engine |
 
-Save as `apps/backend/scripts/v1-migration.sql` (or run inline inside `initDatabase()` — either works, but keep a copy of this file in the repo either way as a record for your report). Written to be **idempotent** (`IF NOT EXISTS` throughout) so it's safe to re-run against a database that already has some of these changes applied.
+### 3.1 How `audio_url` is populated
+
+1. **Normal path.** The phone uploads the 30-second master WAV to Cloudinary and updates the alert through `PATCH /api/sos/:id/audio`.
+2. **Rescue path.** If the phone is destroyed or loses connectivity mid-stream, the server's 8-second watchdog concatenates the received slices into `interrupted_stitched.wav`, uploads it and sets `audio_url`.
+
+### 3.2 Reporter identity
+
+`reports.user_id` is always stored. Identity is removed in the repository and DTO layer: the public representation omits `userId`, `reporterName` and `reporterEmail`, and staff-guarded endpoints return the full staff representation. No schema change is needed for this.
+
+## 4. Indexes
 
 ```sql
--- ============================================================
--- Safora V1 migration — breadcrumbs, watchdog state, age/terms
--- ============================================================
+CREATE INDEX IF NOT EXISTS idx_reports_location ON reports USING GIST (location);
+CREATE INDEX IF NOT EXISTS idx_breadcrumbs_journey ON journey_breadcrumbs (journey_id, recorded_at DESC);
+CREATE INDEX IF NOT EXISTS idx_journeys_active ON journeys (status) WHERE status = 'active';
+```
 
+The partial index keeps the watchdog and the admin radar fast as the journey history grows.
+
+## 5. V1 Migration Script
+
+Idempotent, so it is safe to run more than once. Keep a copy in the repository as `apps/backend/scripts/v1-migration.sql`.
+
+```sql
 BEGIN;
 
--- 1. Live tracking (architecture.md §3, tasks.md #4)
 CREATE TABLE IF NOT EXISTS journey_breadcrumbs (
   id BIGSERIAL PRIMARY KEY,
   journey_id INTEGER NOT NULL REFERENCES journeys(id) ON DELETE CASCADE,
@@ -126,47 +159,46 @@ CREATE TABLE IF NOT EXISTS journey_breadcrumbs (
 CREATE INDEX IF NOT EXISTS idx_breadcrumbs_journey
   ON journey_breadcrumbs (journey_id, recorded_at DESC);
 
--- 2. Watchdog state (architecture.md §4/§6, tasks.md #7)
 ALTER TABLE journeys
   ADD COLUMN IF NOT EXISTS last_location GEOGRAPHY(Point,4326),
   ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS deviated_at TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS escalated_at TIMESTAMPTZ;
-
--- Partial index: the watchdog and the admin radar both filter on status='active' constantly
 CREATE INDEX IF NOT EXISTS idx_journeys_active
   ON journeys (status) WHERE status = 'active';
 
--- 3. Age notice + terms (tasks.md #10, #11) — no parental-consent workflow in V1
 ALTER TABLE users
   ADD COLUMN IF NOT EXISTS age SMALLINT,
   ADD COLUMN IF NOT EXISTS age_notice_ack BOOLEAN NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMPTZ;
 
--- 4. Optional: per-report name visibility (only if you implement the toggle — see database.md §3)
-ALTER TABLE reports
-  ADD COLUMN IF NOT EXISTS show_reporter_name BOOLEAN NOT NULL DEFAULT true;
-
--- 5. Confirm PostGIS spatial index exists on reports (should already exist — verify, don't assume)
 CREATE INDEX IF NOT EXISTS idx_reports_location ON reports USING GIST (location);
 
 COMMIT;
 ```
 
-### Rollback (for local dev only — think twice before running against any database with real data)
+### Rollback (development databases only)
+
 ```sql
 BEGIN;
-ALTER TABLE reports DROP COLUMN IF EXISTS show_reporter_name;
-ALTER TABLE users DROP COLUMN IF EXISTS terms_accepted_at, DROP COLUMN IF EXISTS age_notice_ack, DROP COLUMN IF EXISTS age;
+ALTER TABLE users DROP COLUMN IF EXISTS terms_accepted_at,
+                  DROP COLUMN IF EXISTS age_notice_ack, DROP COLUMN IF EXISTS age;
 DROP INDEX IF EXISTS idx_journeys_active;
-ALTER TABLE journeys DROP COLUMN IF EXISTS escalated_at, DROP COLUMN IF EXISTS deviated_at, DROP COLUMN IF EXISTS last_seen_at, DROP COLUMN IF EXISTS last_location;
+ALTER TABLE journeys DROP COLUMN IF EXISTS escalated_at, DROP COLUMN IF EXISTS deviated_at,
+                     DROP COLUMN IF EXISTS last_seen_at, DROP COLUMN IF EXISTS last_location;
 DROP TABLE IF EXISTS journey_breadcrumbs;
 COMMIT;
 ```
 
-### How to run it
-- **Fresh database:** just start the backend — if you fold these statements into `initDatabase()`, they run automatically on boot.
-- **Existing database with data (e.g. your deployed Neon instance):** connect with `psql` (or Neon's SQL editor in their dashboard) and run the migration script directly, once, before deploying the V1 backend code that depends on these columns/tables. Doing it in this order (schema first, code second) avoids the backend starting up against a schema it expects but doesn't yet have.
+### Running the migration
 
-## 8. Data growth estimate (sanity check, not a hard requirement)
-`journey_breadcrumbs` grows fastest — at a 5-second interval during an active walk, a 20-minute walk writes ~240 rows. At demo/submission scale (a handful of test walks) this is negligible; V2's retention policy (`docs/v2/database.md` §*, 30-day purge) is not needed for V1 but is worth keeping in mind if you leave the submission build running for weeks afterward — periodically truncate `journey_breadcrumbs` for old/completed journeys if the table grows large enough to notice.
+- **Fresh database:** start the backend; `initDatabase()` creates everything.
+- **Existing database with data:** run the script once in `psql` or the Neon SQL editor **before** deploying the V1 backend, so the code never starts against a schema it does not have.
+
+## 6. Growth
+
+`journey_breadcrumbs` grows fastest: one row about every 3 seconds during a walk, which is roughly 400 rows for a 20-minute walk. This is negligible at college scale. If a build stays online for weeks, periodically delete breadcrumbs of completed journeys. A 30-day retention job is part of V2.
+
+## 7. Deferred to V2
+
+`refresh_tokens`, `otp_codes`, `email_outbox`, `guardian_invites`, `report_confirmations`, `alert_deliveries`, `checkins`, `contacts`, `threads`, `messages`, `medical_cards`, `advisories`, `safe_places`, `place_audits`, `tracking_links`, `organizations` and the others listed in [`docs/v2/database.md`](../v2/database.md).

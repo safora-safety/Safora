@@ -1,207 +1,190 @@
-# SAFORA — Community Safety & Safe Walk Platform
+# Safora – Community Safety and Safe Walk App
 
 [![React Native](https://img.shields.io/badge/React%20Native-0.87.1%20(Fabric)-61DAFB?logo=react&logoColor=black)](https://reactnative.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org)
-[![Express](https://img.shields.io/badge/Express-4.x-000000?logo=express&logoColor=white)](https://expressjs.com)
+[![Node.js](https://img.shields.io/badge/Node.js-22%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+[![Express](https://img.shields.io/badge/Express-5.x-000000?logo=express&logoColor=white)](https://expressjs.com)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15%2B-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org)
 [![PostGIS](https://img.shields.io/badge/PostGIS-Spatial%20Engine-336791)](https://postgis.net)
-[![Tests](https://img.shields.io/badge/Tests-104%20Passing-success?logo=jest&logoColor=white)](docs/v1/testing-and-submission.md)
+[![Tests](https://img.shields.io/badge/tests-104%20automated%20%2B%20143%20field-brightgreen)](docs/v1/testing-and-submission.md)
 
-> **Academic Context**: Minor Project-I submitted in partial fulfilment of the requirements for the degree of **Bachelor of Technology in Computer Science & Engineering**  
-> **Institution**: Dev Bhoomi Uttarakhand University (DBUU), Dehradun  
-> **Batch**: 2026 – 2027  
-> **Supervisor**: Mr. Mukesh Rajput (Assistant Professor, Department of CSE, SoEC, DBUU)  
-> **Project Team**: Arushi Saxena (24BTCSE0241), Anurag Suyal (24BTCSE0264), Aman Singh Kunwar (24BTCSE0321), Shubham Kumar (24BTCSE0333)
+| | |
+|---|---|
+| **Academic context** | Minor Project-I, submitted in partial fulfilment of the requirements for the degree of Bachelor of Technology in Computer Science & Engineering |
+| **Institution** | Dev Bhoomi Uttarakhand University (DBUU), Dehradun |
+| **Batch** | 2026 – 2027 |
+| **Supervisor** | Mr. Mukesh Rajput, Assistant Professor, Department of CSE, SoEC, DBUU |
+| **Team** | Arushi Saxena (24BTCSE0241), Anurag Suyal (24BTCSE0264), Aman Singh Kunwar (24BTCSE0321), Shubham Kumar (24BTCSE0333) |
+| **Status** | **Version 1 complete** (all objectives implemented, deployed and verified) |
+| **Live backend** | https://safora-backend.onrender.com/ |
+| **Live admin console** | https://safora-admin.onrender.com/ |
 
----
+## Summary
 
-## Executive Summary
+Safora is a community-powered personal-safety navigation and emergency-response application for campus and urban settings. Standard navigation applications optimise for distance and speed. Safora helps walkers, especially women and students travelling at night or in unfamiliar areas, to judge risk and to get help.
 
-**SAFORA** is a community-powered personal safety navigation and emergency response platform designed for university campuses and urban corridors. While conventional navigation platforms optimize purely for distance and travel time, SAFORA empowers pedestrians—particularly women and students traveling after dark—to proactively evaluate route safety, share live journeys with trusted guardians, and dispatch instant SOS alerts backed by real-time audio evidence.
+- Users **report hazards** (poor lighting, road hazards, waterlogging, isolated areas, traffic and others), and the reports become a live **safety score** and **heat map**.
+- A **Safe Walk** shares the live location with trusted contacts. If the walker leaves the planned corridor and does not confirm safety within 60 seconds, a **server-side watchdog** alerts the guardians, even if the phone has stopped working.
+- A **one-tap SOS** sends the position and battery level at once, streams 30 seconds of audio to guardians and dispatchers while it is still being recorded, can sound a loud siren, and falls back to a pre-filled SMS without internet.
+- A **web console** lets staff moderate reports, watch live walks and handle alerts.
 
-The platform combines crowdsourced hazard telemetry, PostGIS spatial clustering, native background walk monitoring, progressive dual-pipe audio streaming, and an operations dispatcher console into an integrated safety ecosystem.
+## System Overview
 
 ```mermaid
 flowchart TD
-    User(["Mobile User (Walker / Student)"])
-    Guardian(["Trusted Guardian (Family / Friend)"])
-    Admin(["Operations Dispatcher (Web Admin)"])
+    User(["Mobile user<br/>student or citizen"])
+    Guardian(["Guardian"])
+    Admin(["Operations lead<br/>web console"])
 
-    subgraph MobileApp ["Mobile Safety App (React Native + TypeScript)"]
-        Radar["Geospatial Safety Radar & DBSCAN Heatmap"]
-        SafeWalk["Safe Walk Engine (150m Corridor Compliance)"]
-        SOS["One-Tap SOS & Dual-Pipe Audio Engine"]
-        Decoy["Covert Decoy Tools (Calculator & Fake Call)"]
+    subgraph MobileApp["Mobile app (React Native + Kotlin service)"]
+        Radar["Safety radar and map"]
+        SafeWalk["Safe Walk engine<br/>configurable corridor, default 150 m"]
+        SOS["One-tap SOS, siren,<br/>dual-pipe audio"]
     end
 
-    subgraph BackendGateway ["Backend API & Real-Time Gateway (Node.js + Express)"]
-        Auth["JWT Auth, Role Guards & Google OAuth"]
-        ScoreEngine["Decay-Weighted Safety Score Engine"]
-        Watchdog["Autonomous Deviation Watchdog (30s Tick)"]
-        AudioStitcher["Fail-Safe Audio Stitcher & Relay"]
-        SocketGateway["Socket.IO Real-Time Dispatcher"]
+    subgraph WebAdmin["Admin console (React + Vite)"]
+        Live["Live operations radar"]
+        Queue["SOS dispatch queue<br/>with live audio"]
+        Mod["Hazard moderation"]
+        Users["User directory"]
     end
 
-    subgraph SpatialDB ["Spatial Database (PostgreSQL + PostGIS)"]
-        PostGIS[("PostGIS Engine<br/>geography(Point, 4326) + GiST Spatial Indexes")]
+    subgraph Backend["Backend (Node.js + Express + Socket.IO)"]
+        Auth["JWT auth and role guards"]
+        Score["Decay-weighted safety score"]
+        WD["Watchdog<br/>30 s tick"]
+        Incident["Incident manager<br/>and audio stitcher"]
     end
 
-    subgraph ExternalServices ["External Cloud Services"]
-        FCM["Firebase Cloud Messaging (FCM)"]
-        Cloudinary["Cloudinary Media & Evidence Storage"]
+    subgraph Data["PostgreSQL + PostGIS"]
+        DB[("geography(Point, 4326)<br/>GiST index")]
     end
 
-    subgraph WebAdmin ["Web Operations Command (React + Vite)"]
-        CommandRadar["Live Operations Radar"]
-        IncidentQueue["SOS Incident Triage & Stream Player"]
-        Moderation["Community Hazard Verification Hub"]
+    subgraph External["External services"]
+        FCM["Firebase Cloud Messaging"]
+        CLD["Cloudinary"]
     end
 
     User <--> MobileApp
-    MobileApp <==>|"HTTPS (REST) & WSS (Socket.IO)"| BackendGateway
-    Guardian <==>|"Live Escort Stream & Push"| BackendGateway
-    Admin <==>|"CAD Dispatcher Stream"| BackendGateway
-    BackendGateway <-->|"ST_DWithin & Spatial Queries"| SpatialDB
-    BackendGateway -->|"Emergency Push"| FCM
-    BackendGateway -->|"Evidence Archival"| Cloudinary
-    WebAdmin <--> BackendGateway
+    Guardian <--> MobileApp
+    Admin <--> WebAdmin
+    MobileApp <==>|"HTTPS and WSS"| Backend
+    WebAdmin <==>|"HTTPS and WSS"| Backend
+    Backend <--> DB
+    Backend --> FCM
+    Backend --> CLD
+    FCM --> Guardian
 ```
 
----
+## Documentation
 
-## Core Platform Capabilities
+All specifications, diagrams and guides are in [`docs/`](docs/README.md). Start with the master index.
 
-### 1. Geospatial Safety Radar & Community Telemetry
-* **Algorithmic Safety Score (0–100)**: Evaluates location risk combining hazard severity, proximity falloff, exponential time decay ($t_{\text{half}} = 24\text{h}$), and community confirmations.
-* **DBSCAN Density Clustering**: PostGIS `ST_ClusterDBSCAN` groups spatial risk density within ~330m radius, rendered as an interactive dynamic heatmap.
-* **Crowdsourced Hazard Verification**: Citizen reports (lighting, harassment spots, waterlogging, isolated trails) with camera evidence, address reverse-geocoding, and duplicate prevention.
-* **Offline Queuing**: Unsent hazard reports save to local storage when offline and auto-sync immediately upon network restoration.
+| Version | Status | Contents |
+|---|---|---|
+| [**V1**](docs/v1/README.md) | Complete | Architecture and data-flow diagrams, API, database, safety algorithms, audio pipeline, mobile and admin features, tests |
+| [**V2**](docs/v2/README.md) | Planned | Product roadmap: accounts and e-mail, guardian handshake, full watchdog, routing and voice, no-unlock triggers, chat, compliance |
+| [**V3**](docs/v3/README.md) | Research | AI safe-route recommendation, offline mesh messaging, hazard image detection, voice-activated SOS |
+| [Requirements and use cases](docs/v1/srs.md) | Complete | SRS with identifiers, use cases, traceability to tests |
+| [Developer setup](docs/setup.md) | – | Prerequisites, environment, running, building |
+| [Operations runbook](docs/v1/operations-runbook.md) | – | Deployment, checks, incidents, backups |
+| [Field checklist](docs/v1_manual_testing_checklist.md) | Complete | The 143-case verification checklist |
+| [Synopsis](docs/SAFORA_Synopsis_Formatted.pdf) | – | The approved project synopsis |
 
-### 2. Safe Walk & Live Guardian Escort
-* **Active Corridor Compliance**: Server-side 150-meter corridor monitoring against planned walking geometry.
-* **Synchronized Live Escort**: Real-time position broadcasting over Socket.IO to trusted guardians, who observe live walker movement on an interactive map.
-* **Android Foreground Service**: Continuous background GPS tracking surviving screen locks and Doze mode, displaying real-time road distance and walking ETA in persistent system notifications.
-* **Autonomous Deviation Watchdog**: 60-second on-phone safe countdown backed by a cloud watchdog that automatically escalates alerts to trusted guardians if the phone disconnects or is destroyed.
+## Modules (Version 1)
 
-### 3. Emergency SOS & Dual-Pipe Audio Evidence
-* **Instant Emergency Broadcast**: Single-tap dispatch streaming coordinates, battery telemetry, and emergency alerts to guardians and dispatchers.
-* **Dual-Pipe Audio Streaming Engine**:
-  * *Pipe 1 (Real-Time Progressive Delivery)*: Slices 16kHz PCM microphone audio into sequential 5-second WAV chunks emitted live over WebSockets for sub-second guardian awareness.
-  * *Pipe 2 (Continuous Master Archival)*: Concurrently streams raw audio into an unbroken 30-second local master file for Cloudinary cloud preservation.
-  * *Fail-Safe Server Concatenator*: If the device is destroyed mid-broadcast, an 8-second server watchdog automatically stitches received chunks with standard WAV headers and preserves the partial evidence.
-* **Dual-Mode Deterrence**: User-configurable high-decibel audible alarm (`STREAM_ALARM`) versus covert stealth mode.
-
-### 4. Tactical Safety Suite
-* **Calculator Decoy**: Fully operational 4-function calculator that silently triggers background emergency SOS and haptic feedback upon entering duress PIN `9999=`.
-* **Incoming Fake Call Simulator**: Configurable bilingual (English/Hindi) caller simulator designed to facilitate safe, discrete exit from uncomfortable situations.
-* **One-Tap Emergency Dialers**: Direct native shortcuts to emergency services (`112`, `108`, `1090`).
-
-### 5. Web Operations Command Center
-* **Live Radar & Telemetry**: Real-time spatial tracking of active journeys with instant corridor deviation highlights.
-* **SOS Incident Queue**: Chronological alert triage with inline audio streaming, duration timers, and one-click coordinate links to external satellite navigation.
-* **Hazard Moderation Hub**: Community report audit table with high-resolution photo inspection, reporter verification, and status updates (Resolved / Duplicate / Dismissed).
-
----
+1. **User authentication and onboarding.** JWT and bcrypt, Google Sign-In, a four-slide onboarding flow, a terms and age notice, guest mode and a rehydration splash screen.
+2. **Community hazard reporting.** Six categories, severity 1 to 5, camera or gallery photos, rate limiting (20 reports per 15 minutes), an offline queue that synchronises when the connection returns, and an in-memory cache.
+3. **Safety score and routing.** A 0 to 100 score from severity, distance, recency decay (half-life 7 days with a floor) and community confirmations; PostGIS DBSCAN clustering (ε about 330 m); route preview with calibrated travel times for walking (1.60 m/s), two-wheeler and car.
+4. **Safe Walk.** Corridor monitoring (default 150 m, 20 to 1000 m configurable by staff), live guardian view, a 60-second confirmation prompt, a server-side watchdog, a Kotlin foreground service for lock-screen tracking, and an offline map cache for a radius of 10 km.
+5. **Guardian SOS and evidence.** Immediate push alert, dual-pipe 30-second audio (live 5-second slices plus a lossless master and a server rescue), a loud siren or stealth mode, a pre-filled SMS fallback, a guardian live SOS screen, a Safety Alerts Centre, Test SOS drills, and a decoy suite (calculator with duress PIN, fake call).
+6. **Administration and diagnostics.** Moderation (active, resolved, duplicate, fake), a live walker radar, an SOS queue with live audio, user roles, a command palette and dispatcher shortcuts, and diagnostics with service checks.
 
 ## Technology Stack
 
-| Layer | Technologies | Key Rationale |
-|---|---|---|
-| **Mobile Application** | React Native `0.87.1`, TypeScript | Native Android performance utilizing **Hermes** engine and **Fabric (New Architecture)**. |
-| **Mobile Map Canvas** | Leaflet in Hardware-Accelerated WebView | High-performance vector tile rendering, smooth layer switching, and offline tile caching. |
-| **Native Android Bridge** | Kotlin Foreground Service | Background location retention and continuous microphone capture surviving system lock. |
-| **Backend API Gateway** | Node.js, Express, TypeScript | Asynchronous REST API, rate-limiting guards, and Socket.IO real-time event distribution. |
-| **Spatial Database** | PostgreSQL 15+, PostGIS extension | Native `geography(Point, 4326)` spatial math, GiST indexing, and `ST_DWithin` proximity queries. |
-| **Web Admin Console** | React 18, Vite, Tailwind CSS | Fast CAD-style command interface with Web Audio API stream decoding and keyboard shortcuts. |
-| **Authentication** | JWT, bcrypt, Google OAuth2 | Stateless authorization with native Google Play Services bottom-sheet account linking. |
-| **Cloud Services** | Firebase Cloud Messaging, Cloudinary | Cross-platform push notifications and court-admissible media evidence storage. |
-
----
-
-## Testing & Quality Assurance
-
-The codebase enforces rigorous automated test coverage and comprehensive manual physical device field verification:
-
-### Automated Test Matrix (100% Pass Rate)
-Execute all test suites monorepo-wide with a single command:
-```bash
-npm test
-```
-
-| Workspace | Test Framework | Suites | Tests | Scope & Assertions |
-|---|---|:---:|:---:|---|
-| **`apps/backend`** | Jest + Supertest | 8 | 72 | Rate limiters, safety score decay, JWT guards, Google OAuth token verification, dual-pipe audio stitcher, 8s watchdog rescue. |
-| **`apps/frontend`** | Vitest + Happy-DOM | 2 | 12 | Command palette routing, CAD keyboard shortcuts, offline failover banner, badge variants. |
-| **`apps/mobile`** | Jest + React Test Renderer | 5 | 20 | Safety search capsule, HUD components, hold-to-confirm button, grace-period overlay, duress calculator decoy. |
-| **Total** | **Unified Runner** | **15** | **104** | **104 / 104 tests passing across all packages.** |
-
-* **TypeScript Verification**: `npx tsc --noEmit` reports **0 errors** across all workspaces.
-* **Physical Device Manual Testing**: **130 / 143 test items verified (90.9%)** on physical Android hardware. See [`docs/v1_manual_testing_checklist.md`](docs/v1_manual_testing_checklist.md) for granular field notes.
-
----
-
-## Quick Start & Local Setup
-
-### 1. Prerequisites
-* **Node.js**: `v20.x` or `v22.x` & `npm`
-* **PostgreSQL**: `15+` with `postgis` spatial extension enabled
-* **Android SDK**: Platform 34/35, NDK `27.1.12297006`, OpenJDK 17
-
-### 2. Installation
-```bash
-# Clone the repository
-git clone https://github.com/your-org/safora.git
-cd safora
-
-# Install monorepo dependencies
-npm install
-```
-
-### 3. Run Backend Server
-```bash
-cd apps/backend
-npm run dev
-```
-* Backend API: `http://localhost:5000/api`
-* Health Endpoint: `http://localhost:5000/api/health`
-* Diagnostics: `http://localhost:5000/api/diagnostics`
-
-### 4. Run Web Admin Command Console
-```bash
-cd apps/frontend
-npm run dev
-```
-* Web Admin: `http://localhost:5173`
-
-### 5. Launch Android Mobile Application
-```bash
-cd apps/mobile
-npm start -- --reset-cache
-# In a separate terminal:
-npm run android
-```
-
----
-
-## Documentation Index
-
-Comprehensive documentation is structured into the following guides:
-
-| Document | Description |
+| Layer | Technology |
 |---|---|
-| **[`docs/v1/architecture.md`](docs/v1/architecture.md)** | Complete system architectural diagrams, data flows, and subsystem specifications. |
-| **[`docs/v1/api.md`](docs/v1/api.md)** | REST API endpoint reference, request/response JSON schemas, and WebSocket events. |
-| **[`docs/v1/database.md`](docs/v1/database.md)** | Database relational schema, PostGIS spatial tables, GiST indexes, and migration scripts. |
-| **[`docs/v1/dual-pipe-audio-streaming.md`](docs/v1/dual-pipe-audio-streaming.md)** | Technical specification for progressive 5s audio chunking and fail-safe server stitching. |
-| **[`docs/v1/safety-algorithms.md`](docs/v1/safety-algorithms.md)** | Mathematical formulation of spatial risk scoring, exponential decay, and corridor math. |
-| **[`docs/v1/testing-and-submission.md`](docs/v1/testing-and-submission.md)** | Master testing matrix, release build verification, and academic evaluation prep. |
-| **[`docs/v1_manual_testing_checklist.md`](docs/v1_manual_testing_checklist.md)** | Field verification checklist covering 143 granular test cases across physical hardware. |
-| **[`docs/SAFORA_Synopsis_Formatted.pdf`](docs/SAFORA_Synopsis_Formatted.pdf)** | Academic project synopsis submitted to Dev Bhoomi Uttarakhand University. |
+| Mobile | React Native 0.87.1 (Hermes, New Architecture), React 19, TypeScript, Zustand, native Kotlin foreground service |
+| Map | Leaflet in a WebView with OpenStreetMap and Esri tiles; OSRM routing; Photon search with MapTiler fallback |
+| Backend | Node.js 22+, Express 5, TypeScript, Zod, Socket.IO 4.8, `pg` |
+| Database | PostgreSQL 15+ with PostGIS (Neon), GiST spatial index |
+| Admin console | React 19, Vite 6, Tailwind CSS 3.4, Recharts |
+| Services | Firebase Cloud Messaging, Cloudinary, Google Sign-In |
+| Quality | Jest and Supertest, Vitest, React Test Renderer, GitHub Actions |
 
----
+Details and versions: [`docs/v1/tech-stack.md`](docs/v1/tech-stack.md).
 
-## License & Academic Attribution
+## Repository Structure
 
-This project is developed as an academic Minor Project-I under the School of Engineering and Computing (SoEC), **Dev Bhoomi Uttarakhand University (DBUU)**, Dehradun.  
-All rights reserved by the project team and institution.
+```text
+safora/
+├── apps/
+│   ├── backend/            Express + TypeScript API, Socket.IO gateway, watchdog (port 5000)
+│   │   └── src/            config, controllers, middleware, repositories, routes, services, sockets, __tests__
+│   ├── frontend/           React + Vite + Tailwind admin console (port 5173)
+│   │   └── src/            components, context, pages, services, __tests__
+│   └── mobile/             React Native application
+│       ├── android/        Gradle project, Kotlin SafeWalkService (arm64-v8a)
+│       ├── src/            screens, components, navigation, services, store, theme
+│       └── __tests__/
+├── packages/
+│   └── shared-types/       Shared TypeScript interfaces
+├── docs/                   Documentation (v1, v2, v3), field checklist, synopsis
+├── .github/                CI workflows
+├── .husky/                 Git hooks
+├── render.yaml             Render deployment blueprint
+└── README.md
+```
+
+## Quick Start
+
+### Prerequisites
+- Node.js 22.11 or later and npm
+- PostgreSQL 15+ with the `postgis` extension (for example on Neon)
+- Android SDK (platform 34 or 35), NDK `27.1.12297006`, OpenJDK 17
+
+### Install and run
+
+```bash
+npm install                       # from the repository root
+
+# Backend (API at http://localhost:5000/api, health at /api/health)
+cd apps/backend && npm run dev
+
+# Admin console (http://localhost:5173)
+cd apps/frontend && npm run dev
+
+# Mobile: in two terminals
+cd apps/mobile && npm start -- --reset-cache
+cd apps/mobile && npm run android
+```
+
+### Tests
+
+```bash
+npm test                # 15 suites, 104 tests (backend 72, admin 12, mobile 20)
+```
+
+### Build an Android package
+
+```bash
+cd apps/mobile/android
+./gradlew assembleDebug           # standalone debug APK
+./gradlew assembleRelease         # signed release APK, about 34 MB (arm64-v8a)
+```
+
+On Windows use `gradlew.bat` or `.\gradlew`. The release APK is written to `apps/mobile/android/app/build/outputs/apk/release/app-release.apk`. Full instructions, environment variables and troubleshooting are in [`docs/setup.md`](docs/setup.md).
+
+## Scope
+
+- **Included in V1:** the six modules above, verified by 104 automated tests and 143 field test cases.
+- **Version 2 (planned):** account hardening and e-mail, a verified guardian handshake, a complete watchdog, per-mode routing with voice guidance, no-unlock triggers, chat, a medical card, Hindi and Uttarakhand content, and public-launch compliance.
+- **Version 3 (research):** AI safe-route recommendation, offline Bluetooth or Wi-Fi Direct messaging, AI hazard classification from photos, and voice-activated SOS.
+
+## Known Limitations (V1)
+
+Android only; the three travel modes share one road geometry; the guardian model has no acceptance step; the free-tier backend can sleep when idle; sessions use a seven-day token. These and the plan to address them are documented in [`docs/v1/README.md`](docs/v1/README.md).
+
+## Licence and Attribution
+
+Developed as an academic Minor Project-I at the School of Engineering and Computing (SoEC), Dev Bhoomi Uttarakhand University (DBUU), Dehradun. All rights are reserved by the project authors and the institution.

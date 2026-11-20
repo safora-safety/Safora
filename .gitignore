@@ -80,3 +80,8 @@ Desktop.ini
 **/.eslintcache
 vite.config.js
 vite.config.d.ts
+
+# Internal Academic Research & Student Study Documentation (Offline Viva & Defense Prep)
+docs/research/
+docs/study-guide/
+docs/viva-guide.md
