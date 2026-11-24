@@ -5,10 +5,11 @@
 | **Version** | V1 (complete) |
 | **Automated tests** | 104 tests in 15 suites, all passing |
 | **Field tests** | 143 cases in 18 areas, all passing ([checklist](../v1_manual_testing_checklist.md)) |
+| **Performance benchmarks** | Load, stress, spike, soak, and volume tests ([report](./performance-testing.md)) |
 
 ## 1. Strategy
 
-Testing is scoped to what a demonstration and a viva expose: the core user journeys, the safety-critical flows, and the failure cases that would damage trust. Wider device coverage, long-duration battery behaviour and load testing are V2 activities (`docs/v2/testing-and-beta.md`).
+Testing is scoped across three complementary tiers: automated continuous integration suites, empirical performance and load testing ([`performance-testing.md`](./performance-testing.md)), and physical hardware field verification ([`../v1_manual_testing_checklist.md`](../v1_manual_testing_checklist.md)). Wider multi-brand beta trials are detailed in V2 (`docs/v2/testing-and-beta.md`).
 
 ```mermaid
 flowchart TB

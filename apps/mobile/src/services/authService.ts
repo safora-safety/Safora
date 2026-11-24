@@ -130,4 +130,21 @@ export class AuthService {
       throw new Error(message);
     }
   }
+
+  static async deleteAccount(): Promise<{ success: boolean; message: string }> {
+    try {
+      const response = await apiClient.delete<{
+        success: boolean;
+        message: string;
+      }>('/users/me');
+      return response.data;
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        'Failed to delete account. Please try again.';
+      throw new Error(message);
+    }
+  }
 }

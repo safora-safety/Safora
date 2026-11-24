@@ -258,4 +258,9 @@ export class UserRepository {
     );
     return result.rows[0] || null;
   }
+
+  static async deleteUser(id: string | number): Promise<boolean> {
+    const result = await db.query(`DELETE FROM users WHERE id = $1;`, [id]);
+    return (result.rowCount ?? 0) > 0;
+  }
 }

@@ -30,6 +30,9 @@ const AnalyticsPage = React.lazy(() =>
 const DiagnosticsPage = React.lazy(() =>
   import('./pages/DiagnosticsPage').then((m) => ({ default: m.DiagnosticsPage }))
 );
+const LogsPage = React.lazy(() =>
+  import('./pages/LogsPage').then((m) => ({ default: m.LogsPage }))
+);
 const UsersPage = React.lazy(() =>
   import('./pages/UsersPage').then((m) => ({ default: m.UsersPage }))
 );
@@ -191,6 +194,7 @@ const AppRoutes: React.FC = () => {
         <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="users" element={<UsersPage />} />
         <Route path="diagnostics" element={<DiagnosticsPage />} />
+        <Route path="logs" element={<LogsPage />} />
         <Route path="settings" element={<SettingsPage />} />
       </Route>
 

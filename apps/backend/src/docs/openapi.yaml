@@ -1,0 +1,487 @@
+openapi: 3.0.3
+info:
+  title: SAFORA Safety Platform API
+  version: 1.0.0
+  description: |
+    REST API specification and real-time backend documentation for the SAFORA safety platform.
+    Features spatial queries, Safe Walk corridor monitoring, progressive dual-pipe audio evidence capture, and emergency SOS dispatch.
+  contact:
+    name: SAFORA Project Team
+    email: safora.safety@gmail.com
+
+servers:
+  - url: http://localhost:5000/api
+    description: Local Development Gateway
+  - url: https://safora-backend.onrender.com/api
+    description: Production Cloud Gateway
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Enter your JSON Web Token (JWT) issued by /auth/login or /auth/google.
+
+  schemas:
+    ApiResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [user, moderator, admin]
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    Coordinates:
+      type: object
+      required: [latitude, longitude]
+      properties:
+        latitude:
+          type: number
+          example: 30.3165
+        longitude:
+          type: number
+          example: 78.0322
+
+    HazardReport:
+      type: object
+      properties:
+        id:
+          type: integer
+        category:
+          type: string
+          enum: [lighting, harassment, waterlogging, isolated, infrastructure, other]
+        severity:
+          type: integer
+          minimum: 1
+          maximum: 5
+        description:
+          type: string
+        location:
+          $ref: '#/components/schemas/Coordinates'
+        photoUrl:
+          type: string
+          format: uri
+        confirmationsCount:
+          type: integer
+        status:
+          type: string
+          enum: [active, resolved, duplicate, fake]
+
+security:
+  - bearerAuth: []
+
+paths:
+  /health:
+    get:
+      summary: Health check & liveness
+      tags: [System]
+      security: []
+      responses:
+        '200':
+          description: Server is online
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: online }
+                  project: { type: string, example: SAFORA - Community Safety & Safe Walk App }
+                  timestamp: { type: string, format: date-time }
+
+  /diagnostics:
+    get:
+      summary: Deep system diagnostics (PostGIS, Cloudinary, Firebase, MapTiler, Nominatim)
+      tags: [System]
+      description: Admin-only diagnostics endpoint to test and benchmark connected cloud infrastructure.
+      responses:
+        '200':
+          description: Diagnostics report
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden (Admin role required)
+
+  /auth/register:
+    post:
+      summary: Register a new citizen account
+      tags: [Authentication]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name: { type: string, example: Jane Doe }
+                email: { type: string, format: email, example: jane@example.com }
+                password: { type: string, format: password, minLength: 6 }
+                phone: { type: string, example: "+919876543210" }
+      responses:
+        '201':
+          description: User registered successfully
+        '400':
+          description: Validation error or email already in use
+
+  /auth/login:
+    post:
+      summary: Authenticate user & obtain JWT token
+      tags: [Authentication]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email, example: user@example.com }
+                password: { type: string, format: password }
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+                  user: { $ref: '#/components/schemas/User' }
+        '401':
+          description: Invalid email or password
+
+  /auth/google:
+    post:
+      summary: Authenticate via Google OAuth2 ID Token
+      tags: [Authentication]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [idToken]
+              properties:
+                idToken: { type: string }
+      responses:
+        '200':
+          description: Google account authenticated
+
+  /auth/profile:
+    get:
+      summary: Get currently authenticated user profile
+      tags: [Authentication]
+      responses:
+        '200':
+          description: User profile
+    patch:
+      summary: Update profile details (blood group, emergency contact, age notice)
+      tags: [Authentication]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                bloodGroup: { type: string }
+                emergencyContact: { type: string }
+                age: { type: integer }
+                ageNoticeAck: { type: boolean }
+      responses:
+        '200':
+          description: Profile updated
+
+  /users/me:
+    delete:
+      summary: Delete my account and all associated personal data (DPDP / GDPR)
+      tags: [Users]
+      description: |
+        Permanently erases the authenticated user's account, personal details,
+        trusted contacts, and safe walk history. Cascade-deletes all associated records.
+      responses:
+        '200':
+          description: Account permanently deleted
+        '401':
+          description: Unauthorized
+
+  /users/fcm-token:
+    post:
+      summary: Update device push notification token
+      tags: [Users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string }
+      responses:
+        '200':
+          description: FCM token updated
+
+  /reports:
+    get:
+      summary: List community hazard reports (Paginated)
+      tags: [Hazards]
+      security: []
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 50, maximum: 500 }
+        - in: query
+          name: category
+          schema: { type: string }
+      responses:
+        '200':
+          description: List of hazards (anonymized for public requests)
+    post:
+      summary: Submit a new hazard report
+      tags: [Hazards]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [category, severity, latitude, longitude]
+              properties:
+                category: { type: string, enum: [lighting, harassment, waterlogging, isolated, infrastructure, other] }
+                severity: { type: integer, minimum: 1, maximum: 5 }
+                description: { type: string }
+                latitude: { type: number }
+                longitude: { type: number }
+                photoUrl: { type: string, format: uri }
+      responses:
+        '201':
+          description: Hazard report submitted
+
+  /reports/nearby:
+    get:
+      summary: Compute algorithmic safety score (0-100) & fetch nearby risks
+      tags: [Hazards]
+      security: []
+      parameters:
+        - in: query
+          name: lat
+          required: true
+          schema: { type: number }
+        - in: query
+          name: lng
+          required: true
+          schema: { type: number }
+        - in: query
+          name: radius
+          schema: { type: integer, default: 1000 }
+      responses:
+        '200':
+          description: Safety score and nearby hazard list
+
+  /reports/clusters:
+    get:
+      summary: Fetch DBSCAN spatial density clusters for dynamic heatmap
+      tags: [Hazards]
+      security: []
+      responses:
+        '200':
+          description: Cluster centers, count, and radius
+
+  /reports/upload-photo:
+    post:
+      summary: Upload hazard evidence photo to Cloudinary
+      tags: [Hazards]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [photo]
+              properties:
+                photo:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Photo uploaded, returns secure CDN URL
+
+  /journeys/start:
+    post:
+      summary: Initiate a Safe Walk session with active 150m corridor
+      tags: [Safe Walk]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [origin, destination, route]
+              properties:
+                origin: { $ref: '#/components/schemas/Coordinates' }
+                destination: { $ref: '#/components/schemas/Coordinates' }
+                route: { type: string, description: Encoded route geometry polyline }
+                mode: { type: string, enum: [walk, two_wheeler, car], default: walk }
+      responses:
+        '201':
+          description: Safe Walk started
+
+  /journeys/{id}/location:
+    patch:
+      summary: Post high-frequency GPS breadcrumb & execute in-memory corridor check
+      tags: [Safe Walk]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [latitude, longitude]
+              properties:
+                latitude: { type: number }
+                longitude: { type: number }
+                speed: { type: number }
+                battery: { type: integer }
+      responses:
+        '200':
+          description: Location updated, returns deviation status and distance to corridor
+
+  /journeys/{id}/safe:
+    post:
+      summary: Walker confirms "I am safe" during deviation prompt
+      tags: [Safe Walk]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Deviation disarmed; 3-minute post-confirmation snooze activated
+
+  /journeys/{id}/end:
+    post:
+      summary: Complete or cancel an active Safe Walk
+      tags: [Safe Walk]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Journey ended
+
+  /sos/trigger:
+    post:
+      summary: Trigger emergency SOS broadcast
+      tags: [Emergency SOS]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [latitude, longitude]
+              properties:
+                latitude: { type: number }
+                longitude: { type: number }
+                batteryLevel: { type: number }
+                stealth: { type: boolean, default: false }
+                isTest: { type: boolean, default: false }
+      responses:
+        '201':
+          description: Emergency broadcast dispatched to guardians and dispatchers
+
+  /sos/{id}/audio-chunk:
+    post:
+      summary: Ingest progressive 5-second PCM audio slice (Pipe 1)
+      tags: [Emergency SOS]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [seq, dataBase64]
+              properties:
+                seq: { type: integer, example: 1 }
+                dataBase64: { type: string }
+      responses:
+        '200':
+          description: Chunk staged; 8-second rescue watchdog timer refreshed
+
+  /sos/{id}/audio:
+    patch:
+      summary: Upload complete 30-second continuous master WAV file (Pipe 2)
+      tags: [Emergency SOS]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [audioUrl]
+              properties:
+                audioUrl: { type: string, format: uri }
+      responses:
+        '200':
+          description: Master audio recorded; server watchdog disarmed
+
+  /internal/tick:
+    post:
+      summary: Scheduled watchdog heartbeat tick
+      tags: [Internal / Watchdog]
+      security: []
+      parameters:
+        - in: header
+          name: X-Internal-Secret
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Watchdog scan executed; returns scanned and escalated counts
+        '401':
+          description: Invalid internal tick secret

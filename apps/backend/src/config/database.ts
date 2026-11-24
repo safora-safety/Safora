@@ -3,6 +3,7 @@ const { Pool } = require("pg");
 import { execSync } from "child_process";
 import dotenv from "dotenv";
 import { seedRealAdminData } from "./seedService";
+import { SystemLogService } from "../services/systemLogService";
 dotenv.config();
 
 const connectionString =
@@ -101,9 +102,9 @@ export const pool = db;
 
 // Handle idle connection drops gracefully (Neon serverless scales down to 0)
 db.on("error", (err: any) => {
-  console.warn(
-    `[WARN] Neon database idle client disconnected: ${err?.message || err}`,
-  );
+  const msg = `Neon database idle client disconnected: ${err?.message || err}`;
+  console.warn(`[WARN] ${msg}`);
+  SystemLogService.recordLog("WARN", "database.idle", msg);
 });
 
 export async function initDatabase(): Promise<void> {
@@ -113,6 +114,11 @@ export async function initDatabase(): Promise<void> {
   } catch (connErr: unknown) {
     const errMsg = connErr instanceof Error ? connErr.message : String(connErr);
     console.warn(`[WARN] Database initial connection deferred: ${errMsg}`);
+    SystemLogService.recordLog(
+      "WARN",
+      "database.init",
+      `Database connection deferred: ${errMsg}`,
+    );
     return;
   }
 

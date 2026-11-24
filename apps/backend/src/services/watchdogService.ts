@@ -1,5 +1,6 @@
 import { JourneyRepository } from "../repositories/journeyRepository";
 import { SosService } from "./sosService";
+import { SystemLogService } from "./systemLogService";
 
 export interface WatchdogState {
   deviatedAt: Date | null;
@@ -9,6 +10,7 @@ export interface WatchdogState {
 export class WatchdogService {
   private static activeJourneys = new Map<number, WatchdogState>();
   private static tickInterval: NodeJS.Timeout | null = null;
+  private static bootstrapped = false;
 
   /**
    * Populate activeJourneys from PostgreSQL on server startup
@@ -23,11 +25,17 @@ export class WatchdogService {
           lastLocation: null,
         });
       }
+      this.bootstrapped = true;
       console.log(
         `[Watchdog] Bootstrapped with ${this.activeJourneys.size} active journey(s) from database`,
       );
     } catch (err) {
-      console.warn("[Watchdog] Failed to bootstrap from database:", err);
+      const msg = `Watchdog failed to bootstrap from database (will retry on next tick): ${err}`;
+      console.warn(
+        "[Watchdog] Failed to bootstrap from database (will retry on next tick):",
+        err,
+      );
+      SystemLogService.recordLog("WARN", "watchdog.bootstrap", msg);
     }
   }
 
@@ -84,6 +92,9 @@ export class WatchdogService {
    * Escalates any journey whose deviatedAt is older than 60 seconds.
    */
   static async scan(): Promise<{ scanned: number; escalated: number }> {
+    if (!this.bootstrapped) {
+      await this.initialize();
+    }
     const now = Date.now();
     const ESCALATION_THRESHOLD_MS = 60 * 1000; // 60s without safe confirmation
     let escalatedCount = 0;
