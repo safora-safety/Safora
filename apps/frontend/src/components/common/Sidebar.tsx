@@ -8,6 +8,7 @@ import {
   BarChart3,
   Users,
   Server,
+  Terminal,
   Settings,
   Shield,
   X,
@@ -107,6 +108,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       to: '/diagnostics',
       label: 'System Diagnostics',
       icon: Server,
+      badge: null,
+    },
+    {
+      to: '/logs',
+      label: 'Crash & System Logs',
+      icon: Terminal,
       badge: null,
     },
     {

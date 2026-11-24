@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuthStore } from '../store/authStore';
+import { AuthService } from '../services/authService';
 import { ChangePasswordModal } from '../components/profile/ChangePasswordModal';
 import { AudioRecorderService } from '../services/audioRecorderService';
 import {
@@ -155,6 +156,55 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     } catch {
       Alert.alert('Notice', 'Cache reset completed.');
     }
+  };
+
+  const handleDeleteAccount = () => {
+    if (isGuest) {
+      Alert.alert(
+        'Guest Session',
+        'You are currently exploring as a guest. Exiting will end your temporary session.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Exit Session', style: 'destructive', onPress: logout },
+        ],
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Delete Account & Data',
+      'This will permanently delete your SAFORA citizen profile, emergency contacts, safe walk histories, and personal data. Anonymized community safety reports will remain to protect others.\n\nThis action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Permanently Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const res = await AuthService.deleteAccount();
+              if (res.success) {
+                Alert.alert(
+                  'Account Deleted',
+                  'Your account and all associated personal data have been completely purged from SAFORA servers.',
+                  [{ text: 'OK', onPress: logout }],
+                );
+              } else {
+                Alert.alert(
+                  'Error',
+                  res.message || 'Failed to delete account.',
+                );
+              }
+            } catch (err: any) {
+              Alert.alert(
+                'Error',
+                err?.message ||
+                  'An unexpected error occurred while deleting account.',
+              );
+            }
+          },
+        },
+      ],
+    );
   };
 
   return (
@@ -783,6 +833,25 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
           </Text>
         </TouchableOpacity>
 
+        {/* Delete Account & Data */}
+        {!isGuest && (
+          <TouchableOpacity
+            style={styles.deleteAccountBtn}
+            onPress={handleDeleteAccount}
+            activeOpacity={0.8}
+          >
+            <Feather
+              name="trash-2"
+              size={13}
+              color="#EF4444"
+              style={{ marginRight: 6 }}
+            />
+            <Text style={styles.deleteAccountText}>
+              Delete Account & Personal Data
+            </Text>
+          </TouchableOpacity>
+        )}
+
         <Text style={styles.versionFooter}>
           SAFORA Community Safety Network • v1.0.0
         </Text>
@@ -1121,6 +1190,22 @@ const styles = StyleSheet.create({
     color: '#EF4444',
     fontSize: 14,
     fontWeight: '800',
+  },
+  deleteAccountBtn: {
+    marginTop: 10,
+    paddingVertical: 12,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(239, 68, 68, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.25)',
+  },
+  deleteAccountText: {
+    color: '#EF4444',
+    fontSize: 13,
+    fontWeight: '700',
   },
   versionFooter: {
     textAlign: 'center',

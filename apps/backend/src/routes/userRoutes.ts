@@ -5,6 +5,7 @@ import {
   updateUserRole,
   updateUserStatus,
   updateFcmToken,
+  deleteMyAccount,
 } from "../controllers/userController";
 import { authMiddleware, requireStaff, requireAdmin } from "../middleware/auth";
 
@@ -14,6 +15,7 @@ router.use(authMiddleware as any);
 
 // User-level endpoints (any authenticated user)
 router.post("/fcm-token", updateFcmToken);
+router.delete("/me", deleteMyAccount);
 
 // Staff and Admins can view user directory and statistics
 router.get("/", requireStaff as any, listUsers);

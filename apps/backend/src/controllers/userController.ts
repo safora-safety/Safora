@@ -199,3 +199,35 @@ export async function updateFcmToken(
     });
   }
 }
+
+export async function deleteMyAccount(
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  try {
+    if (!req.user?.id) {
+      res.status(401).json({ success: false, message: "Unauthorized" });
+      return;
+    }
+
+    const userId = req.user.id;
+    const deleted = await UserRepository.deleteUser(userId);
+    if (!deleted) {
+      res
+        .status(404)
+        .json({ success: false, message: "User account not found" });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Your account and personal data have been permanently deleted.",
+    });
+  } catch (err: unknown) {
+    console.error("[UserController.deleteMyAccount]:", err);
+    res.status(500).json({
+      success: false,
+      message: "An error occurred while deleting your account",
+    });
+  }
+}

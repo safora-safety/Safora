@@ -3,6 +3,7 @@ import { Server as SocketIOServer } from "socket.io";
 import { app } from "./app";
 import { initDatabase } from "./config/database";
 import { runSystemDiagnostics } from "./config/diagnostics";
+import { SystemLogService } from "./services/systemLogService";
 import { setupJourneySockets } from "./sockets/journeySocket";
 import { WatchdogService } from "./services/watchdogService";
 
@@ -90,6 +91,23 @@ function handleShutdown(signal: string): void {
 
 process.on("SIGTERM", () => handleShutdown("SIGTERM"));
 process.on("SIGINT", () => handleShutdown("SIGINT"));
+
+process.on("unhandledRejection", (reason: any) => {
+  const msg = reason instanceof Error ? reason.message : String(reason);
+  const stack = reason instanceof Error ? reason.stack : undefined;
+  console.error("[CRASH UNHANDLED REJECTION]", reason);
+  SystemLogService.recordLog("CRASH", "process.unhandledRejection", msg, stack);
+});
+
+process.on("uncaughtException", (error: Error) => {
+  console.error("[CRASH UNCAUGHT EXCEPTION]", error);
+  SystemLogService.recordLog(
+    "CRASH",
+    "process.uncaughtException",
+    error.message,
+    error.stack,
+  );
+});
 
 startServer().catch((err) => {
   console.error("[FATAL] Server startup failed:", err);

@@ -11,7 +11,8 @@ This directory contains the technical documentation of Safora. It is organised b
 | Run or build the project | [`setup.md`](setup.md) and [`v1/setup.md`](v1/setup.md) |
 | Call the API | [`v1/api.md`](v1/api.md) |
 | Understand the scoring and safety logic | [`v1/safety-algorithms.md`](v1/safety-algorithms.md) |
-| Check how the project was tested | [`v1/testing-and-submission.md`](v1/testing-and-submission.md), [`requirements-traceability.md`](requirements-traceability.md) and the [checklist](v1_manual_testing_checklist.md) |
+| Check how the project was tested | [`v1/testing-and-submission.md`](v1/testing-and-submission.md), [`v1/performance-testing.md`](v1/performance-testing.md), [`requirements-traceability.md`](requirements-traceability.md) and the [checklist](v1_manual_testing_checklist.md) |
+| Review performance and load benchmarks | [`v1/performance-testing.md`](v1/performance-testing.md) |
 | Run and operate the deployment | [`v1/operations-runbook.md`](v1/operations-runbook.md) |
 | See what comes next | [`v2/roadmap.md`](v2/roadmap.md) and [`v3/README.md`](v3/README.md) |
 | Look up a term | [`glossary.md`](glossary.md) |
@@ -39,7 +40,7 @@ docs/
 │   ├── dual-pipe-audio-streaming.md       live audio, master archive, rescue
 │   ├── mobile-app-features.md · admin-panel.md
 │   ├── roles-and-permissions.md · security-and-privacy.md
-│   ├── tech-stack.md · setup.md · operations-runbook.md
+│   ├── tech-stack.md · setup.md · operations-runbook.md · performance-testing.md
 │   ├── testing-and-submission.md · tasks.md
 │   └── safora-v1-features-industry-research.md   comparison with existing platforms
 ├── v2/                                    planned product roadmap
@@ -59,7 +60,7 @@ docs/
 
 - **Diagrams** are written in [Mermaid](https://mermaid.js.org/) and render directly on GitHub. Data flow diagrams use rectangles for external entities, rounded boxes for processes and cylinders for data stores.
 - **Work item identifiers** (for example `SYN-1`, `TRK-4`, `MAP-6`) are stable across documents and commit messages.
-- **Status tags** in V2 and V3: ✅ verified · 📄 documented only · 🔬 needs a test or check · 🗓 planned.
+- **Status tags** in V2 and V3: [VERIFIED] · [DOCS-ONLY] · [NEEDS-TEST] · [PLANNED].
 - **Single source of truth.** Formulas and constants in `v1/safety-algorithms.md` are taken from the code. Change them in the same commit as the code.
 
 ## Current Constants at a Glance

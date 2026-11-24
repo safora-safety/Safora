@@ -27,6 +27,7 @@ Safora is a community safety platform for students and women in campus and urban
 | [`tech-stack.md`](./tech-stack.md) | Technologies, versions, hosting, code size |
 | [`setup.md`](./setup.md) | V1-specific setup steps |
 | [`operations-runbook.md`](./operations-runbook.md) | Deployment, routine checks, incident playbook, backups |
+| [`performance-testing.md`](./performance-testing.md) | Load, stress, spike, soak, and volume testing, API latencies, market benchmarks |
 | [`testing-and-submission.md`](./testing-and-submission.md) | Test strategy, automated suites, field verification, demonstration script |
 | [`tasks.md`](./tasks.md) | Delivery record of the V1 work items |
 | [`safora-v1-features-industry-research.md`](./safora-v1-features-industry-research.md) | Feature comparison with existing platforms |
